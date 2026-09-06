@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+body{margin:0;background:#0b1224;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#38bdf8}a:hover{color:#7dd3fc}
+*{box-sizing:border-box}
+</style>
+</helmet>
+<section id="turn1" style="display:flex;flex-wrap:wrap;gap:48px;padding:48px;align-items:flex-start">
+
+<!-- 1a: Admin schedule list -->
+<div id="1a" data-screen-label="1a Admin · Schedule list" style="width:1100px;flex:none">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;background:#38bdf8;color:#082f49;padding:3px 8px;border-radius:6px">1a</span><span style="font-size:14px;color:#8fa3c4">Admin · Schedule tab — display filter, kind filter, compact grouped rows</span></div>
+<div style="background:#0f172a;border-radius:18px;padding:24px;border:1px solid #263450">
+  <div style="display:flex;align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid #263450">
+    <div style="display:flex;flex:1;background:#16213b;border:1px solid #263450;border-radius:12px;padding:4px">
+      <div style="flex:1;text-align:center;padding:10px;border-radius:9px;background:#38bdf8;color:#082f49;font-weight:700;font-size:16px">Schedule</div>
+      <div style="flex:1;text-align:center;padding:10px;font-weight:600;font-size:16px;color:#8fa3c4">Activity</div>
+      <div style="flex:1;text-align:center;padding:10px;font-weight:600;font-size:16px;color:#8fa3c4">Simulated Schedule</div>
+      <div style="flex:1;text-align:center;padding:10px;font-weight:600;font-size:16px;color:#8fa3c4">Settings</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;color:#34d399;font-weight:700"><span style="width:22px;height:22px;border-radius:5px;background:#38bdf8;display:inline-flex;align-items:center;justify-content:center;color:#082f49;font-size:14px">✓</span>On</div>
+  </div>
+
+  <div style="display:flex;gap:12px;margin-top:20px;align-items:center">
+    <input placeholder="Find a rule by name, group or command…" style="flex:1;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px;color:#e2e8f0;font-size:15px;outline:none">
+    <div style="display:flex;background:#16213b;border:1px solid #263450;border-radius:12px;padding:3px">
+      <div onClick="{{ setFilterAll }}" style="padding:8px 14px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;background:{{ fAllBg }};color:{{ fAllFg }}">All displays</div>
+      <div onClick="{{ setFilterFull }}" style="padding:8px 14px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;background:{{ fFullBg }};color:{{ fFullFg }}">Software</div>
+      <div onClick="{{ setFilterVb }}" style="padding:8px 14px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;background:{{ fVbBg }};color:{{ fVbFg }}">Vestaboards</div>
+    </div>
+    <div style="display:flex;background:#16213b;border:1px solid #263450;border-radius:12px;padding:3px">
+      <div onClick="{{ setKindAll }}" style="padding:8px 14px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;background:{{ kAllBg }};color:{{ kAllFg }}">Any</div>
+      <div onClick="{{ setKindCadence }}" style="padding:8px 14px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;background:{{ kCadBg }};color:{{ kCadFg }}">Cadence</div>
+      <div onClick="{{ setKindFixed }}" style="padding:8px 14px;border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;background:{{ kFixBg }};color:{{ kFixFg }}">Fixed time</div>
+    </div>
+    <button style="background:#38bdf8;color:#082f49;border:0;border-radius:12px;padding:12px 18px;font-weight:700;font-size:15px;cursor:pointer">+ Add rule</button>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:10px;font-size:13px;color:#8fa3c4"><span>{{ countLabel }}</span><span>Sort: Group · Next fire · Priority</span></div>
+
+  <div style="display:grid;grid-template-columns:18px minmax(0,1fr) 118px 250px 80px 90px 44px 32px;gap:12px;padding:14px 16px 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8fa3c4;font-weight:700">
+    <span></span><span>Rule</span><span>Show on</span><span>Schedule</span><span>Hold</span><span>Priority</span><span>On</span><span></span>
+  </div>
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+    <div style="margin-top:6px">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:.1em;color:#8fa3c4"><span style="color:#e2e8f0">▾</span>{{ g.name }}<span style="background:#1c2947;border-radius:6px;padding:1px 7px;color:#e2e8f0">{{ g.count }}</span></div>
+      <sc-for list="{{ g.rules }}" as="r" hint-placeholder-count="3">
+        <div style="display:grid;grid-template-columns:18px minmax(0,1fr) 118px 250px 80px 90px 44px 32px;gap:12px;align-items:center;padding:12px 16px;background:#16213b;border:1px solid #263450;border-radius:12px;margin-bottom:6px" style-hover="border-color:#38bdf8">
+          <span style="width:12px;height:12px;border-radius:50%;background:{{ r.color }}"></span>
+          <div style="min-width:0"><div style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.name }}</div><div style="font-size:12px;color:#8fa3c4">{{ r.sub }}</div></div>
+          <span style="font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;justify-self:start;background:{{ r.tBg }};color:{{ r.tFg }}">{{ r.target }}</span>
+          <div style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-size:11px;font-weight:700;padding:3px 7px;border-radius:6px;background:{{ r.kBg }};color:{{ r.kFg }}">{{ r.kind }}</span><span style="font-size:13px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.when }}</span></div>
+          <span style="font-size:13px">{{ r.hold }}</span>
+          <div style="display:flex;gap:3px" title="{{ r.prioLabel }}"><sc-for list="{{ r.pips }}" as="p" hint-placeholder-count="5"><span style="width:8px;height:14px;border-radius:2px;background:{{ p }}"></span></sc-for></div>
+          <div style="width:38px;height:22px;border-radius:11px;background:{{ r.swBg }};position:relative"><span style="position:absolute;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;left:{{ r.swLeft }}"></span></div>
+          <span style="color:#8fa3c4;font-size:18px;text-align:center;cursor:pointer">›</span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-for>
+</div>
+</div>
+
+<!-- 1b: Rule editor -->
+<div id="1b" data-screen-label="1b Admin · Rule editor" style="width:1100px;flex:none">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;background:#38bdf8;color:#082f49;padding:3px 8px;border-radius:6px">1b</span><span style="font-size:14px;color:#8fa3c4">Admin · Rule editor (drawer) — Fixed time mode with week grid + minute selector, hold, priority</span></div>
+<div style="background:#0f172a;border-radius:18px;padding:28px;border:1px solid #263450">
+  <div style="display:flex;align-items:center;gap:14px">
+    <span style="width:14px;height:14px;border-radius:50%;background:#F5C453"></span>
+    <input value="Bible Verse of the Day" style="flex:1;background:transparent;border:0;border-bottom:1px solid #263450;padding:6px 0;color:#e2e8f0;font-size:22px;font-weight:700;outline:none">
+    <button style="background:transparent;color:#e2e8f0;border:1px solid #263450;border-radius:12px;padding:10px 16px;font-weight:600;cursor:pointer">Air now</button>
+    <button style="background:transparent;color:#f87171;border:1px solid #263450;border-radius:12px;padding:10px 16px;font-weight:600;cursor:pointer">Delete</button>
+    <button style="background:#38bdf8;color:#082f49;border:0;border-radius:12px;padding:10px 18px;font-weight:700;cursor:pointer">Save</button>
+  </div>
+  <div style="font-size:13px;color:#8fa3c4;margin:6px 0 22px 28px">faith.verse · Faith group</div>
+
+  <div style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px 20px;align-items:center">
+    <span style="font-weight:600;color:#8fa3c4">Show on</span>
+    <div style="display:flex;background:#16213b;border:1px solid #263450;border-radius:12px;padding:3px;justify-self:start">
+      <div style="padding:9px 16px;border-radius:9px;background:#38bdf8;color:#082f49;font-weight:700;font-size:14px">All displays</div>
+      <div style="padding:9px 16px;border-radius:9px;color:#8fa3c4;font-weight:600;font-size:14px">Software</div>
+      <div style="padding:9px 16px;border-radius:9px;color:#8fa3c4;font-weight:600;font-size:14px">Vestaboards</div>
+      <div style="padding:9px 16px;border-radius:9px;color:#8fa3c4;font-weight:600;font-size:14px">Specific display…</div>
+    </div>
+
+    <span style="font-weight:600;color:#8fa3c4">Schedule type</span>
+    <div style="display:flex;background:#16213b;border:1px solid #263450;border-radius:12px;padding:3px;justify-self:start">
+      <div onClick="{{ setModeCadence }}" style="padding:9px 16px;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;background:{{ modeCadBg }};color:{{ modeCadFg }}">Cadence — roughly every N minutes</div>
+      <div onClick="{{ setModeFixed }}" style="padding:9px 16px;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;background:{{ modeFixedBg }};color:{{ modeFixedFg }}">Fixed time — exactly at these times</div>
+    </div>
+  </div>
+
+  <sc-if value="{{ isCadence }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px 20px;align-items:center;margin-top:14px">
+      <span style="font-weight:600;color:#8fa3c4">Every</span><div style="background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px;font-size:15px">30 min</div>
+      <span style="font-weight:600;color:#8fa3c4">Chance</span><div style="background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px;font-size:15px">90%</div>
+      <span></span><span style="font-size:13px;color:#8fa3c4">≈ 43.2×/day · typical gap 33m, occasionally 1h+ (unchanged from today)</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isFixed }}" hint-placeholder-val="{{ true }}">
+    <div style="margin-top:22px;background:#16213b;border:1px solid #263450;border-radius:16px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div><div style="font-weight:700;font-size:16px">Week schedule</div><div style="font-size:13px;color:#8fa3c4">Click or drag across cells to pick the hours this rule fires. Each selected cell fires once, at the minute chosen below.</div></div>
+        <div style="display:flex;gap:14px;font-size:13px;color:#8fa3c4"><span style="display:flex;align-items:center;gap:6px"><i style="width:14px;height:14px;border-radius:3px;background:#38bdf8;display:inline-block"></i>Fires</span><span style="display:flex;align-items:center;gap:6px"><i style="width:14px;height:14px;border-radius:3px;background:#1c2947;display:inline-block"></i>Idle</span></div>
+      </div>
+      <div style="display:grid;grid-template-columns:52px repeat(24,minmax(0,1fr));gap:3px;user-select:none">
+        <span></span><div style="grid-column:2 / span 12;text-align:center;font-size:12px;font-weight:700;color:#FF7A6B;border-bottom:2px solid #FF7A6B;padding-bottom:4px">am</div><div style="grid-column:14 / span 12;text-align:center;font-size:12px;font-weight:700;color:#38bdf8;border-bottom:2px solid #38bdf8;padding-bottom:4px">pm</div>
+        <sc-for list="{{ fixedRows }}" as="row" hint-placeholder-count="7">
+          <span style="font-size:13px;color:#8fa3c4;display:flex;align-items:center">{{ row.day }}</span>
+          <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="24"><div onMouseDown="{{ c.onMouseDown }}" onMouseEnter="{{ c.onMouseEnter }}" style="height:30px;border-radius:5px;cursor:pointer;background:{{ c.bg }}" style-hover="outline:2px solid #7dd3fc"></div></sc-for>
+        </sc-for>
+        <span></span><sc-for list="{{ hours }}" as="h" hint-placeholder-count="24"><span style="font-size:11px;color:#8fa3c4;text-align:center">{{ h }}</span></sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap">
+        <span style="font-weight:600;color:#8fa3c4">Fire at minute</span>
+        <div style="display:flex;background:#0f172a;border:1px solid #263450;border-radius:10px;padding:3px">
+          <sc-for list="{{ mins }}" as="m" hint-placeholder-count="4"><div onClick="{{ m.onClick }}" style="padding:7px 12px;border-radius:7px;font-weight:700;font-size:14px;cursor:pointer;background:{{ m.bg }};color:{{ m.fg }}">{{ m.label }}</div></sc-for>
+        </div>
+        <span style="font-size:13px;color:#8fa3c4">or</span>
+        <div style="display:flex;align-items:center;gap:6px;background:#0f172a;border:1px solid #263450;border-radius:10px;padding:6px 10px"><span style="font-size:13px;color:#8fa3c4">HH:</span><input value="{{ minuteValue }}" onChange="{{ onMinuteInput }}" style="width:34px;background:transparent;border:0;color:#e2e8f0;font-size:15px;font-weight:700;outline:none;text-align:center"><span style="font-size:13px;color:#8fa3c4">past the hour</span></div>
+        <span style="font-size:13px;color:#8fa3c4;margin-left:auto">Right-click a cell to override its minute</span>
+      </div>
+      <div style="margin-top:14px;padding:12px 14px;background:#0f172a;border-radius:10px;font-size:14px"><span style="color:#8fa3c4">Fires </span><b>{{ firesPerWeek }}×/week</b><span style="color:#8fa3c4"> — </span>{{ fixedSummary }}</div>
+    </div>
+  </sc-if>
+
+  <div style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px 20px;align-items:center;margin-top:22px">
+    <span style="font-weight:600;color:#8fa3c4">Hold on screen</span>
+    <div style="display:flex;align-items:center;gap:12px"><div style="display:flex;align-items:center;gap:6px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:10px 14px"><input value="15" style="width:40px;background:transparent;border:0;color:#e2e8f0;font-size:16px;font-weight:700;outline:none;text-align:right"><span style="color:#8fa3c4">min</span></div><span style="font-size:13px;color:#8fa3c4">Default 15 min. Vestaboards keep it until this expires <b style="color:#e2e8f0">and</b> another event is queued; a higher-priority event always interrupts.</span></div>
+
+    <span style="font-weight:600;color:#8fa3c4">Priority</span>
+    <div style="display:flex;align-items:center;gap:10px"><div style="display:flex;background:#16213b;border:1px solid #263450;border-radius:12px;padding:3px">
+      <div style="padding:8px 14px;border-radius:9px;color:#8fa3c4;font-weight:600;font-size:14px">1 Background</div><div style="padding:8px 14px;border-radius:9px;color:#8fa3c4;font-weight:600;font-size:14px">2 Low</div><div style="padding:8px 14px;border-radius:9px;color:#8fa3c4;font-weight:600;font-size:14px">3 Normal</div><div style="padding:8px 14px;border-radius:9px;color:#8fa3c4;font-weight:600;font-size:14px">4 High</div><div style="padding:8px 14px;border-radius:9px;background:#38bdf8;color:#082f49;font-weight:700;font-size:14px">5 Featured</div></div></div>
+
+    <span style="font-weight:600;color:#8fa3c4">Quiet hours</span>
+    <label style="display:flex;align-items:center;gap:10px;font-size:14px"><span style="width:20px;height:20px;border-radius:5px;border:1px solid #263450;background:#16213b;display:inline-block"></span>Exempt — may fire during a board's quiet hours</label>
+  </div>
+  <div style="margin-top:18px;font-size:14px;color:#8fa3c4;cursor:pointer">▸ Advanced — cooldown, max per day, jitter, requires-content guard</div>
+</div>
+</div>
+
+<!-- 1c: Quiet hours per board -->
+<div id="1c" data-screen-label="1c Admin · Vestaboard quiet hours" style="width:1100px;flex:none">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;background:#38bdf8;color:#082f49;padding:3px 8px;border-radius:6px">1c</span><span style="font-size:14px;color:#8fa3c4">Admin · Settings → Quiet hours — per-board week grid (default 22:00–07:00)</span></div>
+<div style="background:#0f172a;border-radius:18px;padding:28px;border:1px solid #263450">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:6px">
+    <div style="font-weight:700;font-size:18px;flex:1">Quiet hours</div>
+    <div style="display:flex;background:#16213b;border:1px solid #263450;border-radius:12px;padding:3px">
+      <sc-for list="{{ boards }}" as="b" hint-placeholder-count="2"><div onClick="{{ b.onClick }}" style="padding:8px 16px;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;background:{{ b.bg }};color:{{ b.fg }}">{{ b.n }}</div></sc-for>
+    </div>
+    <button style="background:transparent;color:#e2e8f0;border:1px solid #263450;border-radius:12px;padding:9px 14px;font-weight:600;font-size:13px;cursor:pointer">Copy to other boards</button>
+    <button style="background:transparent;color:#e2e8f0;border:1px solid #263450;border-radius:12px;padding:9px 14px;font-weight:600;font-size:13px;cursor:pointer">Reset to 22:00–07:00</button>
+  </div>
+  <p style="font-size:13px;color:#8fa3c4;margin:0 0 18px">While quiet, <b style="color:#e2e8f0">{{ boardName }}</b> shows nothing new; queued events wait until the board wakes. Exempt rules and the Quiet Hours Reminder still post.</p>
+  <div style="display:flex;gap:16px;font-size:13px;color:#8fa3c4;margin-bottom:12px"><span style="display:flex;align-items:center;gap:6px"><i style="width:14px;height:14px;border-radius:3px;background:#f5c453;display:inline-block"></i>Active</span><span style="display:flex;align-items:center;gap:6px"><i style="width:14px;height:14px;border-radius:3px;background:#263450;display:inline-block"></i>Quiet</span><span style="margin-left:auto">Drag to paint · click a day label to toggle the whole day</span></div>
+  <div style="display:grid;grid-template-columns:52px repeat(24,minmax(0,1fr));gap:3px;user-select:none">
+    <span></span><div style="grid-column:2 / span 12;text-align:center;font-size:12px;font-weight:700;color:#FF7A6B;border-bottom:2px solid #FF7A6B;padding-bottom:4px">am</div><div style="grid-column:14 / span 12;text-align:center;font-size:12px;font-weight:700;color:#38bdf8;border-bottom:2px solid #38bdf8;padding-bottom:4px">pm</div>
+    <sc-for list="{{ quietRows }}" as="row" hint-placeholder-count="7">
+      <span style="font-size:13px;color:#8fa3c4;display:flex;align-items:center;cursor:pointer">{{ row.day }}</span>
+      <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="24"><div onMouseDown="{{ c.onMouseDown }}" onMouseEnter="{{ c.onMouseEnter }}" style="height:34px;border-radius:5px;cursor:pointer;background:{{ c.bg }}" style-hover="outline:2px solid #7dd3fc"></div></sc-for>
+    </sc-for>
+    <span></span><sc-for list="{{ hours }}" as="h" hint-placeholder-count="24"><span style="font-size:11px;color:#8fa3c4;text-align:center">{{ h }}</span></sc-for>
+  </div>
+  <div style="margin-top:14px;padding:12px 14px;background:#16213b;border-radius:10px;font-size:13px;color:#8fa3c4">{{ qSum }}</div>
+  <div style="display:flex;align-items:center;gap:10px;margin-top:18px;font-size:14px"><span style="width:20px;height:20px;border-radius:5px;background:#38bdf8;display:inline-flex;align-items:center;justify-content:center;color:#082f49;font-size:13px">✓</span>Post a Quiet Hours Reminder card when quiet begins</div>
+</div>
+</div>
+
+<!-- 1d: Permission -->
+<div id="1d" data-screen-label="1d Admin · User permission" style="width:520px;flex:none">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;background:#38bdf8;color:#082f49;padding:3px 8px;border-radius:6px">1d</span><span style="font-size:14px;color:#8fa3c4">Admin · Household user editor — new Scheduler permission</span></div>
+<div style="background:#0f172a;border-radius:18px;padding:28px;border:1px solid #263450">
+  <div style="font-weight:700;font-size:20px;margin-bottom:18px">Edit Maria</div>
+  <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8fa3c4;font-weight:700;margin-bottom:10px">Permissions</div>
+  <div style="display:grid;gap:10px">
+    <label style="display:flex;align-items:center;gap:12px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px"><span style="width:20px;height:20px;border-radius:5px;background:#38bdf8;display:inline-flex;align-items:center;justify-content:center;color:#082f49;font-size:13px">✓</span><span style="flex:1;font-weight:600">Flight plan</span></label>
+    <label style="display:flex;align-items:center;gap:12px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px"><span style="width:20px;height:20px;border-radius:5px;background:#38bdf8;display:inline-flex;align-items:center;justify-content:center;color:#082f49;font-size:13px">✓</span><span style="flex:1;font-weight:600">Slideshow</span></label>
+    <label style="display:flex;align-items:center;gap:12px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px"><span style="width:20px;height:20px;border-radius:5px;border:1px solid #263450;display:inline-block"></span><span style="flex:1;font-weight:600">Red letter dates</span></label>
+    <div style="background:#16213b;border:1px solid #38bdf8;border-radius:12px;padding:12px 14px">
+      <label style="display:flex;align-items:center;gap:12px"><span style="width:20px;height:20px;border-radius:5px;background:#38bdf8;display:inline-flex;align-items:center;justify-content:center;color:#082f49;font-size:13px">✓</span><span style="flex:1;font-weight:600">Scheduler</span><span style="font-size:11px;font-weight:700;background:rgba(56,189,248,.18);color:#7dd3fc;padding:3px 8px;border-radius:999px">NEW</span></label>
+      <div style="font-size:13px;color:#8fa3c4;margin:8px 0 0 32px">Shows the Scheduler tab on the user site with the same rule editor as admin — filters, fixed-time week grid, hold and priority. <code style="color:#e2e8f0">permissions.scheduler</code></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:18px"><span style="font-size:12px;background:#1c2947;padding:4px 9px;border-radius:999px">Member</span><span style="font-size:12px;background:#1c2947;padding:4px 9px;border-radius:999px">Flights</span><span style="font-size:12px;background:#1c2947;padding:4px 9px;border-radius:999px">Slideshow</span><span style="font-size:12px;background:rgba(56,189,248,.18);color:#7dd3fc;padding:4px 9px;border-radius:999px;font-weight:700">Scheduler</span></div>
+</div>
+</div>
+
+<!-- 1e: User site -->
+<div id="1e" data-screen-label="1e User site · Scheduler" style="width:520px;flex:none">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px"><span style="font-size:12px;font-weight:700;background:#38bdf8;color:#082f49;padding:3px 8px;border-radius:6px">1e</span><span style="font-size:14px;color:#8fa3c4">User site · Scheduler tab (full parity, same components)</span></div>
+<div style="background:#0f172a;border-radius:18px;padding:24px;border:1px solid #263450">
+  <div style="display:flex;gap:6px;margin-bottom:18px;font-size:14px;font-weight:600;color:#8fa3c4"><span style="padding:8px 12px;border-radius:9px">Dashboard</span><span style="padding:8px 12px;border-radius:9px">Flights</span><span style="padding:8px 12px;border-radius:9px">Slideshow</span><span style="padding:8px 12px;border-radius:9px;background:#38bdf8;color:#082f49;font-weight:700">Scheduler</span></div>
+  <div style="display:flex;gap:8px;margin-bottom:14px"><input placeholder="Find a rule…" style="flex:1;background:#16213b;border:1px solid #263450;border-radius:12px;padding:10px 12px;color:#e2e8f0;font-size:14px;outline:none"><button style="background:#38bdf8;color:#082f49;border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer">+ Add</button></div>
+  <div style="display:flex;background:#16213b;border:1px solid #263450;border-radius:12px;padding:3px;margin-bottom:14px"><div style="flex:1;text-align:center;padding:7px;border-radius:9px;background:#38bdf8;color:#082f49;font-weight:700;font-size:13px">All</div><div style="flex:1;text-align:center;padding:7px;font-weight:600;font-size:13px;color:#8fa3c4">Software</div><div style="flex:1;text-align:center;padding:7px;font-weight:600;font-size:13px;color:#8fa3c4">Vestaboards</div></div>
+  <div style="display:grid;gap:6px">
+    <div style="display:flex;align-items:center;gap:10px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px"><span style="width:10px;height:10px;border-radius:50%;background:#F5C453"></span><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">Bible Verse of the Day</div><div style="font-size:12px;color:#8fa3c4">Fixed · Daily 07:00 · hold 15m · All displays</div></div><div style="width:34px;height:20px;border-radius:10px;background:#38bdf8;position:relative"><span style="position:absolute;top:3px;left:17px;width:14px;height:14px;border-radius:50%;background:#fff"></span></div></div>
+    <div style="display:flex;align-items:center;gap:10px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px"><span style="width:10px;height:10px;border-radius:50%;background:#FF7A6B"></span><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">Weather Forecast</div><div style="font-size:12px;color:#8fa3c4">Fixed · Mon–Fri 06:45, 17:30 · hold 5m</div></div><div style="width:34px;height:20px;border-radius:10px;background:#38bdf8;position:relative"><span style="position:absolute;top:3px;left:17px;width:14px;height:14px;border-radius:50%;background:#fff"></span></div></div>
+    <div style="display:flex;align-items:center;gap:10px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px"><span style="width:10px;height:10px;border-radius:50%;background:#6EE7A8"></span><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">Shared Photo Slideshow</div><div style="font-size:12px;color:#8fa3c4">Cadence · every 20 min · 80% · Software</div></div><div style="width:34px;height:20px;border-radius:10px;background:#38bdf8;position:relative"><span style="position:absolute;top:3px;left:17px;width:14px;height:14px;border-radius:50%;background:#fff"></span></div></div>
+    <div style="display:flex;align-items:center;gap:10px;background:#16213b;border:1px solid #263450;border-radius:12px;padding:12px 14px"><span style="width:10px;height:10px;border-radius:50%;background:#C79BFF"></span><div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">Evening Prayer</div><div style="font-size:12px;color:#8fa3c4">Fixed · Daily 21:30 · hold 20m · Vestaboards</div></div><div style="width:34px;height:20px;border-radius:10px;background:#263450;position:relative"><span style="position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff"></span></div></div>
+  </div>
+  <p style="font-size:12px;color:#8fa3c4;margin:14px 0 0">Tapping a row opens the same editor as <a href="#1b">1b</a>, stacked vertically on narrow screens. Requires the Scheduler permission (<a href="#1d">1d</a>).</p>
+</div>
+</div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const HOURS = Array.from({length:24},(_,i)=>i);
+const T = {
+  all:{label:'All displays',bg:'#1c2947',fg:'#e2e8f0'},
+  full:{label:'Software',bg:'rgba(56,189,248,.18)',fg:'#7dd3fc'},
+  vestaboard:{label:'Vestaboards',bg:'rgba(245,196,83,.18)',fg:'#f5c453'},
+};
+const RULES = [
+  {g:'Alexa',name:'Calendar Clock',sub:'alexa.calendar-clock',target:'vestaboard',kind:'cadence',when:'Every 30 min · 90%',hold:'1m',prio:3,color:'#F58EC1',on:true},
+  {g:'Alexa',name:'Red Letter',sub:'alexa.red-letter',target:'all',kind:'fixed',when:'Daily 08:00',hold:'10m',prio:4,color:'#B8D06A',on:true},
+  {g:'Alexa',name:'Weather Forecast',sub:'alexa.weather',target:'all',kind:'fixed',when:'Mon–Fri 06:45, 17:30 · Sat–Sun 09:00',hold:'5m',prio:4,color:'#FF7A6B',on:true},
+  {g:'Faith',name:'Bible Verse of the Day',sub:'faith.verse',target:'all',kind:'fixed',when:'Daily 07:00',hold:'15m',prio:5,color:'#F5C453',on:true},
+  {g:'Faith',name:'Evening Prayer',sub:'faith.prayer',target:'vestaboard',kind:'fixed',when:'Daily 21:30',hold:'20m',prio:4,color:'#C79BFF',on:false},
+  {g:'Media',name:'Steam — last played',sub:'steam.last-played',target:'full',kind:'cadence',when:'Every 45 min · 60%',hold:'45s',prio:2,color:'#C79BFF',on:true},
+  {g:'Media',name:'PSN Library Tour',sub:'psn.library',target:'full',kind:'cadence',when:'Every 2h · 100%',hold:'2m',prio:2,color:'#F58EC1',on:true},
+  {g:'Media',name:'Shared Photo Slideshow',sub:'photos.slideshow',target:'full',kind:'cadence',when:'Every 20 min · 80% · 09:00–22:00',hold:'3m',prio:3,color:'#6EE7A8',on:true},
+  {g:'News',name:'The Upside News',sub:'news.upside',target:'all',kind:'cadence',when:'Every 1h · 100%',hold:'1m',prio:3,color:'#B8D06A',on:true},
+  {g:'News',name:'Trivia',sub:'trivia.daily',target:'vestaboard',kind:'fixed',when:'Mon–Fri 12:15',hold:'15m',prio:3,color:'#F5C453',on:true},
+  {g:'House',name:'Tesla Dashboard',sub:'tesla.dashboard',target:'full',kind:'cadence',when:'Every 30 min · 90%',hold:'1m',prio:2,color:'#5FD0FF',on:true},
+  {g:'House',name:'Overhead',sub:'flights.overhead',target:'all',kind:'cadence',when:'Every 15 min · 100%',hold:'30s',prio:5,color:'#9AA7FF',on:true},
+];
+const KIND = {cadence:{bg:'rgba(143,163,196,.2)',fg:'#c7d2e6',l:'Cadence'},fixed:{bg:'rgba(52,211,153,.18)',fg:'#6ee7b7',l:'Fixed'}};
+function defaultQuiet(){const s=new Set();for(let d=0;d<7;d++){for(let h=0;h<24;h++){if(h>=22||h<7)s.add(d+'-'+h);}}return s;}
+function fmt(h,m){return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');}
+class Component extends DCLogic {
+  state = {
+    filter:'all', kind:'all',
+    fixed:new Set(['0-7','1-7','2-7','3-7','4-7','5-8','6-8']),
+    minute:0, drag:null,
+    board:0,
+    quiet:[defaultQuiet(), (()=>{const s=defaultQuiet();for(let d=5;d<7;d++){s.delete(d+'-22');s.delete(d+'-23');}return s;})()],
+    quietDrag:null, mode:'fixed',
+  };
+  componentDidMount(){ this._up=()=>this.setState({drag:null,quietDrag:null}); window.addEventListener('mouseup',this._up); }
+  componentWillUnmount(){ window.removeEventListener('mouseup',this._up); }
+  seg(active){ return active?{bg:'#38bdf8',fg:'#082f49'}:{bg:'transparent',fg:'#8fa3c4'}; }
+  paint(setKey,key,mode){ this.setState(s=>{const n=new Set(s[setKey]);mode==='on'?n.add(key):n.delete(key);return {[setKey]:n};}); }
+  gridRows(set,onKey,offKey,dragKey,onColor,offColor){
+    return DAYS.map((day,d)=>({day,cells:HOURS.map(h=>{const key=d+'-'+h;const on=set.has(key);return {key,bg:on?onColor:offColor,
+      onMouseDown:()=>{const mode=on?'off':'on';this.setState({[dragKey]:mode});this.paint(onKey,key,mode);},
+      onMouseEnter:()=>{if(this.state[dragKey])this.paint(onKey,key,this.state[dragKey]);}};})}));
+  }
+  renderVals(){
+    const s=this.state;
+    const rules=RULES.filter(r=>(s.filter==='all'||r.target===s.filter||r.target==='all')&&(s.kind==='all'||r.kind===s.kind));
+    const groups=[];rules.forEach(r=>{let g=groups.find(x=>x.name===r.g);if(!g){g={name:r.g,rules:[],count:0};groups.push(g);}g.count++;g.rules.push({
+      ...r,target:T[r.target].label,tBg:T[r.target].bg,tFg:T[r.target].fg,kind:KIND[r.kind].l,kBg:KIND[r.kind].bg,kFg:KIND[r.kind].fg,
+      pips:[1,2,3,4,5].map(i=>i<=r.prio?'#38bdf8':'#263450'),prioLabel:'Importance '+r.prio,swBg:r.on?'#38bdf8':'#263450',swLeft:r.on?'19px':'3px'});});
+    const fa=this.seg(s.filter==='all'),ff=this.seg(s.filter==='full'),fv=this.seg(s.filter==='vestaboard');
+    const ka=this.seg(s.kind==='all'),kc=this.seg(s.kind==='cadence'),kf=this.seg(s.kind==='fixed');
+    // fixed-time summary
+    const byDay=DAYS.map((_,d)=>HOURS.filter(h=>s.fixed.has(d+'-'+h)).map(h=>fmt(h,s.minute)).join(', '));
+    const summary=[];DAYS.forEach((day,d)=>{const t=byDay[d];if(!t)return;const last=summary[summary.length-1];if(last&&last.t===t){last.days.push(day);}else summary.push({days:[day],t});});
+    const fixedSummary=summary.map(x=>(x.days.length>2?x.days[0]+'–'+x.days[x.days.length-1]:x.days.join(', '))+' '+x.t).join(' · ')||'Nothing selected — click cells in the grid';
+    const firesPerWeek=s.fixed.size;
+    const quietSet=s.quiet[s.board];
+    const qSum=DAYS.map((day,d)=>{const qs=HOURS.filter(h=>quietSet.has(d+'-'+h));return day+' '+(qs.length?qs.length+'h quiet':'always on');}).join(' · ');
+    const mins=[0,15,30,45].map(m=>({m,label:':'+String(m).padStart(2,'0'),bg:s.minute===m?'#38bdf8':'transparent',fg:s.minute===m?'#082f49':'#8fa3c4',onClick:()=>this.setState({minute:m})}));
+    return {
+      groups, countLabel:rules.length+' of '+RULES.length+' rules · grouped by type',
+      setFilterAll:()=>this.setState({filter:'all'}),setFilterFull:()=>this.setState({filter:'full'}),setFilterVb:()=>this.setState({filter:'vestaboard'}),
+      setKindAll:()=>this.setState({kind:'all'}),setKindCadence:()=>this.setState({kind:'cadence'}),setKindFixed:()=>this.setState({kind:'fixed'}),
+      fAllBg:fa.bg,fAllFg:fa.fg,fFullBg:ff.bg,fFullFg:ff.fg,fVbBg:fv.bg,fVbFg:fv.fg,kAllBg:ka.bg,kAllFg:ka.fg,kCadBg:kc.bg,kCadFg:kc.fg,kFixBg:kf.bg,kFixFg:kf.fg,
+      hours:HOURS, fixedRows:this.gridRows(s.fixed,'fixed',null,'drag','#38bdf8','#1c2947'),
+      fixedSummary, firesPerWeek, mins, minuteValue:String(s.minute).padStart(2,'0'),
+      onMinuteInput:(e)=>this.setState({minute:Math.max(0,Math.min(59,Number(e.target.value)||0))}),
+      modeFixedBg:s.mode==='fixed'?'#38bdf8':'transparent',modeFixedFg:s.mode==='fixed'?'#082f49':'#8fa3c4',modeCadBg:s.mode==='cadence'?'#38bdf8':'transparent',modeCadFg:s.mode==='cadence'?'#082f49':'#8fa3c4',
+      setModeFixed:()=>this.setState({mode:'fixed'}),setModeCadence:()=>this.setState({mode:'cadence'}),isFixed:s.mode==='fixed',isCadence:s.mode==='cadence',
+      quietRows:this.gridRows(quietSet,null,null,'quietDrag','#263450','#f5c453').map(r=>({...r,cells:r.cells.map(c=>({...c,
+        onMouseDown:()=>{const on=quietSet.has(c.key);const mode=on?'off':'on';this.setState({quietDrag:mode});this.paintQuiet(c.key,mode);},
+        onMouseEnter:()=>{if(this.state.quietDrag)this.paintQuiet(c.key,this.state.quietDrag);}}))})),
+      qSum, boards:[{n:'Kitchen',i:0},{n:'Office',i:1}].map(b=>({...b,bg:s.board===b.i?'#38bdf8':'transparent',fg:s.board===b.i?'#082f49':'#8fa3c4',onClick:()=>this.setState({board:b.i})})),
+      boardName:['Kitchen','Office'][s.board],
+    };
+  }
+  paintQuiet(key,mode){ this.setState(s=>{const q=s.quiet.map(x=>new Set(x));mode==='on'?q[s.board].add(key):q[s.board].delete(key);return {quiet:q};}); }
+}
+</script>
+</body>
+</html>

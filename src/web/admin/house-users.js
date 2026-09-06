@@ -98,13 +98,14 @@
         flightPlan: $('hu-flight')?.checked === true,
         slideshow: $('hu-slides')?.checked === true,
         redLetter: $('hu-dates')?.checked === true,
+        scheduler: $('hu-sched')?.checked === true,
       },
       avatar: selectedAvatar,
     };
   }
 
   function setLocked(locked) {
-    ['hu-username', 'hu-email', 'hu-admin', 'hu-flight', 'hu-slides', 'hu-dates'].forEach((id) => {
+    ['hu-username', 'hu-email', 'hu-admin', 'hu-flight', 'hu-slides', 'hu-dates', 'hu-sched'].forEach((id) => {
       if ($(id)) $(id).disabled = locked;
     });
     ['btn-hu-toggle', 'btn-hu-reset', 'btn-hu-email'].forEach((id) => {
@@ -122,6 +123,7 @@
     $('hu-flight').checked = user?.permissions?.flightPlan === true;
     $('hu-slides').checked = user?.permissions?.slideshow === true;
     $('hu-dates').checked = user?.permissions?.redLetter === true;
+    if ($('hu-sched')) $('hu-sched').checked = user?.permissions?.scheduler === true;
     selectedAvatar = user?.avatar
       ? { kind: user.avatar.kind, id: user.avatar.id }
       : { kind: 'template', id: DEFAULT_AVATAR };
@@ -338,6 +340,7 @@
         user.permissions?.flightPlan ? 'Flights' : '',
         user.permissions?.slideshow ? 'Slideshow' : '',
         user.permissions?.redLetter ? 'Dates' : '',
+        user.permissions?.scheduler ? 'Scheduler' : '',
         user.active === false ? 'Inactive' : '',
       ].filter(Boolean);
       card.innerHTML = `

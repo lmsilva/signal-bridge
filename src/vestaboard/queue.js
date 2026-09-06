@@ -39,7 +39,7 @@
 // Time and the transport are injected so the whole thing can be tested
 // without waiting fifteen real seconds for anything.
 
-const { dateParts } = require('./clock');
+const { parseHhMm, inQuietHours } = require('./quiet-hours');
 const {
   classify: classifyHold,
   LANES,
@@ -114,34 +114,6 @@ function resolveActor(options = {}) {
     return { kind: 'scheduler', userId: null, name: 'Scheduled' };
   }
   return { kind: 'system', userId: null, name: 'System' };
-}
-
-/** "22:00" -> minutes since midnight, or null if unusable. */
-function parseHhMm(value) {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value || '').trim());
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return null;
-  return hours * 60 + minutes;
-}
-
-/**
- * Quiet hours are local wall-clock and usually cross midnight, so the window
- * is "start <= t OR t < end" whenever start is after end.
- */
-function inQuietHours(date, quietHours, timeZone) {
-  if (!quietHours || quietHours.enabled === false) return false;
-  const start = parseHhMm(quietHours.start);
-  const end = parseHhMm(quietHours.end);
-  if (start === null || end === null || start === end) return false;
-
-  const parts = dateParts(date, timeZone);
-  if (!parts) return false;
-  const minutes = parts.hour * 60 + parts.minute;
-  return start < end
-    ? minutes >= start && minutes < end
-    : minutes >= start || minutes < end;
 }
 
 function createQueue({

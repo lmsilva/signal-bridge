@@ -107,17 +107,19 @@ function normalizeEmail(value) {
 }
 
 function emptyPermissions() {
-  return { flightPlan: false, slideshow: false, redLetter: false };
+  return { flightPlan: false, slideshow: false, redLetter: false, scheduler: false };
 }
 
 function sanitisePermissions(raw = {}, { isAdmin = false } = {}) {
+  // Admins/owners get every feature permission (same as flightPlan / slideshow / redLetter).
   if (isAdmin) {
-    return { flightPlan: true, slideshow: true, redLetter: true };
+    return { flightPlan: true, slideshow: true, redLetter: true, scheduler: true };
   }
   return {
     flightPlan: raw.flightPlan === true,
     slideshow: raw.slideshow === true,
     redLetter: raw.redLetter === true,
+    scheduler: raw.scheduler === true,
   };
 }
 
@@ -411,6 +413,7 @@ function createHouseUsers(config = {}, log = console) {
         payload.permissions.flightPlan === false
         || payload.permissions.slideshow === false
         || payload.permissions.redLetter === false
+        || payload.permissions.scheduler === false
       )) {
         return { ok: false, error: 'The environment admin permissions cannot be changed' };
       }

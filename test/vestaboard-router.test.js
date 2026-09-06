@@ -459,3 +459,20 @@ test('the admin Push grid filters by the selected display kind', () => {
   assert.match(appJs, /board-capable pushes go to every enabled board/);
   assert.match(appJs, /entry\.kind !== 'vestaboard'/);
 });
+
+test('routeEvent stamps holdSeconds onto frames that lack one', () => {
+  let submitted = null;
+  routeEvent({
+    payload: WEATHER,
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    holdSeconds: 900,
+    scheduler: true,
+    submit: (_boardId, frames, options) => {
+      submitted = { frames, options };
+      return { ok: true, accepted: frames.length };
+    },
+  });
+  assert.ok(submitted.frames.length >= 1);
+  assert.ok(submitted.frames.every((frame) => frame.holdSeconds === 900));
+  assert.equal(submitted.options.scheduler, true);
+});

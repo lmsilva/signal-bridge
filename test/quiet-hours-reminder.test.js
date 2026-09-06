@@ -246,3 +246,14 @@ test('remindOnStart false skips a board even at 22:00', () => {
   assert.equal(pushed.length, 0);
   watch.stop();
 });
+
+test('week-model quiet hours keep one period id from 22:00 through 06:59', () => {
+  const { defaultQuietWeek } = require('../src/vestaboard/quiet-hours');
+  const weekQuiet = { enabled: true, remindOnStart: true, week: defaultQuietWeek() };
+  assert.equal(quietHoursPeriodId(atHour(21, 59), weekQuiet), null);
+  assert.equal(quietHoursPeriodId(atHour(22), weekQuiet), '2026-08-28');
+  assert.equal(quietHoursPeriodId(atHour(2, 0, 29), weekQuiet), '2026-08-28');
+  assert.equal(quietHoursPeriodId(atHour(7, 0, 29), weekQuiet), null);
+  assert.equal(minutesSinceQuietStart(atHour(22, 2), weekQuiet), 2);
+  assert.equal(minutesSinceQuietStart(atHour(0, 10, 29), weekQuiet), 130);
+});

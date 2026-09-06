@@ -59,10 +59,9 @@ test('a half-filled board comes back with everything a queue needs', () => {
   assert.equal(board.dwellSeconds, undefined);
   assert.equal(board.priorities, undefined);
   assert.deepEqual(board.quietHours, {
-    start: '22:00',
-    end: '07:00',
     enabled: true,
     remindOnStart: true,
+    week: ["000000011111111111111100","000000011111111111111100","000000011111111111111100","000000011111111111111100","000000011111111111111100","000000011111111111111100","000000011111111111111100"],
   });
   assert.equal(board.events, 'all');
 
@@ -612,4 +611,35 @@ test('the hub survives having no simulator at all', async () => {
     hub.stop();
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('legacy start/end quiet hours migrate to a week grid', () => {
+  const { normaliseQuietHours, DEFAULT_QUIET_WEEK_ROW } = require('../src/vestaboard/settings');
+  const overnight = normaliseQuietHours({ start: '22:00', end: '07:00' });
+  assert.equal(overnight.enabled, true);
+  assert.equal(overnight.remindOnStart, true);
+  assert.equal(overnight.week.length, 7);
+  assert.equal(overnight.week[0], DEFAULT_QUIET_WEEK_ROW);
+  assert.equal(overnight.start, undefined);
+  assert.equal(overnight.end, undefined);
+
+  const nap = normaliseQuietHours({ start: '13:00', end: '15:00' });
+  assert.equal(nap.week[0][13], '0');
+  assert.equal(nap.week[0][14], '0');
+  assert.equal(nap.week[0][12], '1');
+  assert.equal(nap.week[0][15], '1');
+});
+
+test('quiet-hours week strings are normalised to 24 chars of 0/1', () => {
+  const { normaliseQuietHours } = require('../src/vestaboard/settings');
+  const q = normaliseQuietHours({
+    week: ['01', 'xxxxxxxxxxxxxxxxxxxxxxxx', null, undefined, '', '111111111111111111111111', '000000000000000000000000'],
+  });
+  assert.equal(q.week.length, 7);
+  for (const row of q.week) {
+    assert.equal(row.length, 24);
+    assert.match(row, /^[01]{24}$/);
+  }
+  assert.equal(q.week[5], '111111111111111111111111');
+  assert.equal(q.week[6], '000000000000000000000000');
 });

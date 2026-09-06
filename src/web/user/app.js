@@ -37,6 +37,7 @@
   const GAMES_POLL_MS = 8000;
   let lightboxIndex = -1;
   let confirmResolver = null;
+  let schedulerUi = null;
   const DATE_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DATE_MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -94,6 +95,7 @@
     }
     if (name === 'flight') loadTrips();
     if (name === 'dates') loadDates();
+    if (name === 'scheduler') schedulerUi?.refresh?.();
   }
 
   function escapeHtml(value) {
@@ -688,12 +690,15 @@
     const canFlight = me.isAdmin || me.permissions?.flightPlan;
     const canSlides = me.isAdmin || me.permissions?.slideshow;
     const canDates = me.isAdmin || me.permissions?.redLetter;
+    const canSched = me.isAdmin || me.permissions?.scheduler;
     document.querySelector('[data-tab="flight"]').hidden = !canFlight;
     document.querySelector('[data-tab="slideshow"]').hidden = !canSlides;
     document.querySelector('[data-tab="dates"]').hidden = !canDates;
+    document.querySelector('[data-tab="scheduler"]').hidden = !canSched;
     $('tab-flight').hidden = !canFlight;
     $('tab-slideshow').hidden = !canSlides;
     $('tab-dates').hidden = !canDates;
+    $('tab-scheduler').hidden = !canSched;
     renderAvatars();
     renderDash();
   }
@@ -1109,6 +1114,12 @@
       watching: () => Boolean($('tab-board')?.classList.contains('active')) && !document.hidden,
     });
     window.userBoard.mount();
+    if (window.SignalSchedulerUi?.mount) {
+      schedulerUi = window.SignalSchedulerUi.mount({
+        toast,
+        getDisplays: () => displays,
+      });
+    }
     renderLibrary();
   }
 

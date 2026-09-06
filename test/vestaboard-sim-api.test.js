@@ -421,7 +421,8 @@ test('the settings tab gets the whole board, health included, and never a key', 
     assert.equal(sim.simulator, true);
     assert.equal(sim.health, 'ok');
     assert.equal(sim.hasKey, true);
-    assert.equal(typeof sim.quietHours.start, 'string');
+    assert.equal(Array.isArray(sim.quietHours.week), true);
+    assert.equal(sim.quietHours.week.length, 7);
     assert.equal(sim.dwellSeconds, undefined);
     assert.equal(sim.priorities, undefined);
     assert.equal(typeof res.body.house.dwellSeconds, 'number');

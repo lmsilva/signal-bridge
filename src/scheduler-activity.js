@@ -23,6 +23,7 @@ const OUTCOMES = [
   'blocked-display',
   'blocked-quiet-hours',
   'blocked-global-gap',
+  'missed-fixed',
   'error',
   'disabled',
 ];

@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { parseHhMm, inQuietHours } = require('./vestaboard/queue');
-const { dateParts } = require('./vestaboard/clock');
+const { quietRunStart, quietWindowEdges } = require('./vestaboard/quiet-hours');
 const { parseLayout } = require('./vestaboard/notation');
 const { centered } = require('./vestaboard/frames');
 const { COLS, fold, blankRow, assertValidLayout } = require('./vestaboard/encoder');
@@ -85,11 +85,6 @@ function ymd(year, month, day) {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
-function previousYmd(year, month, day) {
-  const prev = new Date(Date.UTC(year, month - 1, day) - 24 * 60 * 60 * 1000);
-  return ymd(prev.getUTCFullYear(), prev.getUTCMonth() + 1, prev.getUTCDate());
-}
-
 /** `UNTIL 7AM` / `UNTIL 10:30PM` — short enough for a centered 22-col line. */
 function formatQuietEnd(hhmm) {
   const minutes = parseHhMm(hhmm);
@@ -155,9 +150,15 @@ function buildQuietHoursReminderPayload({
     type: TYPE,
     variant: chosen,
     asOf: Number.isNaN(at.getTime()) ? new Date().toISOString() : at.toISOString(),
-    window: quietHours && (quietHours.start || quietHours.end)
-      ? { start: quietHours.start || '', end: quietHours.end || '' }
-      : null,
+    window: (() => {
+      if (!quietHours) return null;
+      const edges = quietWindowEdges(at, quietHours, null);
+      if (edges && (edges.start || edges.end)) return edges;
+      if (quietHours.start || quietHours.end) {
+        return { start: quietHours.start || '', end: quietHours.end || '' };
+      }
+      return null;
+    })(),
   };
 }
 
@@ -166,37 +167,19 @@ function buildQuietHoursReminderPayload({
  * Overnight 22:00–07:00 at 02:00 on the 29th is still the 28th's period.
  */
 function quietHoursPeriodId(date, quietHours, timeZone) {
-  if (!inQuietHours(date, quietHours, timeZone)) {
+  const startInfo = quietRunStart(date, quietHours, timeZone);
+  if (!startInfo) {
     return null;
   }
-  const parts = dateParts(date, timeZone);
-  const start = parseHhMm(quietHours?.start);
-  const end = parseHhMm(quietHours?.end);
-  if (!parts || start == null || end == null) {
-    return null;
-  }
-  const minutes = parts.hour * 60 + parts.minute;
-  if (start > end && minutes < end) {
-    return previousYmd(parts.year, parts.month, parts.day);
-  }
-  return ymd(parts.year, parts.month, parts.day);
+  return ymd(startInfo.year, startInfo.month, startInfo.day);
 }
 
 function minutesSinceQuietStart(date, quietHours, timeZone) {
-  if (!inQuietHours(date, quietHours, timeZone)) {
+  const startInfo = quietRunStart(date, quietHours, timeZone);
+  if (!startInfo) {
     return Infinity;
   }
-  const parts = dateParts(date, timeZone);
-  const start = parseHhMm(quietHours?.start);
-  if (!parts || start == null) {
-    return Infinity;
-  }
-  const minutes = parts.hour * 60 + parts.minute;
-  const end = parseHhMm(quietHours?.end);
-  if (end != null && start > end && minutes < end) {
-    return (24 * 60 - start) + minutes;
-  }
-  return minutes - start;
+  return startInfo.minutesSinceStart;
 }
 
 /**

@@ -327,7 +327,7 @@ function createWebAdminAuth(config = {}, log = console, deps = {}) {
 
   function hasPermission(req, permission) {
     const session = sessionFromRequest(req);
-    if (!session.ok) return session;
+    if (!session.ok) return deny(session, 'Sign in required');
     if (session.isAdmin || session.permissions?.[permission] === true) {
       return { ok: true, ...session };
     }

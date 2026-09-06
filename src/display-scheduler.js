@@ -22,12 +22,66 @@ const fs = require('fs');
 const path = require('path');
 const {
   createRuleStore, scoreRule, expectedPerDay, gapProfile, normaliseTarget, resolveCommandId,
+  mondayIndexToSunday, DEFAULT_HOLD_SECONDS,
 } = require('./scheduler-rules');
 const { kindsOf, COMMANDS } = require('./command-registry');
 const {
   createActivityLog, localDateKey, localParts, withinWindow,
 } = require('./scheduler-activity');
 
+/**
+ * Instant (ms) of the next fixed slot at-or-after `fromMs`.
+ * `fixedTimes[].day` is Monday-first; `localParts().weekday` is Sunday-first.
+ */
+function nextFixedFireMs(rule, fromMs, timeZone) {
+  const slots = Array.isArray(rule.fixedTimes) ? rule.fixedTimes : [];
+  if (!slots.length) return null;
+  // Search up to 8 days so a Sunday evening still finds next Monday's slots.
+  for (let dayOffset = 0; dayOffset <= 7; dayOffset += 1) {
+    const probeMs = fromMs + dayOffset * 24 * 60 * 60 * 1000;
+    const parts = localParts(probeMs, timeZone);
+    const mondayDay = (parts.weekday + 6) % 7;
+    const candidates = slots
+      .filter((slot) => slot.day === mondayDay)
+      .map((slot) => {
+        // Build a local civil datetime, then interpret it in the house zone.
+        const iso = `${parts.year}-${String(parts.month).padStart(2, '0')}-`
+          + `${String(parts.day).padStart(2, '0')}T`
+          + `${String(slot.hour).padStart(2, '0')}:${String(slot.minute).padStart(2, '0')}:00`;
+        // Date.parse of a zone-less ISO is treated as local to the process.
+        // For the injectable clock in tests (no TZ), that is correct; for a
+        // real zone we re-derive via a short binary search against localParts.
+        if (!timeZone) {
+          return Date.parse(iso);
+        }
+        return localCivilToUtcMs(parts.year, parts.month, parts.day, slot.hour, slot.minute, timeZone);
+      })
+      .filter((ms) => Number.isFinite(ms) && ms >= fromMs)
+      .sort((a, b) => a - b);
+    if (candidates.length) {
+      return candidates[0];
+    }
+    // After the first day, roll `parts.day` forward by resetting to local
+    // midnight of the next civil day — handled by dayOffset on fromMs.
+  }
+  return null;
+}
+
+/** Convert a civil wall-clock in `timeZone` to a UTC epoch ms. */
+function localCivilToUtcMs(year, month, day, hour, minute, timeZone) {
+  // Start from a UTC guess and walk in until localParts matches. Two hours of
+  // padding covers every DST spring-forward / fall-back the zone can throw.
+  let guess = Date.UTC(year, month - 1, day, hour, minute, 0);
+  for (let i = 0; i < 8; i += 1) {
+    const parts = localParts(guess, timeZone);
+    const localAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
+    const targetAsUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+    const delta = targetAsUtc - localAsUtc;
+    if (delta === 0) return guess;
+    guess += delta;
+  }
+  return guess;
+}
 const DEFAULT_SETTINGS = {
   active: false,
   tickSeconds: 30,
@@ -176,6 +230,13 @@ function createDisplayScheduler(deps = {}) {
   }
 
   function advance(rule, nowMs) {
+    if (rule.scheduleType === 'fixed') {
+      const next = nextFixedFireMs(rule, nowMs + 1000, timeZone);
+      rule.nextEvalAt = new Date(next || (nowMs + 24 * 60 * 60 * 1000)).toISOString();
+      rule.pending = false;
+      delete rule.pendingSince;
+      return;
+    }
     let base = rule.intervalSeconds;
     if (rule.jitterPercent) {
       base *= 1 + ((random() * 2 - 1) * rule.jitterPercent) / 100;
@@ -200,6 +261,12 @@ function createDisplayScheduler(deps = {}) {
         rollDailyCounter(rule, nowMs);
 
         if (!rule.enabled) {
+          continue;
+        }
+
+        // Fixed-time rules have their own lane — dice / interval cadence does
+        // not apply to "every day at 07:00".
+        if (rule.scheduleType === 'fixed') {
           continue;
         }
 
@@ -358,8 +425,26 @@ function createDisplayScheduler(deps = {}) {
     if (!settings.active) {
       return { aired: null, reason: 'paused' };
     }
-    if (inQuietHours(nowMs)) {
-      return { aired: null, reason: 'blocked-quiet-hours' };
+
+    const quiet = inQuietHours(nowMs);
+
+    // Fixed-time lane runs before opportunistic cadence. Quiet hours still
+    // block unless the rule opts out; dice and global gap do not apply.
+    const fixedResult = await airDueFixedRules(nowMs, { quiet });
+
+    if (quiet) {
+      if (!fixedResult) {
+        return { aired: null, reason: 'blocked-quiet-hours' };
+      }
+      // An exempt fixed airing does not unlock cadence during quiet hours.
+      store.persist();
+      return {
+        aired: fixedResult.winner.id,
+        event: fixedResult.event,
+        candidates: [fixedResult.winner.id],
+        fixed: true,
+        boardAired: fixedResult.boardWinnerId || null,
+      };
     }
 
     const blocked = displayBlockedReason(nowMs);
@@ -382,6 +467,15 @@ function createDisplayScheduler(deps = {}) {
     }
 
     store.persist();
+    if (fixedResult) {
+      return {
+        aired: fixedResult.winner.id,
+        event: fixedResult.event,
+        candidates: [fixedResult.winner.id],
+        fixed: true,
+        boardAired: boardResult?.winner?.id || fixedResult.boardWinnerId || null,
+      };
+    }
     if (displayResult) {
       return {
         aired: displayResult.winner.id,
@@ -405,6 +499,125 @@ function createDisplayScheduler(deps = {}) {
   }
 
   /**
+   * Fire at most one due fixed-time rule per lane (display / board).
+   *
+   * A slot that is more than `holdSeconds` late is dropped as `missed-fixed`.
+   * A slot blocked by equal-or-higher importance already on screen stays due
+   * and retries next tick until it is too late.
+   */
+  async function airDueFixedRules(nowMs, { quiet }) {
+    const due = [];
+    for (const rule of store.all()) {
+      if (!rule.enabled || rule.scheduleType !== 'fixed') continue;
+      rollDailyCounter(rule, nowMs);
+      if (quiet && !rule.quietHoursExempt) continue;
+      if (atDailyCap(rule)) continue;
+
+      // Seed nextEvalAt the first time we see a fixed rule.
+      if (!rule.nextEvalAt || !Number.isFinite(Date.parse(rule.nextEvalAt))) {
+        const seeded = nextFixedFireMs(rule, nowMs, timeZone);
+        rule.nextEvalAt = new Date(seeded || nowMs).toISOString();
+      }
+
+      const dueAt = Date.parse(rule.nextEvalAt);
+      if (!Number.isFinite(dueAt) || dueAt > nowMs) continue;
+
+      const holdMs = (Number(rule.holdSeconds) || DEFAULT_HOLD_SECONDS) * 1000;
+      if (nowMs - dueAt > holdMs) {
+        record(rule, 'missed-fixed', {
+          detail: `Slot was ${Math.round((nowMs - dueAt) / 1000)}s late`,
+        });
+        advance(rule, nowMs);
+        continue;
+      }
+
+      const command = commandRegistry?.get?.(rule.commandId);
+      if (!command) {
+        record(rule, 'error', { detail: `Unknown command: ${rule.commandId}` });
+        advance(rule, nowMs);
+        continue;
+      }
+      if (rule.guard === 'requires-content'
+        && !commandRegistry.hasContent(rule.commandId, rule.params)) {
+        record(rule, 'blocked-guard', { detail: 'No content available' });
+        advance(rule, nowMs);
+        continue;
+      }
+      due.push(rule);
+    }
+
+    if (!due.length) {
+      store.persist();
+      return null;
+    }
+
+    // Prefer the most important, then the longest-waiting.
+    due.sort((a, b) => {
+      const imp = (Number(b.importance) || 3) - (Number(a.importance) || 3);
+      if (imp) return imp;
+      return Date.parse(a.nextEvalAt) - Date.parse(b.nextEvalAt);
+    });
+
+    // One display + one board airing per tick, matching the cadence lanes.
+    let displayWinner = null;
+    let boardWinner = null;
+    for (const rule of due) {
+      if (isBoardOnlyRule(rule)) {
+        if (!boardWinner) boardWinner = rule;
+      } else if (!displayWinner) {
+        displayWinner = rule;
+      }
+    }
+
+    let result = null;
+    if (displayWinner) {
+      // Spec: fire if nothing of higher priority is showing; else stay due
+      // and retry until the hold window elapses. External (non-scheduler)
+      // pages always win — the scheduler never interrupts a human or event.
+      if (shouldYieldFixed(displayWinner)) {
+        // Keep nextEvalAt in the past so the next tick retries.
+      } else {
+        result = {
+          winner: displayWinner,
+          event: await airRule(displayWinner, {
+            nowMs,
+            holdsDisplay: true,
+          }),
+        };
+      }
+    }
+    if (boardWinner) {
+      const boardEvent = await airRule(boardWinner, {
+        nowMs,
+        holdsDisplay: false,
+      });
+      if (!result) {
+        result = { winner: boardWinner, event: boardEvent, boardWinnerId: boardWinner.id };
+      } else {
+        result.boardWinnerId = boardWinner.id;
+      }
+    }
+    store.persist();
+    return result;
+  }
+
+  /** True when a fixed display rule must wait for something more important. */
+  function shouldYieldFixed(rule) {
+    if (!isBusy()) {
+      return false;
+    }
+    if (activeAiring) {
+      const showing = store.get(activeAiring.ruleId);
+      const showingImportance = Number(showing?.importance) || 3;
+      const mine = Number(rule.importance) || 3;
+      // Yield only to a strictly higher priority already on screen.
+      return showingImportance > mine;
+    }
+    // Busy for a manual push / live event — always yield.
+    return true;
+  }
+
+  /**
    * Fire one rule and hold the display for its duration.
    *
    * `lastAiringAt` is stamped when the sequence **completes**, not when it
@@ -425,16 +638,30 @@ function createDisplayScheduler(deps = {}) {
       return event;
     }
 
-    const planned = commandRegistry.estimateDuration(rule.commandId, {
+    const holdSeconds = Number(rule.holdSeconds);
+    const hasHold = Number.isFinite(holdSeconds) && holdSeconds > 0;
+    // Per-rule hold is the user-facing "stay on screen" length when set.
+    // Otherwise fall back to the command's estimate / default so legacy
+    // cadence rules keep their short page times.
+    const estimated = commandRegistry.estimateDuration(rule.commandId, {
       ...rule.params,
-      displayDurationSeconds: rule.displayDurationSeconds,
-    }) || command.defaultDurationSeconds || 60;
+      ...(hasHold ? { displayDurationSeconds: holdSeconds } : {}),
+    });
+    const planned = (hasHold ? holdSeconds : null)
+      || estimated
+      || command.defaultDurationSeconds
+      || 60;
 
     const lockDisplay = holdsDisplay !== false && !isBoardOnlyRule(rule);
 
     let event;
     try {
-      const airResult = await air?.(rule, command, { durationSeconds: planned, manual });
+      const airResult = await air?.(rule, command, {
+        durationSeconds: planned,
+        holdSeconds: hasHold ? holdSeconds : planned,
+        quietHoursExempt: Boolean(rule.quietHoursExempt),
+        manual,
+      });
       event = record(rule, 'aired', {
         score,
         competingRuleIds: competingRuleIds.length > 1 ? competingRuleIds : undefined,
@@ -461,7 +688,13 @@ function createDisplayScheduler(deps = {}) {
     advance(rule, endsAt);
     if (lockDisplay) {
       lastAiringAt = endsAt;
-      activeAiring = { ruleId: rule.id, eventId: event.id, startedAt: nowMs, plannedSeconds: planned };
+      activeAiring = {
+        ruleId: rule.id,
+        eventId: event.id,
+        startedAt: nowMs,
+        plannedSeconds: planned,
+        importance: Number(rule.importance) || 3,
+      };
     }
     store.persist();
     return event;
@@ -563,25 +796,39 @@ function createDisplayScheduler(deps = {}) {
   /** Rule + its live derived readouts, for both the settings page and the API. */
   function describeRule(rule) {
     const command = commandRegistry?.get?.(rule.commandId) || null;
+    const holdSeconds = Number(rule.holdSeconds) > 0
+      ? Number(rule.holdSeconds)
+      : DEFAULT_HOLD_SECONDS;
     const estimated = command
       ? commandRegistry.estimateDuration(rule.commandId, {
         ...rule.params,
-        displayDurationSeconds: rule.displayDurationSeconds,
+        ...(rule.holdSeconds != null ? { displayDurationSeconds: holdSeconds } : {}),
       })
       : null;
+    const fixed = rule.scheduleType === 'fixed';
     return {
       ...rule,
+      // Always surface a hold so the editor has a value; unset rules keep
+      // command duration at air time until the user saves an explicit hold.
+      holdSeconds: rule.holdSeconds != null ? Number(rule.holdSeconds) : DEFAULT_HOLD_SECONDS,
+      displayDurationSeconds: rule.displayDurationSeconds != null
+        ? Number(rule.displayDurationSeconds)
+        : (rule.holdSeconds != null ? Number(rule.holdSeconds) : DEFAULT_HOLD_SECONDS),
       commandTitle: command?.title || null,
       commandGroup: command?.group || null,
       broken: !command,
       variableDuration: Boolean(command?.variableDuration),
       commandSupportsContentCheck: Boolean(command?.supportsContentCheck),
-      estimatedDurationSeconds: estimated,
+      estimatedDurationSeconds: estimated
+        || (rule.holdSeconds != null ? holdSeconds : null)
+        || command?.defaultDurationSeconds
+        || null,
       expectedPerDay: Math.round(expectedPerDay(rule) * 10) / 10,
-      gapProfile: gapProfile(rule),
+      gapProfile: fixed ? null : gapProfile(rule),
       // §7.4: "every 15 minutes" for a two-minute round is a different choice
-      // than the user thinks they are making.
-      durationWarning: estimated && estimated > rule.intervalSeconds * 0.25
+      // than the user thinks they are making. Fixed rules have no interval
+      // to compare against.
+      durationWarning: !fixed && estimated && estimated > rule.intervalSeconds * 0.25
         ? `This page runs about ${Math.round(estimated / 60)}m of every `
           + `${Math.round(rule.intervalSeconds / 60)}m interval`
         : null,
@@ -786,4 +1033,6 @@ module.exports = {
   seededRandom,
   sanitiseSettings,
   createDisplayScheduler,
+  nextFixedFireMs,
+  localCivilToUtcMs,
 };

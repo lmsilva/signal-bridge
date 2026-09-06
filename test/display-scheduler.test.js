@@ -13,10 +13,11 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
-  createDisplayScheduler, seededRandom, sanitiseSettings,
+  createDisplayScheduler, seededRandom, sanitiseSettings, nextFixedFireMs,
 } = require('../src/display-scheduler');
 const {
   normaliseRule, scoreRule, expectedPerDay, gapProfile, RULE_PALETTE,
+  mondayIndexToSunday, sundayIndexToMonday, DEFAULT_HOLD_SECONDS,
 } = require('../src/scheduler-rules');
 const {
   withinWindow, localDateKey, createActivityLog,
@@ -86,7 +87,15 @@ function build({
     setTimer: () => null,
     clearTimer: () => {},
     timeZone: 'UTC',
-    air: airImpl || ((rule) => { aired.push({ ruleId: rule.id, at: clock.t, target: rule.target }); }),
+    air: airImpl || ((rule, _command, options = {}) => {
+      aired.push({
+        ruleId: rule.id,
+        at: clock.t,
+        target: rule.target,
+        holdSeconds: options.holdSeconds,
+        quietHoursExempt: options.quietHoursExempt,
+      });
+    }),
   });
   scheduler.updateSettings({
     active: true, tickSeconds: 30, globalMinGapSeconds: 0,
@@ -979,4 +988,154 @@ test('air-now bypasses the dice and the interval', async () => {
   await scheduler.airRule(scheduler.rules.get('a'), { manual: true });
   assert.equal(aired.length, 1);
   assert.equal(scheduler.activity.query({ limit: 5 }).at(-1).outcome, 'aired');
+});
+
+// --------------------------------------------------------------- fixed time
+
+test('Monday-first fixedTimes convert to Sunday-first weekday correctly', () => {
+  // Mon=0 … Sun=6  →  Sun=0 … Sat=6
+  assert.equal(mondayIndexToSunday(0), 1);
+  assert.equal(mondayIndexToSunday(6), 0);
+  assert.equal(sundayIndexToMonday(0), 6);
+  assert.equal(sundayIndexToMonday(1), 0);
+});
+
+test('normaliseRule defaults fixed hold to 15 minutes and keeps cadence hold optional', () => {
+  const fixed = normaliseRule({
+    commandId: 'alexa.weather',
+    scheduleType: 'fixed',
+    fixedTimes: [{ day: 0, hour: 7, minute: 0 }],
+  });
+  assert.equal(fixed.scheduleType, 'fixed');
+  assert.equal(fixed.holdSeconds, DEFAULT_HOLD_SECONDS);
+  assert.equal(fixed.probability, 100);
+
+  const cadence = normaliseRule({
+    commandId: 'alexa.weather',
+    intervalSeconds: 1800,
+  });
+  assert.equal(cadence.scheduleType, 'cadence');
+  assert.equal(cadence.holdSeconds, undefined);
+});
+
+test('a fixed-time rule fires at its slot without rolling the dice', async () => {
+  // 2026-03-10 is a Tuesday. Monday-first day index for Tuesday is 1.
+  const { scheduler, clock, aired } = build({
+    rules: [{
+      id: 'fixed-weather',
+      commandId: 'alexa.weather',
+      scheduleType: 'fixed',
+      fixedTimes: [{ day: 1, hour: 15, minute: 0 }],
+      holdSeconds: 120,
+      // Far in the past so the slot is due.
+      nextEvalAt: new Date(Date.parse('2026-03-10T15:00:00Z')).toISOString(),
+      probability: 0,
+      intervalSeconds: 7200,
+    }],
+  });
+  const result = await scheduler.tick();
+  assert.equal(result.aired, 'fixed-weather');
+  assert.equal(result.fixed, true);
+  assert.equal(aired.length, 1);
+  assert.equal(aired[0].holdSeconds, 120);
+  assert.equal(scheduler.activity.query({ limit: 5 }).at(-1).outcome, 'aired');
+  // Next slot is next Tuesday 15:00 — a week later.
+  const next = Date.parse(scheduler.rules.get('fixed-weather').nextEvalAt);
+  assert.ok(next > clock.t + 6 * 24 * HOUR);
+});
+
+test('a fixed slot more than holdSeconds late is dropped as missed-fixed', async () => {
+  const dueAt = Date.parse('2026-03-10T14:00:00Z');
+  const { scheduler, aired } = build({
+    rules: [{
+      id: 'late',
+      commandId: 'alexa.weather',
+      scheduleType: 'fixed',
+      fixedTimes: [{ day: 1, hour: 14, minute: 0 }],
+      holdSeconds: 300,
+      nextEvalAt: new Date(dueAt).toISOString(),
+    }],
+  });
+  // Clock starts at 15:00 — an hour late, well past the 5-minute hold.
+  const result = await scheduler.tick();
+  assert.equal(result.aired, null);
+  assert.equal(aired.length, 0);
+  assert.equal(scheduler.activity.query({ limit: 5 }).at(-1).outcome, 'missed-fixed');
+});
+
+test('a fixed rule yields while a higher-importance scheduler page is showing', async () => {
+  let busy = true;
+  const { scheduler, aired } = build({
+    busy: () => busy,
+    rules: [
+      {
+        id: 'low',
+        commandId: 'alexa.weather',
+        scheduleType: 'fixed',
+        fixedTimes: [{ day: 1, hour: 15, minute: 0 }],
+        holdSeconds: 600,
+        importance: 2,
+        nextEvalAt: new Date(Date.parse('2026-03-10T15:00:00Z')).toISOString(),
+      },
+      {
+        id: 'high',
+        commandId: 'signal.slideshow',
+        intervalSeconds: 7200,
+        probability: 0,
+        importance: 5,
+      },
+    ],
+  });
+  // Put the high-importance cadence rule on screen first (manual air).
+  busy = false;
+  await scheduler.airRule(scheduler.rules.get('high'), { manual: true, holdsDisplay: true });
+  assert.equal(aired.length, 1);
+  busy = true;
+
+  const result = await scheduler.tick();
+  assert.equal(result.aired, null);
+  assert.equal(aired.length, 1);
+  // Still due — not advanced, not missed.
+  assert.equal(
+    Date.parse(scheduler.rules.get('low').nextEvalAt),
+    Date.parse('2026-03-10T15:00:00Z'),
+  );
+});
+
+test('quietHoursExempt lets a fixed rule fire during quiet hours', async () => {
+  const { scheduler, aired } = build({
+    settings: {
+      quietHours: { start: '00:00', end: '23:59' },
+    },
+    rules: [{
+      id: 'exempt',
+      commandId: 'alexa.weather',
+      scheduleType: 'fixed',
+      fixedTimes: [{ day: 1, hour: 15, minute: 0 }],
+      holdSeconds: 120,
+      quietHoursExempt: true,
+      nextEvalAt: new Date(Date.parse('2026-03-10T15:00:00Z')).toISOString(),
+    }, {
+      id: 'cadence',
+      commandId: 'signal.slideshow',
+      intervalSeconds: 60,
+      probability: 100,
+    }],
+  });
+  const result = await scheduler.tick();
+  assert.equal(result.aired, 'exempt');
+  assert.equal(result.fixed, true);
+  // Cadence must stay blocked during quiet even when an exempt fixed airs.
+  assert.equal(aired.length, 1);
+  assert.equal(aired[0].quietHoursExempt, true);
+});
+
+test('nextFixedFireMs finds the next Monday-first slot', () => {
+  // Tuesday 15:00 UTC; next Mon 07:00 is six days later.
+  const from = Date.parse('2026-03-10T15:00:00Z');
+  const next = nextFixedFireMs({
+    fixedTimes: [{ day: 0, hour: 7, minute: 0 }],
+  }, from, 'UTC');
+  assert.ok(next);
+  assert.equal(next, Date.parse('2026-03-16T07:00:00Z'));
 });
