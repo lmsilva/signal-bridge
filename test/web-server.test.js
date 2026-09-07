@@ -5974,7 +5974,12 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal310/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal291/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal311/);
+    assert.match(
+      fs.readFileSync(path.join(realWebRoot, 'vestaboard-sim-ui.js'), 'utf8'),
+      /Blank flaps \(spaces\) snap now/,
+      'simulator flip must snap blank flaps immediately so spaces are not filled by the drum',
+    );
     assert.match(userApp.text, /class="gb-controls"/);
     assert.match(userCss, /\.push-lib-body \{[^}]*padding: 0 14px 6px 0/);
     assert.match(userCss, /\*::-webkit-scrollbar \{/);
