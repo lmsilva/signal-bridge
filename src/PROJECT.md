@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-07 (Simulator skip)
+**Last updated:** 2026-09-07 (Simulator skip animation)
 
 ---
 
@@ -937,6 +937,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-07: **Simulator Skip keeps the flap cascade** — Skip was painting the next layout from the POST/`sim.state` payload, which cancelled drums still waiting on their stagger delay, so the flip sound played over an instant board. The flip event owns the animation; that follow-up paint leaves an in-flight cascade alone. Cache-bust `signal313`. Tests: `web-server`.
 - 2026-09-07: **Vestaboard simulator Skip** — Board queue (user + admin) gains **Skip**. It ignores the next-flip timer (house dwell and the Local API flap window) and posts the next queued page immediately so a long dwell can be stepped through while debugging. The hold pinning the current screen is released; if the page being loaded is a hold card, that hold is applied. `POST /api/vestaboard-sim/queue/skip`. Cache-bust `signal312`. Tests: `vestaboard-queue`, `vestaboard-sim-api`, `web-server`.
 - 2026-09-07: **Vestaboard simulator keeps spaces** — blank flaps (code 0) are the gaps between words. The flip cascade used to walk those cells through the letter drum, so a fact such as Chuck Norris painted as `CHUCKNORRIS` until the settle a few seconds later. Blanks now snap immediately on the user and admin boards. Cache-bust `signal311`.
 - 2026-09-06: **“How much time left?” shows timers** — `SHOW_TIMERS_RE` now matches bare “how much time left”, “how much time is/do I have left”, and “how’s my timer” (previously required “left on … timers”), so the voice query triggers `show-timers` → UDP `timer.snapshot` for Vestaboard and software displays. Tests: `voice-query-parser`.

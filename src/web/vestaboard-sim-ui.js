@@ -320,14 +320,15 @@
       if (!animate || reducedMotion()) {
         cells.forEach((tile, index) => {
           const code = flat[index] || 0;
-          const face = shown[index] ?? 0;
-          const flipping = tile.classList.contains('is-flipping');
-          // A later state with the same letter target must not snap a drum
-          // that is still walking. Blanks are not optional decoration —
-          // they are the spaces. Leave one showing the previous letter and
-          // the line reads as one word until settle.
-          if (code !== 0 && (current[index] ?? 0) === code && flipping) return;
-          if (!flipping && face === code && (current[index] ?? 0) === code) return;
+          // A later sim.state (or the Skip response) with the same target
+          // must not snap a drum that is still walking — or one still
+          // waiting on its stagger delay (before is-flipping is set).
+          // That race is how you heard the flip sound with an instant
+          // paint and no flaps. Blanks are the spaces: snap one that is
+          // still showing a letter so the line does not stay run together.
+          if ((current[index] ?? 0) === code) {
+            if (code !== 0 || (shown[index] ?? 0) === 0) return;
+          }
           gen[index] = (gen[index] || 0) + 1;
           tile.classList.remove('is-flipping');
           current[index] = code;
@@ -560,7 +561,7 @@
       rateTimer = window.setInterval(tick, 250);
     }
 
-    function renderState(state) {
+    function renderState(state, { paint = true } = {}) {
       const online = $('vb-pill-online');
       const quiet = $('vb-pill-quiet');
       if (online) {
@@ -570,7 +571,10 @@
       $('vb-bezel')?.classList.toggle('is-offline', state?.online === false);
       startRateCountdown(state?.cooldownMs, { game: Boolean(state?.gameLock) });
       if (quiet) quiet.hidden = !state?.quietHours;
-      if (state?.current) paintGrid(state.current);
+      // Skip's POST already carries the next layout. Painting it here
+      // races sim.flip and snaps the board before the cascade starts.
+      // The flip event owns the animation; state only keeps the pills.
+      if (paint && state?.current) paintGrid(state.current);
     }
 
     async function refresh() {
@@ -651,7 +655,7 @@
         try {
           const data = await fetchJson('/api/vestaboard-sim/queue/skip', {});
           if (data?.queue) applyQueue(data.queue, data.queueRevision);
-          if (data?.state) renderState(data.state);
+          if (data?.state) renderState(data.state, { paint: false });
           if (data?.skipped) {
             toast('Skipped to the next screen');
           } else if (data?.reason === 'empty') {
