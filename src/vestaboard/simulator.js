@@ -537,6 +537,12 @@ function createVestaboardSimulator({
     /** Shown once on the settings page, the way a board owner gets it by email. */
     enablementToken: () => state.enablementToken,
     apiKey: () => state.apiKey,
+    clearCooldown() {
+      state.lastAcceptedAt = null;
+      persist();
+      emit('state', snapshot());
+      return snapshot();
+    },
     setRateWindowSeconds(seconds) {
       const value = Number(seconds);
       if (Number.isFinite(value) && value >= 0) {

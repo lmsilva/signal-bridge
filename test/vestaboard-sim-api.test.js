@@ -991,7 +991,10 @@ test('the simulator page walks the drum slowly and can click', () => {
   assert.match(html, /btn-vb-sound/);
   assert.match(html, /btn-vb-queue-clear/);
   assert.match(html, /btn-vb-release-holds/);
+  assert.match(html, /btn-vb-skip/);
   assert.match(js, /function vbClearQueue\(/);
+  assert.match(js, /function vbSkipQueue\(/);
+  assert.match(js, /\/api\/vestaboard-sim\/queue\/skip/);
   assert.match(js, /closest\('\.vb-queue-handle'\)/);
   assert.match(js, /function vbReleaseHolds\(/);
   assert.match(js, /\/api\/vestaboards\/release-holds/);
@@ -1028,6 +1031,8 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(js, /closest\('\.vb-queue-handle'\)/);
   assert.match(bezel, /vb-tile\.is-flipping/);
   assert.match(userHtml, /id="btn-vb-sound"/);
+  assert.match(userHtml, /id="btn-vb-skip"/);
+  assert.match(js, /\/api\/vestaboard-sim\/queue\/skip/);
   assert.match(userHtml, /id="vb-flip-clock"/);
   assert.match(userHtml, /id="vb-flip-remain"/);
   assert.match(userHtml, /id="vb-flip-when"/);

@@ -828,6 +828,63 @@ test('a live game card does not wait out the board dwell', async () => {
   assert.equal(h.queue.state().nextFlipCooldownMs, 0);
 });
 
+test('skipToNext posts the next page without waiting out dwell or the rate window', async () => {
+  const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('CHUCK', 2, { source: 'chuck.facts' })]);
+  assert.equal(await h.queue.tick(), null, 'dwell must still park the next page');
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, true);
+  assert.equal(skipped.reason, 'posted');
+  assert.equal(h.transport.posts.length, 2);
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.equal(h.queue.pending().length, 0);
+});
+
+test('skipToNext releases a guest hold and applies a hold on the page it loads', async () => {
+  const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
+  h.queue.submit([{ ...frame('GUEST', 1), holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.ok(h.queue.state().holdUntil > h.at());
+  h.queue.submit([{ ...frame('INVITE', 2), holdSeconds: 180 }]);
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, true);
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.ok(h.queue.state().holdUntil > h.at(), 'the loaded page must take its own hold');
+  assert.equal(h.queue.state().holdKind, 'guest');
+});
+
+test('skipToNext drops a game lock and takes the lock of the game card it loads', async () => {
+  const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([{
+    ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
+    holdSeconds: 180,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.queue.state().gameLock.source, 'word.scramble');
+  h.queue.submit([{
+    ...frame('WHEEL', 2, { source: 'wheel.fortune' }),
+    holdSeconds: 120,
+  }]);
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, true);
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.equal(h.queue.state().gameLock.source, 'wheel.fortune');
+  assert.ok(h.queue.state().phaseUntil > h.at(), 'the loaded game card must hold the board');
+});
+
+test('skipToNext on an empty queue does not flip the board', async () => {
+  const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, false);
+  assert.equal(skipped.reason, 'empty');
+  assert.equal(h.transport.posts.length, 1);
+});
+
 test('holdSeconds keeps the next snapshot off the board until the hold ends', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);

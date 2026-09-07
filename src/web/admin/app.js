@@ -21511,6 +21511,25 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
     }
   }
 
+  async function vbSkipQueue() {
+    try {
+      const data = await apiPost('/api/vestaboard-sim/queue/skip', {});
+      if (data?.queue) vbApplyQueue(data.queue, data.queueRevision);
+      if (data?.state) {
+        vbStartRateCountdown(data.state.cooldownMs, { game: Boolean(data.state.gameLock) });
+      }
+      if (data?.skipped) {
+        toast('Skipped to the next screen', 'good');
+      } else if (data?.reason === 'empty') {
+        toast('Nothing queued to skip', 'bad');
+      } else {
+        toast('Nothing to skip yet', 'bad');
+      }
+    } catch (error) {
+      toast(error?.message || 'Could not skip', 'bad');
+    }
+  }
+
   async function vbReleaseHolds() {
     try {
       const data = await apiPost('/api/vestaboards/release-holds', {});
@@ -21763,6 +21782,10 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
 
   $('btn-vb-queue-clear')?.addEventListener('click', () => {
     vbClearQueue();
+  });
+
+  $('btn-vb-skip')?.addEventListener('click', () => {
+    vbSkipQueue();
   });
 
   $('btn-vb-release-holds')?.addEventListener('click', () => {
