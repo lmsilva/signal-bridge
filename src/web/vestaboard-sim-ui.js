@@ -92,21 +92,44 @@
       return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
     }
 
+    // Code 0 is a blank flap — the space between words. `Number(x) || 0`
+    // is fine for 0 itself, but a character row must keep that blank in
+    // place. Dropping it slides the rest of the line left (CHUCKNORRIS,
+    // and the corner chips ride in after the title) until a later paint
+    // restores the gaps.
+    function cellCode(line, col) {
+      if (line == null) return 0;
+      const raw = line[col];
+      if (raw == null || raw === '') return 0;
+      if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
+      const text = String(raw);
+      if (text === ' ') return 0;
+      if (/^-?\d+$/.test(text)) {
+        const code = Number(text);
+        return Number.isFinite(code) ? code : 0;
+      }
+      const map = root.FLAP_GRID?.FLAP_CODE_BY_CHAR;
+      if (map && typeof map.get === 'function') {
+        return map.get(text.toUpperCase()) || 0;
+      }
+      return 0;
+    }
+
     function flatten(layout) {
       const out = [];
       const rows = Array.isArray(layout) ? layout : [];
       for (let row = 0; row < 6; row += 1) {
         const line = rows[row] || [];
         for (let col = 0; col < 22; col += 1) {
-          out.push(Number(line[col]) || 0);
+          out.push(cellCode(line, col));
         }
       }
       return out;
     }
 
     function glyphFor(code) {
+      if (!code || code >= CHIP_MIN) return '';
       const chars = root.FLAP_GRID?.FLAP_CHARS || '';
-      if (code >= CHIP_MIN) return '';
       const ch = chars[code] || '';
       return ch === ' ' ? '' : ch;
     }
@@ -297,7 +320,14 @@
       if (!animate || reducedMotion()) {
         cells.forEach((tile, index) => {
           const code = flat[index] || 0;
-          if ((current[index] ?? 0) === code) return;
+          const face = shown[index] ?? 0;
+          const flipping = tile.classList.contains('is-flipping');
+          // A later state with the same letter target must not snap a drum
+          // that is still walking. Blanks are not optional decoration —
+          // they are the spaces. Leave one showing the previous letter and
+          // the line reads as one word until settle.
+          if (code !== 0 && (current[index] ?? 0) === code && flipping) return;
+          if (!flipping && face === code && (current[index] ?? 0) === code) return;
           gen[index] = (gen[index] || 0) + 1;
           tile.classList.remove('is-flipping');
           current[index] = code;
@@ -307,10 +337,20 @@
         return;
       }
       let starting = 0;
-      cells.forEach((_, index) => {
+      cells.forEach((tile, index) => {
         const code = flat[index] || 0;
         if (faceMatches(index, code)) return;
         current[index] = code;
+        // Blank flaps (spaces) snap now. Walking them through the letter
+        // drum fills the gap for the whole cascade, so the joke renders
+        // with no spaces and only separates when the last flap settles.
+        if (code === 0) {
+          gen[index] = (gen[index] || 0) + 1;
+          tile.classList.remove('is-flipping');
+          shown[index] = 0;
+          paintTile(tile, 0);
+          return;
+        }
         starting += 1;
         runFlips(index, drumSteps(shown[index] ?? 0, code), flipDelay(index, strategy || 'column'));
       });

@@ -21269,7 +21269,9 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
         // an instant paint and no flaps. A stale face on that same target
         // (letters left on the ocean after a map flip) is fixed by settle.
         if ((vbCurrent[index] ?? 0) === code) {
-          continue;
+          if (code !== 0 || (vbShown[index] ?? 0) === 0) {
+            continue;
+          }
         }
         vbStopTile(index);
         vbCurrent[index] = code;
@@ -21282,6 +21284,16 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
         continue;
       }
       vbCurrent[index] = code;
+      // Blank flaps are the spaces. Walking them through the letter drum
+      // fills the gap for the whole cascade, so a line reads as one word
+      // until settle paints the blanks a few seconds later.
+      if (code === 0) {
+        if (vbGen) vbGen[index] += 1;
+        tile.classList.remove('is-flipping');
+        vbShown[index] = 0;
+        vbPaintTile(tile, 0);
+        continue;
+      }
       starting += 1;
       vbRunFlips(index, vbDrumSteps(vbShown[index] ?? 0, code), vbFlipDelay(index, strategy));
     }

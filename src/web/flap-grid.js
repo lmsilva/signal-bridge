@@ -67,7 +67,10 @@
     for (let rowIndex = 0; rowIndex < ROWS; rowIndex += 1) {
       const row = grid[rowIndex] || [];
       for (let col = 0; col < COLS; col += 1) {
-        const code = Number(row[col] ?? 0);
+        const raw = row[col];
+        const code = typeof raw === 'string'
+          ? charCode(raw)
+          : (Number(raw ?? 0) || 0);
         const chip = FLAP_CHIP_BY_CODE.get(code);
         const isSlot = messageCell != null && code === messageCell;
         const locked = rowIndex >= lockAt;
