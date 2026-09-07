@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-06 (Centred badges + timer DONE)
+**Last updated:** 2026-09-06 (How much time left → timers)
 
 ---
 
@@ -936,6 +936,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-06: **“How much time left?” shows timers** — `SHOW_TIMERS_RE` now matches bare “how much time left”, “how much time is/do I have left”, and “how’s my timer” (previously required “left on … timers”), so the voice query triggers `show-timers` → UDP `timer.snapshot` for Vestaboard and software displays. Tests: `voice-query-parser`.
 - 2026-09-06: **Centred badges + timer DONE** — `badgeFrame` centres top title and bottom summary by default (page counters stay flush-right). Timer/alarm fired alerts stop double-taxing the border row (`indent: 1` + `BORDER_TEXT_WIDTH - 1`), so `CHICKEN TIMER DONE` keeps its E; longer names drop `TIMER` before eating `DONE`. Guest Book / Message painted grids and Red Letter layouts untouched. Tests: `vestaboard-frames`, `vestaboard-alexa`, `vestaboard-tesla`, `vestaboard-gaming`, `vestaboard-feeds`, `vestaboard-encoder`.
 - 2026-09-06: **Message board sizes the wrap, not the bezel** — the real cause of the broken household Message layout (worst in Safari, latent everywhere on a short window): `.vb-bezel` padding is `7%` of its *containing block*, so capping the **bezel** with the height budget drew a frame sized for the full-width wrap and squeezed the flaps into the remainder — a full slab with a postage-stamp grid. The cap now lives on `.gb-board-wrap` (same rule as the Board tab) in both the stacked and 1600px two-column layouts, with a 520px floor, and the panel scrolls instead of clipping when `--gb-chrome` reads low. Cache-bust `signal310`. Tests: `web-server`, `ui-dialog`.
 - 2026-09-06: **Safari Message board sizing** — household Message used `container-type: size` + `100cqb` on a flex-grown wrap; Safari collapses those units so the Vestaboard preview shrank and floated in empty space. Size with `dvh` like the Simulator, cache-bust `signal309`. Tests: `web-server`.

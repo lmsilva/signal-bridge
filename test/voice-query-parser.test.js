@@ -85,6 +85,22 @@ test('voice query parser detects show timers command', () => {
   assert.equal(event.trigger, 'show-timers');
 });
 
+test('voice query parser detects how much time left', () => {
+  const parser = createVoiceQueryParser();
+  for (const phrase of [
+    'how much time left',
+    'how much time left?',
+    'how much time is left',
+    'how much time do I have left',
+    'how much time is left on my timers',
+    "how's my timer",
+  ]) {
+    const event = parser.parse(activity(phrase, 'You have 5 minutes left'));
+    assert.equal(event?.kind, 'timer-list', phrase);
+    assert.equal(event?.trigger, 'show-timers', phrase);
+  }
+});
+
 test('voice query parser detects timer set hint', () => {
   const parser = createVoiceQueryParser();
   const event = parser.parse(activity('set a 5 minute timer', 'Five minutes starting now'));
