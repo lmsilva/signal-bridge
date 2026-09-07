@@ -8037,6 +8037,27 @@ function createWebServer({
     });
   }
 
+  async function handleVestaboardSimQueueSkip(_body, res) {
+    const queue = vestaboardSimQueueApi();
+    if (!queue?.skipToNext) {
+      sendJson(res, 404, { ok: false, error: 'Simulator queue is not running' });
+      return;
+    }
+    // The Local API still refuses a flip inside its flap window. Skip is
+    // meant to ignore that timer, so clear it before the queue posts.
+    if (typeof vestaboardSimulator?.clearCooldown === 'function') {
+      vestaboardSimulator.clearCooldown();
+    }
+    const outcome = await queue.skipToNext();
+    sendJson(res, 200, {
+      ok: true,
+      ...outcome,
+      state: vestaboardSimPublicState(),
+      queue: vestaboardSimQueue(),
+      queueRevision: vestaboardSimQueueRevision(),
+    });
+  }
+
   function handleVestaboardSimQueueReorder(body, res) {
     const queue = vestaboardSimQueueApi();
     if (!queue) {
@@ -10449,6 +10470,9 @@ function createWebServer({
             return;
           case '/api/vestaboard-sim/queue/clear':
             handleVestaboardSimQueueClear(body, res);
+            return;
+          case '/api/vestaboard-sim/queue/skip':
+            await handleVestaboardSimQueueSkip(body, res);
             return;
           case '/api/vestaboards':
             handleVestaboardSave(body, res);

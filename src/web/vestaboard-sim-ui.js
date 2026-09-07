@@ -647,6 +647,22 @@
           toast(error.message);
         }
       });
+      $('btn-vb-skip')?.addEventListener('click', async () => {
+        try {
+          const data = await fetchJson('/api/vestaboard-sim/queue/skip', {});
+          if (data?.queue) applyQueue(data.queue, data.queueRevision);
+          if (data?.state) renderState(data.state);
+          if (data?.skipped) {
+            toast('Skipped to the next screen');
+          } else if (data?.reason === 'empty') {
+            toast('Nothing queued to skip');
+          } else {
+            toast('Nothing to skip yet');
+          }
+        } catch (error) {
+          toast(error.message);
+        }
+      });
       $('btn-vb-release-holds')?.addEventListener('click', async () => {
         try {
           const data = await fetchJson('/api/vestaboards/release-holds', {});

@@ -1141,6 +1141,55 @@ function createQueue({
       clearTimer(timer);
       timer = null;
     },
+    /**
+     * Debug: drop the current hold and the next-flip wait, then post the
+     * next queued page immediately. A hold on that page is applied — skip
+     * does not disable holds, it only ends the one pinning the board now.
+     */
+    async skipToNext() {
+      if (!items.length) {
+        return { ok: true, skipped: false, reason: 'empty' };
+      }
+
+      const next = items[0];
+      const nextSource = String(next.ownerSource || next.frame?.source || '');
+
+      state.holdUntil = null;
+      state.holdKind = null;
+      state.snapshotUntil = null;
+      state.phaseUntil = null;
+      state.restoreAfter = null;
+      state.retryNotBefore = null;
+      // The pill is the Settings dwell plus the flap window. Skip is a
+      // deliberate "show the next one now", so both waits give way.
+      state.lastPostAt = null;
+      if (next.notBefore) next.notBefore = null;
+
+      if (state.laneLock && state.laneLock.source !== nextSource) {
+        releaseLaneLock('');
+      }
+      if (isHoldLane(next.lane) && nextSource) {
+        acquireLaneLock(nextSource, next.lane, { rank: next.rank });
+      }
+
+      announceQueue();
+      let outcome = await tick();
+      // The head can be a duplicate of what is already up. Drop it and
+      // take the page behind it so Skip still advances a screen.
+      let guard = 0;
+      while (outcome === 'duplicate' && items.length && guard < 8) {
+        guard += 1;
+        if (items[0]?.notBefore) items[0].notBefore = null;
+        state.lastPostAt = null;
+        state.snapshotUntil = null;
+        outcome = await tick();
+      }
+      return {
+        ok: true,
+        skipped: outcome === 'posted',
+        reason: outcome || 'waiting',
+      };
+    },
     clear() {
       const dropped = items.length;
       if (!dropped) {
