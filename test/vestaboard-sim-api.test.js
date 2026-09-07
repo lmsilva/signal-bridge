@@ -1033,6 +1033,8 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(userHtml, /id="btn-vb-sound"/);
   assert.match(userHtml, /id="btn-vb-skip"/);
   assert.match(js, /\/api\/vestaboard-sim\/queue\/skip/);
+  assert.match(js, /renderState\(data\.state, \{ paint: false \}\)/);
+  assert.match(js, /waiting on its stagger delay/);
   assert.match(userHtml, /id="vb-flip-clock"/);
   assert.match(userHtml, /id="vb-flip-remain"/);
   assert.match(userHtml, /id="vb-flip-when"/);
