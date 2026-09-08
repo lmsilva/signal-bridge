@@ -367,9 +367,16 @@
       applyLayout(layout, false);
     }
 
-    function syncClear() {
-      const btn = $('btn-vb-queue-clear');
-      if (btn) btn.hidden = items.length === 0;
+    function syncQueueActions() {
+      const queued = items.length > 0;
+      const skip = $('btn-vb-skip');
+      const clear = $('btn-vb-queue-clear');
+      const holds = $('btn-vb-release-holds');
+      // Skip and Clear need a waiting page. Release Holds only while a
+      // lane lock is pinning the board — an empty line can still be held.
+      if (skip) skip.hidden = !queued;
+      if (clear) clear.hidden = !queued;
+      if (holds) holds.hidden = !rateGame;
     }
 
     function idsFromDom() {
@@ -465,7 +472,7 @@
       const host = $('vb-queue');
       if (!host) return;
       items = Array.isArray(nextItems) ? nextItems : [];
-      syncClear();
+      syncQueueActions();
       if (!items.length) {
         host.innerHTML = '<p class="hint">Nothing queued.</p>';
         return;
@@ -525,6 +532,7 @@
       window.clearInterval(rateTimer);
       rateGame = Boolean(game);
       rateUntil = nextUntil;
+      syncQueueActions();
       const tick = () => {
         const left = rateUntil - Date.now();
         const rate = $('vb-pill-rate');
