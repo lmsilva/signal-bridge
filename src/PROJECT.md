@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-07 (Simulator guest hold)
+**Last updated:** 2026-09-07 (Skip leftover game card)
 
 ---
 
@@ -937,6 +937,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-07: **Skip leaves a leftover Word Scramble invite** — a lobby refresh left another copy of the card that was already on the board. Skip treated that as the next page, dropped it as a duplicate, and kept the game lock, so Calendar Clock stayed held and the flaps never moved. Skip now drops already-showing heads first, unpins the game unless the next page is that same hold, and posts through a leftover hold. Tests: `vestaboard-queue`.
 - 2026-09-07: **Release Holds matches the yellow held rows** — a guest hold (the card on the board parking scheduled pages) marked those rows `held` but the button only appeared for a game lock, and the release API ignored `holdUntil`. The button now shows for either hold on the user and admin boards, and releasing drops both. Cache-bust `signal315`. Tests: `vestaboard-queue`, `vestaboard-sim-api`, `web-server`.
 - 2026-09-07: **Simulator queue actions hide when they have nothing to do** — **Skip** and **Clear queue** appear only while a page is waiting. **Release Holds** appears only while a lane lock is pinning the board (an empty line can still be held). Cache-bust `signal314`. Tests: `vestaboard-sim-api`, `web-server`.
 - 2026-09-07: **Simulator Skip keeps the flap cascade** — Skip was painting the next layout from the POST/`sim.state` payload, which cancelled drums still waiting on their stagger delay, so the flip sound played over an instant board. The flip event owns the animation; that follow-up paint leaves an in-flight cascade alone. Cache-bust `signal313`. Tests: `web-server`.

@@ -887,6 +887,53 @@ test('skipToNext drops a game lock and takes the lock of the game card it loads'
   assert.ok(h.queue.state().phaseUntil > h.at(), 'the loaded game card must hold the board');
 });
 
+test('skipToNext drops a leftover game card and unpins the board so the next page can flip', async () => {
+  const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([{
+    ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
+    holdSeconds: 180,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  // A lobby refresh leaves another copy of the invite in line. Skip used
+  // to treat that as the next page, drop it as a duplicate, and keep the
+  // lock — so Calendar Clock stayed held and the board never moved.
+  h.queue.submit([{
+    ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
+    holdSeconds: 180,
+  }]);
+  h.queue.submit([frame('CLOCK', 2, { source: 'calendar.clock' })], { scheduler: true });
+  h.queue.submit([frame('LETTER', 3, { source: 'red.letter' })], { scheduler: true });
+  h.queue.submit([frame('NAME', 4, { source: 'smart.name' })]);
+  assert.equal(h.queue.pending()[1].status, 'held');
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, true);
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.equal(h.queue.state().gameLock, null);
+  assert.equal(h.queue.pending().some((item) => item.label === 'SCRAMBLE'), false);
+});
+
+test('skipToNext leaves a live game when the next page is ordinary rotation', async () => {
+  const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
+  const preempted = [];
+  h.queue.onChange((event, detail) => {
+    if (event === 'lock-preempted') preempted.push(detail.source);
+  });
+  h.queue.acquireGameLock('word.scramble');
+  h.queue.submit([{
+    ...frame('SCRAMBLE', 1, { source: 'word.scramble' }),
+    holdSeconds: 180,
+  }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('CLOCK', 2, { source: 'calendar.clock' })], { scheduler: true });
+  assert.equal(h.queue.pending()[0].status, 'held');
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, true);
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.equal(h.queue.state().gameLock, null);
+  assert.deepEqual(preempted, ['word.scramble']);
+});
+
 test('skipToNext on an empty queue does not flip the board', async () => {
   const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
   h.queue.submit([frame('WEATHER', 1)]);

@@ -938,7 +938,7 @@ function createQueue({
    * kick from `pushEvent` and the 1s timer (or a test drain) cannot miss
    * `lastSchedulerFlipAt` being set.
    */
-  async function tickOnce() {
+  async function tickOnce(opts = {}) {
     const at = now();
 
     if (state.restoreAfter && at >= state.restoreAfter && state.lastSnapshot
@@ -971,11 +971,17 @@ function createQueue({
     // session's own card (or an alert, which still gets through). A guest
     // hold only parks scheduler pages; the head of the line still has to
     // finish (or drop as a duplicate) before a later Push / Air now may flip.
+    // `skip` is the Simulator Skip button: the pin was already dropped,
+    // so a leftover hold must not no-op the flip.
+    const skip = Boolean(opts.skip);
     let index = 0;
     while (index < items.length && itemHeld(items[index], at)) {
       if (sameLayout(items[index].frame.rows, state.current)) {
         dropAt(index, 'dedupe drop', items[index]);
         return 'duplicate';
+      }
+      if (skip) {
+        break;
       }
       if (!laneLockActive(at)) {
         return null;
@@ -986,12 +992,12 @@ function createQueue({
       return null;
     }
     const item = items[index];
-    if (item.notBefore && at < item.notBefore) return null;
-    if (state.retryNotBefore && at < state.retryNotBefore) return null;
-    if (state.lastPostAt !== null && at < state.lastPostAt + rateWindowMs()) return null;
+    if (!skip && item.notBefore && at < item.notBefore) return null;
+    if (!skip && state.retryNotBefore && at < state.retryNotBefore) return null;
+    if (!skip && state.lastPostAt !== null && at < state.lastPostAt + rateWindowMs()) return null;
     // Hardware can take another flip after the rate window; a 60s dwell
     // still keeps the current page up. Alerts and the live game skip it.
-    if (item.priority !== 'alert' && !ownedByLock(item) && snapshotDwellActive(at)) {
+    if (!skip && item.priority !== 'alert' && !ownedByLock(item) && snapshotDwellActive(at)) {
       return null;
     }
 
@@ -1060,8 +1066,8 @@ function createQueue({
     return 'failed';
   }
 
-  function tick() {
-    const run = tickTail.then(tickOnce, tickOnce);
+  function tick(opts = {}) {
+    const run = tickTail.then(() => tickOnce(opts), () => tickOnce(opts));
     tickTail = run.then(() => {}, () => {});
     return run;
   }
@@ -1163,9 +1169,6 @@ function createQueue({
         return { ok: true, skipped: false, reason: 'empty' };
       }
 
-      const next = items[0];
-      const nextSource = String(next.ownerSource || next.frame?.source || '');
-
       state.holdUntil = null;
       state.holdKind = null;
       state.snapshotUntil = null;
@@ -1175,26 +1178,52 @@ function createQueue({
       // The pill is the Settings dwell plus the flap window. Skip is a
       // deliberate "show the next one now", so both waits give way.
       state.lastPostAt = null;
-      if (next.notBefore) next.notBefore = null;
 
-      if (state.laneLock && state.laneLock.source !== nextSource) {
+      // A leftover invite of what is already showing is not the next
+      // screen. Drop it first, or Skip keeps the game lock and parks
+      // every scheduler page behind it.
+      while (items.length && sameLayout(items[0].frame.rows, state.current)) {
+        dropHead('dedupe drop', items[0]);
+      }
+      if (!items.length) {
+        if (state.laneLock) releaseLaneLock('');
+        return { ok: true, skipped: false, reason: 'empty' };
+      }
+
+      for (const item of items) {
+        if (item.notBefore) item.notBefore = null;
+      }
+
+      const next = items[0];
+      const nextSource = String(next.ownerSource || next.frame?.source || '');
+      const lockSource = String(state.laneLock?.source || '');
+      const showingSource = lockSource || String(state.lastSnapshot?.source || '');
+
+      // Leave the current game unless the page we are loading is that
+      // same hold. After dropping duplicates, a Calendar Clock (or any
+      // rotation page) must unpin Word Scramble.
+      if (state.laneLock && (lockSource !== nextSource || !isHoldLane(next.lane))) {
         releaseLaneLock('');
+      } else if (!state.laneLock && showingSource && showingSource !== nextSource) {
+        emit('lock-preempted', {
+          boardId: config.id,
+          source: showingSource,
+          by: '',
+        });
       }
       if (isHoldLane(next.lane) && nextSource) {
         acquireLaneLock(nextSource, next.lane, { rank: next.rank });
       }
 
       announceQueue();
-      let outcome = await tick();
-      // The head can be a duplicate of what is already up. Drop it and
-      // take the page behind it so Skip still advances a screen.
+      let outcome = await tick({ skip: true });
       let guard = 0;
       while (outcome === 'duplicate' && items.length && guard < 8) {
         guard += 1;
         if (items[0]?.notBefore) items[0].notBefore = null;
         state.lastPostAt = null;
         state.snapshotUntil = null;
-        outcome = await tick();
+        outcome = await tick({ skip: true });
       }
       return {
         ok: true,
