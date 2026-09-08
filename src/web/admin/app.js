@@ -21306,12 +21306,13 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
 
   function vbStartRateCountdown(cooldownMs, { game = false } = {}) {
     window.clearInterval(vbRateTimer);
+    vbRateGame = Boolean(game);
+    vbRateUntil = Date.now() + Math.max(0, cooldownMs || 0);
+    vbSyncClearButton();
     const pill = $('vb-pill-rate');
     if (!pill) {
       return;
     }
-    vbRateGame = Boolean(game);
-    vbRateUntil = Date.now() + Math.max(0, cooldownMs || 0);
     const tick = () => {
       const left = Math.max(0, Math.ceil((vbRateUntil - Date.now()) / 1000));
       if (left > 0) {
@@ -21480,6 +21481,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
           vbStartRateCountdown(data.state.cooldownMs, { game });
         } else {
           vbRateGame = game;
+          vbSyncClearButton();
         }
       }
     }).catch(() => {
@@ -21556,11 +21558,15 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   }
 
   function vbSyncClearButton() {
-    const btn = $('btn-vb-queue-clear');
-    if (!btn) {
-      return;
-    }
-    btn.hidden = vbQueueItems.length === 0;
+    const queued = vbQueueItems.length > 0;
+    const skip = $('btn-vb-skip');
+    const clear = $('btn-vb-queue-clear');
+    const holds = $('btn-vb-release-holds');
+    // Skip and Clear need a waiting page. Release Holds only while a
+    // lane lock is pinning the board — an empty line can still be held.
+    if (skip) skip.hidden = !queued;
+    if (clear) clear.hidden = !queued;
+    if (holds) holds.hidden = !vbRateGame;
   }
 
   async function vbCommitQueueOrder() {
