@@ -501,15 +501,22 @@ function createVestaboardHub({
   }
 
   /**
-   * Drop the house hold. Every enabled board follows that line, so one
-   * release unpins them all.
+   * Drop the house hold. A lane lock (game / feature presentation) and a
+   * guest hold (scheduler pages parked by the card on the board) are both
+   * holds the Simulator can show. Either one is enough to unpin the line.
    */
   function releaseHolds() {
-    if (!houseQueue?.releaseGameLock?.('')) {
+    if (!houseQueue) {
       return { released: 0, boards: [] };
     }
+    const lock = Boolean(houseQueue.releaseGameLock?.(''));
+    const guest = Boolean(houseQueue.releaseGuestHold?.());
+    if (!lock && !guest) {
+      return { released: 0, boards: [] };
+    }
+    houseQueue.tick?.()?.catch?.(() => {});
     const ids = [...boards.keys()];
-    return { released: ids.length, boards: ids };
+    return { released: Math.max(ids.length, 1), boards: ids };
   }
 
   /** Drop matching pending pages on the house line. */

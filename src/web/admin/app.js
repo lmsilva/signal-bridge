@@ -20769,6 +20769,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   let vbRateTimer = null;
   let vbRateUntil = 0;
   let vbRateGame = false;
+  let vbGuestHold = false;
   let vbSoundOn = (() => {
     try {
       return window.localStorage.getItem(VB_SOUND_KEY) !== '0';
@@ -21346,6 +21347,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
     if (quiet) {
       quiet.hidden = !state.quietHours;
     }
+    vbGuestHold = Boolean(state.guestHold);
     vbStartRateCountdown(state.cooldownMs, { game: Boolean(state.gameLock) });
     if (Array.isArray(state.current)) {
       vbApplyLayout(state.current, false);
@@ -21475,6 +21477,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
       }
       vbApplyQueue(data.queue, data.queueRevision);
       if (data.state) {
+        vbGuestHold = Boolean(data.state.guestHold);
         const nextUntil = Date.now() + Math.max(0, data.state.cooldownMs || 0);
         const game = Boolean(data.state.gameLock);
         if (Math.abs(nextUntil - vbRateUntil) > 1500 || game !== vbRateGame) {
@@ -21518,6 +21521,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
       const data = await apiPost('/api/vestaboard-sim/queue/skip', {});
       if (data?.queue) vbApplyQueue(data.queue, data.queueRevision);
       if (data?.state) {
+        vbGuestHold = Boolean(data.state.guestHold);
         vbStartRateCountdown(data.state.cooldownMs, { game: Boolean(data.state.gameLock) });
       }
       if (data?.skipped) {
@@ -21539,6 +21543,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
         vbApplyQueue(data.queue, data.queueRevision);
       }
       if (data?.state) {
+        vbGuestHold = Boolean(data.state.guestHold);
         vbStartRateCountdown(data.state.cooldownMs, { game: Boolean(data.state.gameLock) });
       } else {
         await vbRefreshQueueFromSim();
@@ -21557,16 +21562,20 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
     }
   }
 
+  function vbHoldsPinned() {
+    // A yellow "held" row is a guest hold parking scheduler pages, not
+    // only a game lock. Either one is something Release Holds can drop.
+    return vbRateGame || vbGuestHold || vbQueueItems.some((item) => item.status === 'held');
+  }
+
   function vbSyncClearButton() {
     const queued = vbQueueItems.length > 0;
     const skip = $('btn-vb-skip');
     const clear = $('btn-vb-queue-clear');
     const holds = $('btn-vb-release-holds');
-    // Skip and Clear need a waiting page. Release Holds only while a
-    // lane lock is pinning the board — an empty line can still be held.
     if (skip) skip.hidden = !queued;
     if (clear) clear.hidden = !queued;
-    if (holds) holds.hidden = !vbRateGame;
+    if (holds) holds.hidden = !vbHoldsPinned();
   }
 
   async function vbCommitQueueOrder() {

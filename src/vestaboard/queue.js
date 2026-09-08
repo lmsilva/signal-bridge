@@ -394,6 +394,17 @@ function createQueue({
     return true;
   }
 
+  /** Drop a guest / scheduled-page hold without touching a live game lock. */
+  function releaseGuestHold() {
+    if (!state.holdUntil || now() >= state.holdUntil) {
+      return false;
+    }
+    state.holdUntil = null;
+    state.holdKind = null;
+    announceQueue();
+    return true;
+  }
+
   function itemHeld(item, at = now()) {
     // A live hold owns the board. Rotation waits. A jumper only gets
     // through when it outranks the lock (alarms sit above games by default).
@@ -1093,6 +1104,7 @@ function createQueue({
     releaseGameLock(source = '') {
       return releaseLaneLock(source);
     },
+    releaseGuestHold,
     /**
      * Honour a flip the process did not itself post — a simulator that
      * persisted `lastAcceptedAt`, or this queue's own last post after a

@@ -828,6 +828,18 @@ test('a live game card does not wait out the board dwell', async () => {
   assert.equal(h.queue.state().nextFlipCooldownMs, 0);
 });
 
+test('releaseGuestHold unparks scheduler pages a guest hold left marked held', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60 });
+  h.queue.submit([{ ...frame('VERSE', 1), holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('CLOCK', 2)], { scheduler: true });
+  assert.equal(h.queue.pending()[0].status, 'held');
+  assert.equal(h.queue.releaseGuestHold(), true);
+  assert.equal(h.queue.state().holdUntil, null);
+  assert.equal(h.queue.pending()[0].status, 'waiting');
+  assert.equal(h.queue.releaseGuestHold(), false);
+});
+
 test('skipToNext posts the next page without waiting out dwell or the rate window', async () => {
   const h = makeQueue({ rateWindowSeconds: 15, dwellSeconds: 60 });
   h.queue.submit([frame('WEATHER', 1)]);
