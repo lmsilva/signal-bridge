@@ -658,7 +658,11 @@ function createDisplayScheduler(deps = {}) {
     try {
       const airResult = await air?.(rule, command, {
         durationSeconds: planned,
-        holdSeconds: hasHold ? holdSeconds : planned,
+        // Only an explicit rule hold parks the Vestaboard queue. Cadence
+        // page time is dwell, not a guest hold — Roast Me! (and the rest
+        // of the news rotation) was stamping 20–60s and marking every
+        // later scheduled page "held".
+        ...(hasHold ? { holdSeconds } : {}),
         quietHoursExempt: Boolean(rule.quietHoursExempt),
         manual,
       });

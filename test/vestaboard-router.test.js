@@ -476,3 +476,18 @@ test('routeEvent stamps holdSeconds onto frames that lack one', () => {
   assert.ok(submitted.frames.every((frame) => frame.holdSeconds === 900));
   assert.equal(submitted.options.scheduler, true);
 });
+
+test('routeEvent leaves frames without a hold when the caller did not ask for one', () => {
+  let submitted = null;
+  routeEvent({
+    payload: WEATHER,
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    scheduler: true,
+    submit: (_boardId, frames, options) => {
+      submitted = { frames, options };
+      return { ok: true, accepted: frames.length };
+    },
+  });
+  assert.ok(submitted.frames.length >= 1);
+  assert.ok(submitted.frames.every((frame) => frame.holdSeconds == null));
+});

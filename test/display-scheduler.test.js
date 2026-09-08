@@ -1033,6 +1033,17 @@ test('normaliseRule defaults fixed hold to 15 minutes and keeps cadence hold opt
   assert.equal(cadence.holdSeconds, undefined);
 });
 
+test('a cadence airing does not stamp the command duration as a Vestaboard hold', async () => {
+  const { scheduler, aired } = build({
+    rules: [
+      { id: 'roast', commandId: 'alexa.weather', intervalSeconds: 3600, probability: 100 },
+    ],
+  });
+  await scheduler.tick();
+  assert.equal(aired.length, 1);
+  assert.equal(aired[0].holdSeconds, undefined);
+});
+
 test('a fixed-time rule fires at its slot without rolling the dice', async () => {
   // 2026-03-10 is a Tuesday. Monday-first day index for Tuesday is 1.
   const { scheduler, clock, aired } = build({
