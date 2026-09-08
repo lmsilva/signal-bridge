@@ -994,7 +994,8 @@ test('the simulator page walks the drum slowly and can click', () => {
   assert.match(html, /id="btn-vb-skip"[^>]*hidden/);
   assert.match(html, /id="btn-vb-release-holds"[^>]*hidden/);
   assert.match(js, /function vbClearQueue\(/);
-  assert.match(js, /holds\.hidden = !vbRateGame/);
+  assert.match(js, /function vbHoldsPinned\(/);
+  assert.match(js, /holds\.hidden = !vbHoldsPinned\(\)/);
   assert.match(js, /function vbSkipQueue\(/);
   assert.match(js, /\/api\/vestaboard-sim\/queue\/skip/);
   assert.match(js, /closest\('\.vb-queue-handle'\)/);
@@ -1035,7 +1036,8 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(userHtml, /id="btn-vb-sound"/);
   assert.match(userHtml, /id="btn-vb-skip"[^>]*hidden/);
   assert.match(userHtml, /id="btn-vb-release-holds"[^>]*hidden/);
-  assert.match(js, /holds\.hidden = !rateGame/);
+  assert.match(js, /function holdsPinned\(/);
+  assert.match(js, /holds\.hidden = !holdsPinned\(\)/);
   assert.match(js, /\/api\/vestaboard-sim\/queue\/skip/);
   assert.match(js, /renderState\(data\.state, \{ paint: false \}\)/);
   assert.match(js, /waiting on its stagger delay/);

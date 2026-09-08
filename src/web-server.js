@@ -7886,6 +7886,8 @@ function createWebServer({
       cooldownMs: Math.max(Number(state.cooldownMs) || 0, queueWait),
       gameLock: queue.gameLock || null,
       phaseUntil: queue.phaseUntil || null,
+      holdUntil: queue.holdUntil || null,
+      guestHold: Boolean(queue.holdUntil && Date.now() < queue.holdUntil),
     };
   }
 

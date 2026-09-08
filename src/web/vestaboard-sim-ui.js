@@ -82,6 +82,7 @@
     let rateTimer = null;
     let rateUntil = 0;
     let rateGame = false;
+    let guestHold = false;
 
     function isWatching() {
       if (typeof options.watching === 'function') return options.watching();
@@ -367,16 +368,20 @@
       applyLayout(layout, false);
     }
 
+    function holdsPinned() {
+      // A yellow "held" row is a guest hold parking scheduler pages, not
+      // only a game lock. Either one is something Release Holds can drop.
+      return rateGame || guestHold || items.some((item) => item.status === 'held');
+    }
+
     function syncQueueActions() {
       const queued = items.length > 0;
       const skip = $('btn-vb-skip');
       const clear = $('btn-vb-queue-clear');
       const holds = $('btn-vb-release-holds');
-      // Skip and Clear need a waiting page. Release Holds only while a
-      // lane lock is pinning the board — an empty line can still be held.
       if (skip) skip.hidden = !queued;
       if (clear) clear.hidden = !queued;
-      if (holds) holds.hidden = !rateGame;
+      if (holds) holds.hidden = !holdsPinned();
     }
 
     function idsFromDom() {
@@ -578,6 +583,8 @@
       }
       $('vb-bezel')?.classList.toggle('is-offline', state?.online === false);
       startRateCountdown(state?.cooldownMs, { game: Boolean(state?.gameLock) });
+      guestHold = Boolean(state?.guestHold);
+      syncQueueActions();
       if (quiet) quiet.hidden = !state?.quietHours;
       // Skip's POST already carries the next layout. Painting it here
       // races sim.flip and snaps the board before the cascade starts.
@@ -679,6 +686,7 @@
         try {
           const data = await fetchJson('/api/vestaboards/release-holds', {});
           if (data?.queue) applyQueue(data.queue, data.queueRevision);
+          if (data?.state) renderState(data.state, { paint: false });
           const n = Number(data?.released) || 0;
           toast(n === 0 ? 'No holds to release' : `Released ${n} hold${n === 1 ? '' : 's'}`);
         } catch (error) {
