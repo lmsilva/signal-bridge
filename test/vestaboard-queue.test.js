@@ -957,6 +957,32 @@ test('holdSeconds keeps the next snapshot off the board until the hold ends', as
   assert.equal(h.transport.posts.length, 2);
 });
 
+test('a scheduler page without holdSeconds does not park later scheduled pages', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, minRotationGapSeconds: 0 });
+  h.queue.submit([frame('ROAST ME', 1, { source: 'roast.me' })], { scheduler: true });
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.queue.state().holdUntil, null);
+  h.queue.submit([frame('WEATHER', 2)], { scheduler: true });
+  assert.equal(h.queue.pending()[0].status, 'waiting');
+  h.advance(SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.length, 2);
+});
+
+test('posting a rotation page without holdSeconds drops a leftover guest hold', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1 });
+  h.queue.submit([{ ...frame('GUEST', 1), holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.ok(h.queue.state().holdUntil > h.at());
+  h.queue.submit([frame('ROAST ME', 2, { source: 'roast.me' })], { scheduler: true });
+  h.queue.submit([frame('WEATHER', 3)], { scheduler: true });
+  assert.equal(h.queue.pending()[0].status, 'held');
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, true);
+  assert.equal(h.queue.state().holdUntil, null);
+  assert.equal(h.queue.pending()[0].status, 'waiting');
+});
+
 test('a Word Scramble lock parks every queued page until the game clears', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.acquireGameLock('word.scramble');
