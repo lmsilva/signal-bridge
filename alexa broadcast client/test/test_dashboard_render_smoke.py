@@ -352,8 +352,13 @@ def sample_huupe_session(*, finished=False, players=0):
                 "player": names[0] if names else None, "made": True,
                 "zone": "three", "zoneLabel": "Deep Range", "points": 3, "pointsLabel": "3",
             },
+            # The last tick is a Countdown attempt the hoop has been handed
+            # back, so the ticker has to paint it as still in doubt.
             "recentShots": [
-                {"made": index % 3 != 0, "zone": zone, "short": short}
+                {
+                    "made": index % 3 != 0, "zone": zone, "short": short,
+                    "provisional": index == 19,
+                }
                 for index, (zone, short) in enumerate(
                     [("three", "3PT"), ("layup", "LAY"), ("two", "2PT"), ("one", "1PT")] * 5
                 )

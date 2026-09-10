@@ -58,6 +58,16 @@ function pct(made, attempts) {
   return Math.round((100 * (Number(made) || 0)) / total);
 }
 
+/**
+ * `Number(null)` is 0 and 0 is finite, so a missing `left` from a Countdown
+ * `start` line would otherwise seed every idle seat at 0 remaining — they
+ * then sort to the top as if they had already won, and a 0-for-0 FG% sits
+ * next to their name.
+ */
+function isPresentNumber(value) {
+  return value != null && value !== '' && Number.isFinite(Number(value));
+}
+
 function round1(value) {
   return Math.round((Number(value) || 0) * 10) / 10;
 }
@@ -256,13 +266,26 @@ function createHuupeLive({
         id: extras.id || null,
         bot: extras.bot === true,
         seat: index,
-        score: Number.isFinite(Number(extras.left))
+        score: isPresentNumber(extras.left)
           ? Number(extras.left)
-          : (Number(session.countdownStart) || 0),
-        scored: Number.isFinite(Number(extras.scored)) ? Number(extras.scored) : 0,
+          : (countdownStartScore() || 0),
+        scored: isPresentNumber(extras.scored) ? Number(extras.scored) : 0,
         position: null,
         isWinner: false,
         stats: emptyStats(),
+        // Attempts by `${turn}:${attempt}`, because that address is the only
+        // handle a later `fix` has on the shot it is correcting.
+        attempts: new Map(),
+        // Bust is a property of the turn, not of the shot that caused it: a
+        // correction can hand back a bust an earlier shot line reported.
+        turns: new Map(),
+        // The hoop's own counters. Assigned, never accumulated — a collector
+        // that joined mid-game has no earlier lines to add up, and a running
+        // total is the one thing a correction cannot repair.
+        madeCount: null,
+        attemptCount: null,
+        threesCount: null,
+        retaking: null,
       };
       session.players.set(key, player);
       session.playerOrder.push(key);
@@ -270,20 +293,168 @@ function createHuupeLive({
       if (named) player.name = named;
       if (extras.id) player.id = extras.id;
       if (extras.bot != null) player.bot = extras.bot === true;
-      if (Number.isFinite(Number(extras.left))) player.score = Number(extras.left);
-      if (Number.isFinite(Number(extras.scored))) player.scored = Number(extras.scored);
+      if (isPresentNumber(extras.left)) player.score = Number(extras.left);
+      if (isPresentNumber(extras.scored)) player.scored = Number(extras.scored);
     }
     return player;
   }
 
-  function recordCountdownShot(stats, { made, zone, points, bust }) {
-    if (bust) {
-      stats.attempts += 1;
-      if (zone && stats.byZone[zone]) stats.byZone[zone].attempts += 1;
-      stats.streak = 0;
-      return stats;
+  function attemptKey(turn, attempt) {
+    return `${Number(turn)}:${Number(attempt) || 0}`;
+  }
+
+  function countdownTurn(player, turn) {
+    const key = Number(turn) || 0;
+    if (!player.turns.has(key)) player.turns.set(key, { bust: false, points: 0 });
+    return player.turns.get(key);
+  }
+
+  /** Chronological order across seats, so the ticker and the house run agree. */
+  function nextCountdownSeq() {
+    session.countdownSeq = (Number(session.countdownSeq) || 0) + 1;
+    return session.countdownSeq;
+  }
+
+  /**
+   * File one attempt under its address, replacing whatever was there.
+   *
+   * A correction keeps the slot it corrects rather than taking a new one, so
+   * fixing the second shot of a turn does not shuffle it to the end of the
+   * ticker. An APK old enough not to address its attempts still gets a row
+   * each; a `fix` then simply has nothing to reach back to.
+   */
+  function storeCountdownAttempt(player, { turn, attempt, zone, made, points, at }) {
+    const seq = nextCountdownSeq();
+    const key = turn != null ? attemptKey(turn, attempt) : `seq:${seq}`;
+    const existing = player.attempts.get(key);
+    player.attempts.set(key, {
+      turn: turn != null ? Number(turn) : 0,
+      attempt: Number(attempt) || 0,
+      zone: zone || null,
+      made: made === true,
+      points: Number(points) || 0,
+      provisional: false,
+      at: at || null,
+      seq: existing ? existing.seq : seq,
+    });
+  }
+
+  /** The seat's attempts oldest first. */
+  function countdownAttempts(player) {
+    return [...player.attempts.values()].sort((a, b) => a.seq - b.seq);
+  }
+
+  /** Points off the board: makes, less any turn the hoop reverted. */
+  function countdownPointsSeen(player) {
+    let total = 0;
+    for (const row of countdownAttempts(player)) {
+      if (row.made && !countdownTurn(player, row.turn).bust) total += Number(row.points) || 0;
     }
-    return recordShot(stats, { made, zone, points: made ? points : 0 });
+    return round1(total);
+  }
+
+  /**
+   * Rebuild a seat's stats from the attempts on file.
+   *
+   * Makes and attempts come off the hoop's own counters when it sends them,
+   * because those survive both a mid-game join and a correction. Everything
+   * with a shape — zones, threes, streaks — is re-derived from the stored
+   * attempts instead, since none of it can be patched after the fact.
+   *
+   * A shot that busted still went in, so it counts as a make here exactly as
+   * it does in `end`. Its points do not: the hoop gave them back.
+   */
+  function countdownPlayerStats(player) {
+    const stats = emptyStats();
+    const rows = countdownAttempts(player);
+    for (const row of rows) {
+      if (row.zone && stats.byZone[row.zone]) {
+        stats.byZone[row.zone].attempts += 1;
+        if (row.made) stats.byZone[row.zone].made += 1;
+      }
+      if (!row.made) {
+        stats.streak = 0;
+        continue;
+      }
+      stats.streak += 1;
+      stats.bestStreak = Math.max(stats.bestStreak, stats.streak);
+      if (row.zone === 'three' && !countdownTurn(player, row.turn).bust) stats.threes += 1;
+    }
+    stats.made = player.madeCount != null
+      ? player.madeCount
+      : rows.filter((row) => row.made).length;
+    stats.attempts = player.attemptCount != null ? player.attemptCount : rows.length;
+    if (player.threesCount != null) stats.threes = player.threesCount;
+    stats.points = countdownScored(player);
+    return stats;
+  }
+
+  /**
+   * Re-derive every countdown total from the attempts on file.
+   *
+   * Cheap enough to run on each line at four seats, and the only way a `fix`
+   * can put right a number that was already on the wall.
+   */
+  function refreshCountdownStats() {
+    const totals = emptyStats();
+    const rows = [];
+    for (const key of session.playerOrder) {
+      const player = session.players.get(key);
+      if (!player) continue;
+      player.stats = countdownPlayerStats(player);
+      totals.made += player.stats.made;
+      totals.attempts += player.stats.attempts;
+      totals.threes += player.stats.threes;
+      totals.points = round1(totals.points + player.stats.points);
+      for (const zone of ZONES) {
+        totals.byZone[zone].made += player.stats.byZone[zone].made;
+        totals.byZone[zone].attempts += player.stats.byZone[zone].attempts;
+      }
+      for (const row of player.attempts.values()) rows.push({ row, player });
+    }
+    rows.sort((a, b) => a.row.seq - b.row.seq);
+    // The house run: makes back to back, whoever was shooting.
+    for (const { row } of rows) {
+      if (!row.made) {
+        totals.streak = 0;
+        continue;
+      }
+      totals.streak += 1;
+      totals.bestStreak = Math.max(totals.bestStreak, totals.streak);
+    }
+    session.stats = totals;
+
+    const tail = rows.slice(-RECENT_SHOT_LIMIT);
+    session.recentShots = tail.map(({ row, player }) => ({
+      made: row.made,
+      zone: row.zone,
+      player: player.name,
+      provisional: row.provisional === true,
+    }));
+    const last = rows[rows.length - 1];
+    session.lastShot = last
+      ? {
+        player: last.player.name,
+        made: last.row.made,
+        zone: last.row.zone,
+        points: last.row.made && !countdownTurn(last.player, last.row.turn).bust
+          ? last.row.points
+          : 0,
+        bust: countdownTurn(last.player, last.row.turn).bust,
+        provisional: last.row.provisional === true,
+        at: last.row.at,
+      }
+      : null;
+  }
+
+  /** Take `left` as gospel and re-price what the seat has scored off it. */
+  function assignCountdownRemaining(player, left) {
+    if (!isPresentNumber(left)) return;
+    player.score = Number(left);
+    const startScore = countdownStartScore();
+    // Without the target — a collector that joined after tip-off — the makes
+    // this session watched are all there is to add up.
+    player.scored = startScore != null ? round1(startScore - player.score) : null;
   }
 
   function applyCountdownMeta(event) {
@@ -332,44 +503,82 @@ function createHuupeLive({
       session.recentShots = [];
       session.players = new Map();
       session.playerOrder = [];
+      session.countdownSeq = 0;
     }
     applyCountdownMeta(event);
     return session;
   }
 
-  function sessionView() {
+  /**
+   * The target this game is counting down from, or null if we never saw it.
+   *
+   * `Number(null)` is 0 and 0 is finite, so an unset target would otherwise
+   * pass a plain isFinite check and price every seat at minus its remaining.
+   */
+  function countdownStartScore() {
+    const value = Number(session?.countdownStart);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  /**
+   * What a Countdown seat actually put through the hoop.
+   *
+   * The hoop only ever reports what is left, so the total has to be derived
+   * from the target it started at. A collector that joined after tip-off never
+   * saw that target, and there the makes it did see are the honest answer.
+   */
+  function countdownScored(player) {
+    if (isPresentNumber(player.scored)) return round1(player.scored);
+    const startScore = countdownStartScore();
+    if (startScore != null) return round1(startScore - Number(player.score || 0));
+    return countdownPointsSeen(player);
+  }
+
+  /**
+   * `finished` is a parameter rather than a read of `phase` because the abort
+   * path builds its final card while the session is still live.
+   */
+  function sessionView({ finished = phase === FINAL } = {}) {
     const countdown = Boolean(session.countdownMode);
+    // Racing to zero makes remaining the number to beat while the game is on,
+    // but once it is over the winner sitting on 0 has to read as the 21 they
+    // scored rather than as having scored nothing.
+    const showScored = countdown && finished;
     const players = session.playerOrder
       .map((key) => session.players.get(key))
       .filter(Boolean)
-      .map((player) => ({
-        name: player.name,
-        score: round1(player.score),
-        remaining: countdown ? round1(player.score) : undefined,
-        scored: countdown
-          ? round1(Number.isFinite(player.scored)
-            ? player.scored
-            : (Number(session.countdownStart) || 0) - Number(player.score || 0))
-          : undefined,
-        position: player.position,
-        isWinner: Boolean(player.isWinner) || player.position === 0,
-        ...statsView(player.stats),
-      }));
+      .map((player) => {
+        const scored = countdown ? countdownScored(player) : undefined;
+        return {
+          name: player.name,
+          score: showScored ? scored : round1(player.score),
+          remaining: countdown ? round1(player.score) : undefined,
+          scored,
+          position: player.position,
+          isWinner: Boolean(player.isWinner) || player.position === 0,
+          // The hoop has been handed a call back and has not answered yet, so
+          // this seat's last attempt is on the board but nobody stands behind it.
+          retaking: countdown ? Boolean(player.retaking) : undefined,
+          ...statsView(player.stats),
+        };
+      });
 
     // Standings order once the game has called it; live score until then.
-    // Countdown races to zero, so the lowest remaining score is winning.
+    // Countdown races to zero, so the lowest remaining score is winning —
+    // read off `remaining`, which holds it whichever number is on show.
     players.sort((a, b) => {
       if (a.position != null && b.position != null) return a.position - b.position;
       if (a.position != null) return -1;
       if (b.position != null) return 1;
-      return countdown ? a.score - b.score : b.score - a.score;
+      if (countdown) return Number(a.remaining) - Number(b.remaining);
+      return b.score - a.score;
     });
 
     const nowMs = now();
     return {
       sessionId: session.sessionId,
       mode: session.mode,
-      status: phase === FINAL ? 'finished' : 'live',
+      status: finished ? 'finished' : 'live',
       revision: session.revision,
       startedAt: session.startedAt,
       endedAt: session.endedAt,
@@ -383,7 +592,7 @@ function createHuupeLive({
       winner: players.find((row) => row.isWinner)?.name || null,
       uniqueScoreId: session.uniqueScoreId,
       combination: session.combination,
-      scoreKind: countdown ? 'remaining' : 'points',
+      scoreKind: showScored ? 'points' : (countdown ? 'remaining' : 'points'),
       startScore: session.countdownStart,
       difficulty: session.countdownDiff,
       currentSeat: session.currentSeat,
@@ -572,8 +781,7 @@ function createHuupeLive({
     const nowMs = now();
     session.endedAt = new Date(nowMs).toISOString();
     session.durationSec = Math.max(0, Math.round((nowMs - session.startedAtMs) / 1000));
-    const view = sessionView();
-    view.status = 'finished';
+    const view = sessionView({ finished: true });
     counters.aborted += 1;
     const keep = hasContent();
     if (keep) settle(view, { aborted: true, reason });
@@ -685,73 +893,130 @@ function createHuupeLive({
   }
 
   function applyCountdownShot(event, nowMs) {
+    // Only `countdown-shot` reaches here. HAL / Unity keep using applyShot and
+    // applyShotMade, which never read these fields.
     enterCountdown(event, nowMs);
-    const player = countdownSeat(event.seat);
+    const extras = {};
+    if (event.name) extras.name = event.name;
+    if (event.bot === true || event.bot === false) extras.bot = event.bot;
+    const player = countdownSeat(event.seat, extras);
     if (!player) return;
-    const points = Number(event.points) || 0;
-    const made = event.made === true && event.bust !== true;
-    recordCountdownShot(player.stats, {
-      made: event.made === true,
+    const turn = isPresentNumber(event.turn) ? Number(event.turn) : null;
+    storeCountdownAttempt(player, {
+      turn,
+      attempt: event.attempt,
       zone: event.zone,
-      points,
-      bust: event.bust === true,
-    });
-    recordCountdownShot(session.stats, {
       made: event.made === true,
-      zone: event.zone,
-      points,
-      bust: event.bust === true,
+      points: Number(event.points) || 0,
+      at: event.at,
     });
-    if (Number.isFinite(Number(event.left))) {
-      player.score = Number(event.left);
-      if (Number.isFinite(Number(session.countdownStart))) {
-        player.scored = Number(session.countdownStart) - player.score;
-      }
-    }
+    if (event.bust === true) countdownTurn(player, turn ?? 0).bust = true;
+    if (isPresentNumber(event.madeN)) player.madeCount = Number(event.madeN);
+    if (isPresentNumber(event.attemptsSoFar)) player.attemptCount = Number(event.attemptsSoFar);
+    assignCountdownRemaining(player, event.left);
     session.currentSeat = event.seat;
-    session.lastShot = {
-      player: player.name,
-      made: event.made === true,
-      zone: event.zone,
-      points: made ? points : 0,
-      bust: event.bust === true,
-      at: event.at || null,
-    };
-    rememberShot(session.lastShot);
+    refreshCountdownStats();
     if (!session.opened) openSession();
     else pushLive();
+  }
+
+  /**
+   * One attempt already on the board turns out to have been something else.
+   *
+   * A correction is never a second `shot` — that is the whole reason this
+   * event exists, since another `shot` would grow an attempt count that should
+   * have stayed where it was. Every number on the line is authoritative:
+   * replace what is held, never add to it.
+   */
+  function applyCountdownFix(event, nowMs) {
+    enterCountdown(event, nowMs);
+    const extras = {};
+    if (event.name) extras.name = event.name;
+    if (event.bot === true || event.bot === false) extras.bot = event.bot;
+    const player = countdownSeat(event.seat, extras);
+    if (!player) return;
+
+    if (event.gone) {
+      // An undo leaves no attempt at that address at all. `zone` / `made` /
+      // `pts` are on the line only so the key set never varies.
+      player.attempts.delete(attemptKey(event.turn, event.attempt));
+    } else {
+      storeCountdownAttempt(player, {
+        turn: event.turn,
+        attempt: event.attempt,
+        zone: event.zone,
+        made: event.made === true,
+        points: Number(event.points) || 0,
+        at: event.at,
+      });
+    }
+    if (player.retaking
+      && player.retaking.turn === event.turn
+      && player.retaking.attempt === event.attempt) {
+      player.retaking = null;
+    }
+
+    // Turn state, not shot state: `false` here retracts a bust an earlier
+    // `shot` line reported.
+    const turnState = countdownTurn(player, event.turn);
+    turnState.bust = event.bust === true;
+    if (isPresentNumber(event.turnPoints)) turnState.points = round1(event.turnPoints);
+
+    if (isPresentNumber(event.madeN)) player.madeCount = Number(event.madeN);
+    if (isPresentNumber(event.attemptsSoFar)) player.attemptCount = Number(event.attemptsSoFar);
+    assignCountdownRemaining(player, event.left);
+
+    refreshCountdownStats();
+    // The correction can be the first thing a late-joining collector sees.
+    if (!session.opened) openSession();
+    else pushLive();
+  }
+
+  /**
+   * The hoop has been handed a call back, or handed it back again.
+   *
+   * Nothing has happened yet: the score has not moved and the disputed attempt
+   * is still the record of the game. Flag it so the overlay can show it as
+   * provisional, and wait for either the `fix` it produces or a `cancelled`.
+   * There is no timeout on the far side, so never block on it.
+   */
+  function applyCountdownRetake(event, nowMs) {
+    enterCountdown(event, nowMs);
+    const extras = {};
+    if (event.name) extras.name = event.name;
+    if (event.bot === true || event.bot === false) extras.bot = event.bot;
+    const player = countdownSeat(event.seat, extras);
+    if (!player) return;
+    const armed = event.state === 'armed';
+    const row = player.attempts.get(attemptKey(event.turn, event.attempt));
+    if (row) row.provisional = armed;
+    player.retaking = armed ? { turn: event.turn, attempt: event.attempt } : null;
+    refreshCountdownStats();
+    if (session.opened) pushLive();
   }
 
   function applyCountdownEnd(event, nowMs) {
     enterCountdown(event, nowMs);
     applyCountdownMeta(event);
-    const startScore = Number(session.countdownStart);
+    const startScore = countdownStartScore();
     for (const seat of event.seats || []) {
       const player = countdownSeat(seat.seat, seat);
       if (!player) continue;
-      if (Number.isFinite(Number(seat.left))) player.score = Number(seat.left);
-      if (Number.isFinite(Number(seat.scored))) {
+      if (isPresentNumber(seat.left)) player.score = Number(seat.left);
+      if (isPresentNumber(seat.scored)) {
         player.scored = Number(seat.scored);
-      } else if (Number.isFinite(startScore)) {
-        player.scored = startScore - Number(player.score || 0);
+      } else if (startScore != null) {
+        player.scored = round1(startScore - Number(player.score || 0));
       }
-      if (Number.isFinite(Number(seat.made)) && player.stats.attempts === 0) {
-        player.stats.made = Number(seat.made) || 0;
-        player.stats.attempts = Number(seat.attempts) || player.stats.made;
-        player.stats.threes = Number(seat.threes) || 0;
-        player.stats.points = round1(player.scored);
-      }
+      // The hoop's closing count settles the card, whatever the live lines
+      // added up to — the two only differ when the collector joined late.
+      if (isPresentNumber(seat.made)) player.madeCount = Number(seat.made);
+      if (isPresentNumber(seat.attempts)) player.attemptCount = Number(seat.attempts);
+      if (isPresentNumber(seat.threes)) player.threesCount = Number(seat.threes);
+      player.retaking = null;
+      for (const row of player.attempts.values()) row.provisional = false;
     }
-    if (session.stats.attempts === 0) {
-      for (const key of session.playerOrder) {
-        const player = session.players.get(key);
-        if (!player) continue;
-        session.stats.made += player.stats.made;
-        session.stats.attempts += player.stats.attempts;
-        session.stats.threes += player.stats.threes;
-        session.stats.points = round1(session.stats.points + (Number(player.scored) || 0));
-      }
-    }
+    refreshCountdownStats();
     const winnerName = String(event.winner || '').trim();
     const winnerId = event.winnerId || null;
     for (const key of session.playerOrder) {
@@ -847,11 +1112,18 @@ function createHuupeLive({
         break;
       case 'countdown-start':
         enterCountdown(event, nowMs);
+        refreshCountdownStats();
         if (!session.opened) openSession();
         else pushLive();
         break;
       case 'countdown-shot':
         applyCountdownShot(event, nowMs);
+        break;
+      case 'countdown-fix':
+        applyCountdownFix(event, nowMs);
+        break;
+      case 'countdown-retake':
+        applyCountdownRetake(event, nowMs);
         break;
       case 'countdown-end':
         applyCountdownEnd(event, nowMs);

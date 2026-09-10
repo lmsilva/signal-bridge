@@ -1981,7 +1981,13 @@ class HuupePanel(BasePanel):
         for index, shot in enumerate(shown):
             cx = x0 + pad + radius + step * index
             colour = ZONE_COLORS.get(shot.get("zone"), ACCENT)
-            if shot.get("made"):
+            if shot.get("provisional"):
+                # The hoop has been handed this call back. The shot is still on
+                # the board, but nobody stands behind it, so it must not read
+                # as settled either way until the correction lands.
+                self._dot(cx, cy, radius * 0.86, fill=CARD_LO, outline=WARN,
+                          width=max(2, int(round(2.4 * self._scale))))
+            elif shot.get("made"):
                 self._dot(cx, cy, radius, fill=colour)
             else:
                 self._dot(cx, cy, radius * 0.86, fill=CARD_LO,

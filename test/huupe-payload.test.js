@@ -197,9 +197,9 @@ test('a layup keeps its tenth of a point all the way to the panel', () => {
   // The ticker is oldest-first so the newest dot lands under the shooter's eye
   // at the right-hand end of the strip.
   assert.deepEqual(payload.session.recentShots, [
-    { made: false, zone: 'three', short: '3PT' },
-    { made: true, zone: 'two', short: '2PT' },
-    { made: true, zone: 'layup', short: 'LAY' },
+    { made: false, zone: 'three', short: '3PT', provisional: false },
+    { made: true, zone: 'two', short: '2PT', provisional: false },
+    { made: true, zone: 'layup', short: 'LAY', provisional: false },
   ]);
   assert.deepEqual(payload.session.headline, { primary: 'trashpanda', secondary: '15.1 PTS' });
 });
@@ -452,6 +452,36 @@ test('an archived game replays as a finished card with nothing missing', () => {
     viewFromArchivedSession({ sessionId: 'sparse' }),
     { persistent: false, displaySeconds: 90, now: clock },
   ));
+});
+
+test('a replayed Countdown game shows the total scored, not the remaining', () => {
+  const view = viewFromArchivedSession({
+    sessionId: 'huupe-20260910T003332-cd',
+    mode: 'countdown',
+    endedAt: '2026-09-10T00:33:32.000Z',
+    durationSec: 147,
+    winner: 'TRASHPANDA',
+    combination: { startScore: 21, difficulty: 'RACE' },
+    players: [
+      {
+        name: 'TRASHPANDA', score: 21, remaining: 0, position: 0, isWinner: true, made: 7, attempts: 11,
+      },
+      { name: 'Bot Pro', score: 18, remaining: 3, position: 1, made: 6, attempts: 9 },
+      { name: 'TOMMY', score: 15, remaining: 6, position: 2, made: 6, attempts: 9 },
+    ],
+    stats: { made: 19, attempts: 29, points: 54 },
+  });
+  assert.equal(view.scoreKind, 'points');
+
+  const payload = buildSessionPayload(view, {
+    persistent: false, displaySeconds: 90, now: clock,
+  });
+  assert.deepEqual(
+    payload.session.players.map((row) => row.scoreLabel),
+    ['21', '18', '15'],
+  );
+  assert.deepEqual(payload.session.headline, { primary: 'TRASHPANDA', secondary: 'WINS' });
+  assertRenderable(payload);
 });
 
 test('the close message names the session it is clearing and why', () => {
