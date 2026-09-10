@@ -27,7 +27,8 @@
 //     board would not flip anyway
 //   - during quiet hours only alarm and timer fires get through, and anything
 //     else is dropped rather than saved for morning; a stale snapshot at 7am
-//     is worse than no snapshot. The window is household wall-clock
+//     is worse than no snapshot. Simulator Skip is a wake and still posts.
+//     The window is household wall-clock
 //     (`timeZone`), not the process TZ, so a UTC container does not treat
 //     8pm Utah as 2am quiet.
 //   - a live hold is session-scoped (`laneLock`, still exposed as `gameLock`).
@@ -1001,7 +1002,11 @@ function createQueue({
       return null;
     }
 
-    if (!item.quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
+    // Skip is someone at the board saying "show the next page now".
+    // Quiet hours still drop an unattended tick; they must not delete
+    // the page a person just asked to see, or the bezel snaps/empties
+    // with no cascade.
+    if (!skip && !item.quietHoursExempt && inQuietHours(new Date(at), config.quietHours, timeZone)) {
       dropAt(index, 'skip (quiet)', item);
       return 'quiet';
     }
@@ -1018,7 +1023,7 @@ function createQueue({
     try {
       outcome = await transport.post(item.frame.rows, {
         strategy: config.transitionStrategy || null,
-        quietHoursExempt: Boolean(item.quietHoursExempt),
+        quietHoursExempt: Boolean(item.quietHoursExempt) || skip,
       });
     } catch (error) {
       outcome = { ok: false, reason: 'network', retryable: true, message: error?.message };
@@ -1163,6 +1168,7 @@ function createQueue({
      * Debug: drop the current hold and the next-flip wait, then post the
      * next queued page immediately. A hold on that page is applied — skip
      * does not disable holds, it only ends the one pinning the board now.
+     * Quiet hours do not drop that page; Skip is a wake.
      */
     async skipToNext() {
       if (!items.length) {

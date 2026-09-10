@@ -11,6 +11,7 @@
     if (actor.kind === 'scheduler') return name || 'Scheduled';
     if (actor.kind === 'guest') return name ? `Guest · ${name}` : 'Guest';
     if (actor.kind === 'system') return name || 'System';
+    if (actor.kind === 'admin') return name || 'Admin';
     return name || 'User';
   }
 
@@ -86,7 +87,9 @@
 
     function isWatching() {
       if (typeof options.watching === 'function') return options.watching();
-      return Boolean($('tab-board')?.classList.contains('active')) && !document.hidden;
+      const onBoard = document.body.dataset.tab === 'board'
+        || Boolean($('tab-board')?.classList.contains('active'));
+      return onBoard && !document.hidden;
     }
 
     function reducedMotion() {
@@ -203,6 +206,25 @@
         } catch {
           // browsers stay silent until a tap
         }
+      }
+    }
+
+    function unlockFlipAudio() {
+      if (!soundOn) return;
+      const sample = loadFlipSample();
+      if (!sample) return;
+      try {
+        sample.volume = 0;
+        const played = sample.play();
+        if (played && typeof played.then === 'function') {
+          played.then(() => {
+            sample.pause();
+            sample.currentTime = 0;
+            sample.volume = 0.78;
+          }).catch(() => {});
+        }
+      } catch {
+        // browsers stay silent until a tap
       }
     }
 
@@ -616,7 +638,9 @@
           try { handler(JSON.parse(event.data)); } catch { /* ignore */ }
         });
       };
-      on('sim.state', renderState);
+      // sim.state carries the new face after Skip/POST. Painting it here
+      // races sim.flip and snaps the bezel before the cascade starts.
+      on('sim.state', (state) => renderState(state, { paint: false }));
       on('sim.flip', (detail) => applyLayout(detail.layout, true, detail.strategy));
       on('sim.queue', (detail) => applyQueue(
         detail.items || detail.queue,
@@ -649,11 +673,7 @@
         try { window.localStorage.setItem(SOUND_KEY, soundOn ? '1' : '0'); } catch { /* ignore */ }
         syncSoundButton();
         if (soundOn) {
-          loadFlipSample();
-          const sample = flipSample;
-          if (sample) {
-            try { sample.volume = 0; sample.play()?.then(() => { sample.pause(); sample.currentTime = 0; sample.volume = 0.78; }).catch(() => {}); } catch { /* ignore */ }
-          }
+          unlockFlipAudio();
         } else {
           stopCascade();
         }
@@ -667,14 +687,23 @@
         }
       });
       $('btn-vb-skip')?.addEventListener('click', async () => {
+        unlockFlipAudio();
         try {
           const data = await fetchJson('/api/vestaboard-sim/queue/skip', {});
           if (data?.queue) applyQueue(data.queue, data.queueRevision);
           if (data?.state) renderState(data.state, { paint: false });
+          if (data?.skipped && data?.state?.current) {
+            const next = flatten(data.state.current);
+            const already = next.length === current.length
+              && next.every((code, index) => (current[index] ?? 0) === code);
+            if (!already) applyLayout(data.state.current, true, data.state.lastStrategy);
+          }
           if (data?.skipped) {
             toast('Skipped to the next screen');
           } else if (data?.reason === 'empty') {
             toast('Nothing queued to skip');
+          } else if (data?.reason === 'quiet') {
+            toast('Quiet hours — nothing to skip');
           } else {
             toast('Nothing to skip yet');
           }
