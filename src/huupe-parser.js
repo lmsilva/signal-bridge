@@ -202,6 +202,10 @@ const COUNTDOWN_ZONES = {
 const COUNTDOWN_DIFFS = new Set(['RACE', 'EXACT', 'DEEP']);
 const COUNTDOWN_STARTS = new Set([21, 51, 101]);
 
+/** How an attempt came to be corrected: typed in, re-called by the hoop, or undone. */
+const COUNTDOWN_FIX_HOWS = new Set(['hand', 'retake', 'undo']);
+const COUNTDOWN_RETAKE_STATES = new Set(['armed', 'cancelled']);
+
 function modeForPackage(pkg) {
   return HUUPE_PACKAGES[pkg] || null;
 }
@@ -474,6 +478,23 @@ function countdownZone(value) {
   return Object.prototype.hasOwnProperty.call(COUNTDOWN_ZONES, key) ? COUNTDOWN_ZONES[key] : null;
 }
 
+function knownCountdownZone(value) {
+  return Object.prototype.hasOwnProperty.call(COUNTDOWN_ZONES, value);
+}
+
+/**
+ * An optional numeric field, or null when the line simply did not carry it.
+ *
+ * `Number(null)` is 0 and 0 is finite, so a plain isFinite check reads a
+ * missing `left` as a seat sitting on zero — which on a countdown board is a
+ * seat that has already won.
+ */
+function countdownNumber(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function countdownSeats(list) {
   if (!Array.isArray(list)) return [];
   return list.slice(0, 4).map((row, index) => {
@@ -483,20 +504,39 @@ function countdownSeats(list) {
       id: typeof node.id === 'string' ? node.id : null,
       name: String(node.name || '').trim() || `P${index + 1}`,
       bot: node.bot === true,
-      left: Number.isFinite(Number(node.left)) ? Number(node.left) : null,
-      scored: Number.isFinite(Number(node.scored)) ? Number(node.scored) : null,
-      made: Number.isFinite(Number(node.made)) ? Number(node.made) : null,
-      attempts: Number.isFinite(Number(node.att)) ? Number(node.att) : null,
-      threes: Number.isFinite(Number(node.threes)) ? Number(node.threes) : null,
+      left: countdownNumber(node.left),
+      scored: countdownNumber(node.scored),
+      made: countdownNumber(node.made),
+      attempts: countdownNumber(node.att),
+      threes: countdownNumber(node.threes),
     };
   });
+}
+
+/** The seat fields every Countdown per-attempt line carries. */
+function countdownActor(json) {
+  const seat = Number(json.seat);
+  if (!Number.isInteger(seat) || seat < 0 || seat > 3) return null;
+  return {
+    seat,
+    name: typeof json.name === 'string' ? json.name.trim() : '',
+    bot: typeof json.bot === 'boolean' ? json.bot : null,
+  };
 }
 
 /**
  * Structured lines from the house Countdown APK (`Log.i("HuupeCountdown", json)`).
  *
- * Three events only — start / shot / end — so a finished match can be rebuilt
- * the same way Family Mode is, without dumping the on-device turn history.
+ * Five events — start / shot / fix / retake / end — so a finished match can be
+ * rebuilt the same way Family Mode is, without dumping the on-device turn
+ * history. `fix` and `retake` are additive on `v: 1`.
+ *
+ * A corrected shot cannot be expressed as another `shot`, which would inflate
+ * the shooter's attempt count, so `fix` reaches back to the attempt already
+ * reported at `(seat, turn, attempt)` and replaces or deletes it in place.
+ *
+ * `name` / `bot` on a `shot` are Countdown-only. HAL and Family Mode never
+ * emit this envelope; the parser only calls this for the `HuupeCountdown` tag.
  */
 function parseCountdownMessage(message) {
   const json = parseJsonObject(message);
@@ -521,23 +561,81 @@ function parseCountdownMessage(message) {
   }
 
   if (ev === 'shot') {
-    const seat = Number(json.seat);
+    const actor = countdownActor(json);
     const rawZone = String(json.zone || '').trim().toUpperCase();
-    if (!Number.isInteger(seat) || seat < 0 || seat > 3) return null;
-    if (!Object.prototype.hasOwnProperty.call(COUNTDOWN_ZONES, rawZone)) return null;
-    const made = json.made === true;
+    if (!actor || !knownCountdownZone(rawZone)) return null;
     return {
       kind: 'countdown-shot',
       id,
-      seat,
+      ...actor,
       rawZone,
       zone: countdownZone(rawZone),
-      made,
+      made: json.made === true,
       points: Number(json.pts) || 0,
-      left: Number(json.left),
+      left: countdownNumber(json.left),
+      turn: countdownNumber(json.turn),
       attempt: Number(json.attempt) || 0,
       bust: json.bust === true,
       win: json.win === true,
+      madeN: countdownNumber(json.madeN),
+      attemptsSoFar: countdownNumber(json.att),
+    };
+  }
+
+  if (ev === 'fix') {
+    const actor = countdownActor(json);
+    const how = String(json.how || '').trim().toLowerCase();
+    const turn = countdownNumber(json.turn);
+    const attempt = countdownNumber(json.attempt);
+    const rawZone = String(json.zone || '').trim().toUpperCase();
+    const wasRawZone = String(json.wasZone || '').trim().toUpperCase();
+    if (!actor || !COUNTDOWN_FIX_HOWS.has(how)) return null;
+    if (turn == null || attempt == null) return null;
+    // An undo still sends MISS/false/0 so the key set never varies, so the
+    // zone is always one of the five even when it means nothing.
+    if (!knownCountdownZone(rawZone)) return null;
+    return {
+      kind: 'countdown-fix',
+      id,
+      ...actor,
+      how,
+      turn,
+      attempt,
+      wasRawZone: knownCountdownZone(wasRawZone) ? wasRawZone : null,
+      wasZone: countdownZone(wasRawZone),
+      wasPoints: Number(json.wasPts) || 0,
+      gone: json.gone === true,
+      rawZone,
+      zone: countdownZone(rawZone),
+      made: json.made === true,
+      points: Number(json.pts) || 0,
+      left: countdownNumber(json.left),
+      turnPoints: countdownNumber(json.turnPts),
+      bust: json.bust === true,
+      win: json.win === true,
+      madeN: countdownNumber(json.madeN),
+      attemptsSoFar: countdownNumber(json.att),
+    };
+  }
+
+  if (ev === 'retake') {
+    const actor = countdownActor(json);
+    const state = String(json.state || '').trim().toLowerCase();
+    const turn = countdownNumber(json.turn);
+    const attempt = countdownNumber(json.attempt);
+    const rawZone = String(json.zone || '').trim().toUpperCase();
+    if (!actor || !COUNTDOWN_RETAKE_STATES.has(state)) return null;
+    if (turn == null || attempt == null) return null;
+    return {
+      kind: 'countdown-retake',
+      id,
+      ...actor,
+      state,
+      turn,
+      attempt,
+      rawZone: knownCountdownZone(rawZone) ? rawZone : null,
+      zone: countdownZone(rawZone),
+      points: Number(json.pts) || 0,
     };
   }
 

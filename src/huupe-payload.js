@@ -221,6 +221,9 @@ function buildSessionPayload(session = {}, {
         made: Boolean(shot.made),
         zone: shot.zone || null,
         short: ZONE_SHORT[shot.zone] || '',
+        // Countdown only: the hoop has been handed this call back, so the tick
+        // is still on the board but nobody stands behind it yet.
+        provisional: Boolean(shot.provisional),
       })),
       winner: session.winner || null,
       sensorErrors: Number(session.sensorErrors) || 0,
@@ -244,13 +247,10 @@ function viewFromArchivedSession(row = {}) {
     startedAt: row.startedAt || null,
     endedAt: row.endedAt || null,
     durationSec: Number(row.durationSec) || 0,
-    players: (row.players || []).map((player) => ({
-      ...player,
-      score: row.mode === 'countdown' && player.remaining != null
-        ? player.remaining
-        : player.score,
-      streak: 0,
-    })),
+    // The archive already stores what each seat scored, and a replayed card is
+    // always a finished game, so Countdown shows the total rather than the
+    // remaining it happened to end on.
+    players: (row.players || []).map((player) => ({ ...player, streak: 0 })),
     stats: { streak: 0, ...(row.stats || {}) },
     lastShot: null,
     // The archive keeps totals, never the shot log, so a replayed game has a
@@ -259,7 +259,7 @@ function viewFromArchivedSession(row = {}) {
     winner: row.winner || null,
     uniqueScoreId: row.uniqueScoreId || null,
     combination: row.combination || null,
-    scoreKind: row.mode === 'countdown' ? 'remaining' : 'points',
+    scoreKind: 'points',
     startScore: row.combination?.startScore ?? null,
     difficulty: row.combination?.difficulty || null,
     truncated: Boolean(row.truncated),

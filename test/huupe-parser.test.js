@@ -321,17 +321,28 @@ test('HuupeCountdown log lines parse start, shot and end', () => {
   assert.equal(start.seats[1].bot, true);
 
   const shot = parseCountdownMessage(
-    '{"v":1,"ev":"shot","id":"m1","seat":0,"zone":"DEEP","made":true,"pts":3,"left":48,"attempt":1,"bust":false,"win":false}',
+    '{"v":1,"ev":"shot","id":"m1","seat":0,"name":"Bot Pro","bot":true,"zone":"DEEP","made":true,"pts":3,"left":48,"attempt":1,"bust":false,"win":false}',
   );
   assert.equal(shot.kind, 'countdown-shot');
   assert.equal(shot.zone, 'three');
   assert.equal(shot.left, 48);
+  assert.equal(shot.name, 'Bot Pro');
+  assert.equal(shot.bot, true);
+
+  const nameless = parseCountdownMessage(
+    '{"v":1,"ev":"shot","id":"m1","seat":1,"zone":"SHORT","made":true,"pts":1,"left":20,"attempt":2,"bust":false,"win":false}',
+  );
+  assert.equal(nameless.name, '');
+  assert.equal(nameless.bot, null);
 
   const bust = parseCountdownMessage(
     '{"v":1,"ev":"shot","id":"m1","seat":0,"zone":"DEEP","made":true,"pts":3,"left":2,"attempt":1,"bust":true,"win":false}',
   );
   assert.equal(bust.bust, true);
   assert.equal(bust.left, 2);
+
+  // A seat with no numbers on the line is unknown, not sitting on zero.
+  assert.equal(start.seats[0].left, null);
 
   const ended = parseCountdownMessage(
     '{"v":1,"ev":"end","id":"m1","winnerId":"p-luis","winner":"Luis","reason":"win","seats":[{"id":"p-luis","name":"Luis","left":0,"scored":51,"made":9,"att":12,"threes":2}]}',
@@ -340,6 +351,18 @@ test('HuupeCountdown log lines parse start, shot and end', () => {
   assert.equal(ended.seats[0].scored, 51);
   assert.equal(parseCountdownMessage('{"v":1,"ev":"start","id":"m1","start":12,"diff":"EXACT"}'), null);
 
+  // An attempt is addressed by turn and attempt so a later fix can find it.
+  const addressed = parseCountdownMessage(
+    '{"v":1,"ev":"shot","id":"m1","seat":0,"name":"Luis","bot":false,"zone":"MID","made":true,"pts":2,"left":16,"turn":2,"attempt":3,"bust":false,"win":false,"madeN":4,"att":6}',
+  );
+  assert.equal(addressed.turn, 2);
+  assert.equal(addressed.attempt, 3);
+  assert.equal(addressed.madeN, 4);
+  assert.equal(addressed.attemptsSoFar, 6);
+  // An older APK does not address its attempts, and must not read as turn 0.
+  assert.equal(shot.turn, null);
+  assert.equal(shot.madeN, null);
+
   const parser = createHuupeParser({ year: 2026 });
   const line = parser.parse(
     '09-09 18:01:02.120  4321  4321 I HuupeCountdown: {"v":1,"ev":"shot","id":"m1","seat":0,"zone":"SHORT","made":true,"pts":1,"left":20,"attempt":2,"bust":false,"win":false}',
@@ -347,6 +370,91 @@ test('HuupeCountdown log lines parse start, shot and end', () => {
   assert.equal(line.kind, 'countdown-shot');
   assert.equal(line.seat, 0);
   assert.equal(line.zone, 'one');
+});
+
+test('a Countdown fix names the attempt it corrects, and an undo deletes it', () => {
+  const retake = parseCountdownMessage(
+    '{"v":1,"ev":"fix","id":"m1","seat":0,"name":"Luis","bot":false,"how":"retake","turn":3,"attempt":1,"wasZone":"DEEP","wasPts":3,"gone":false,"zone":"MISS","made":false,"pts":0,"left":2,"turnPts":0,"bust":false,"win":false,"madeN":4,"att":8}',
+  );
+  assert.equal(retake.kind, 'countdown-fix');
+  assert.equal(retake.how, 'retake');
+  assert.equal(retake.turn, 3);
+  assert.equal(retake.attempt, 1);
+  assert.equal(retake.wasZone, 'three');
+  assert.equal(retake.zone, null);
+  assert.equal(retake.gone, false);
+  // `bust: false` on a fix hands back a bust an earlier shot line reported.
+  assert.equal(retake.bust, false);
+  assert.equal(retake.turnPoints, 0);
+  assert.equal(retake.madeN, 4);
+  assert.equal(retake.attemptsSoFar, 8);
+
+  const undone = parseCountdownMessage(
+    '{"v":1,"ev":"fix","id":"m1","seat":0,"name":"Luis","bot":false,"how":"undo","turn":3,"attempt":1,"wasZone":"DEEP","wasPts":3,"gone":true,"zone":"MISS","made":false,"pts":0,"left":2,"turnPts":0,"bust":false,"win":false,"madeN":4,"att":7}',
+  );
+  assert.equal(undone.gone, true);
+  assert.equal(undone.attemptsSoFar, 7);
+
+  // Only the three ways an attempt can change, and only at a real address.
+  assert.equal(parseCountdownMessage(
+    '{"v":1,"ev":"fix","id":"m1","seat":0,"how":"nudge","turn":1,"attempt":1,"zone":"MISS"}',
+  ), null);
+  assert.equal(parseCountdownMessage(
+    '{"v":1,"ev":"fix","id":"m1","seat":0,"how":"hand","attempt":1,"zone":"MISS"}',
+  ), null);
+});
+
+test('a Countdown retake brackets the attempt in doubt without scoring it', () => {
+  const armed = parseCountdownMessage(
+    '{"v":1,"ev":"retake","id":"m1","seat":0,"name":"Luis","bot":false,"state":"armed","turn":3,"attempt":2,"zone":"MISS","pts":0}',
+  );
+  assert.equal(armed.kind, 'countdown-retake');
+  assert.equal(armed.state, 'armed');
+  assert.equal(armed.turn, 3);
+  assert.equal(armed.attempt, 2);
+  assert.equal(armed.zone, null);
+
+  const stoodDown = parseCountdownMessage(
+    '{"v":1,"ev":"retake","id":"m1","seat":0,"name":"Luis","bot":false,"state":"cancelled","turn":3,"attempt":2,"zone":"DEEP","pts":3}',
+  );
+  assert.equal(stoodDown.state, 'cancelled');
+  assert.equal(stoodDown.zone, 'three');
+
+  // There is deliberately no `landed`: a retake that lands is reported as a fix.
+  assert.equal(parseCountdownMessage(
+    '{"v":1,"ev":"retake","id":"m1","seat":0,"state":"landed","turn":3,"attempt":2,"zone":"DEEP","pts":3}',
+  ), null);
+  // An event nobody knows is skipped, not fatal.
+  assert.equal(parseCountdownMessage('{"v":1,"ev":"heartbeat","id":"m1"}'), null);
+});
+
+test('a real hoop Countdown shot carries the seat name; HAL stays a HAL shot', () => {
+  const parser = createHuupeParser({ year: 2026 });
+  const named = parser.parse(
+    '09-10 00:32:51.962  3032  3032 I HuupeCountdown: {"v":1,"ev":"shot","id":"bd676b2f-9244-4b34-b674-3de7f7d6f563","seat":0,"name":"TRASHPANDA","bot":false,"zone":"DEEP","made":true,"pts":3,"left":6,"attempt":2,"bust":false,"win":false}',
+  );
+  assert.equal(named.kind, 'countdown-shot');
+  assert.equal(named.name, 'TRASHPANDA');
+  assert.equal(named.bot, false);
+  assert.equal(named.seat, 0);
+
+  const bot = parser.parse(
+    '09-10 00:32:37.480  3032  3032 I HuupeCountdown: {"v":1,"ev":"shot","id":"bd676b2f-9244-4b34-b674-3de7f7d6f563","seat":2,"name":"Bot Pro","bot":true,"zone":"DEEP","made":true,"pts":3,"left":15,"attempt":2,"bust":false,"win":false}',
+  );
+  assert.equal(bot.name, 'Bot Pro');
+  assert.equal(bot.bot, true);
+
+  const hal = parser.parse(
+    '09-10 00:32:51.956   339   339 I huupe.hardware.shottracker-tof-service: TOF: {"stream_ts": 2423.831543, "events": ["make_detected"], "shot_zone": "three_point_shot", "shot_range": 5.753076 }',
+  );
+  assert.equal(hal.kind, 'shot');
+  assert.equal(hal.zone, 'three');
+  assert.equal(hal.name, undefined);
+
+  const onTracker = parser.parse(
+    '09-10 00:32:51.962  2736  2736 I ShotTracker: Get EVENT: {"v":1,"ev":"shot","id":"m1","seat":0,"name":"TRASHPANDA","bot":false,"zone":"DEEP","made":true,"pts":3,"left":6,"attempt":2,"bust":false,"win":false}',
+  );
+  assert.equal(onTracker, null);
 });
 
 test('real ActivityTaskManager lines from the hoop resolve a foreground package', () => {

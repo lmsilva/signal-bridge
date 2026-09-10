@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the Windows display client.  
 > **Keep fresh:** Update this file whenever you change modules, config, UDP handling, overlay UI, or packaging. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-08-31 (Latest Inducted shows the full title)
+**Last updated:** 2026-09-09 (Huupe ticker marks a shot the hoop is re-calling)
 
 ---
 
@@ -271,6 +271,7 @@ Smoke: `python test/send_test.py --type tesla-battery-limited --seconds 30`
 
 ## Recent changes
 
+- 2026-09-09: **Huupe shot ticker marks an attempt the hoop is re-calling** — Countdown can hand a disputed shot back to the hoop, and between arming and the correction landing the board is showing an attempt nobody stands behind. `huupe.session.recentShots[].provisional` now paints that tick as a hollow amber ring instead of a settled make or miss, so it does not read as decided either way. Tests: `test_dashboard_render_smoke.py`. Ship: portable client rebuild required (not run).
 - 2026-08-31: **Latest Inducted shows the full game title** — the dashboard clipped "Contra Anniversary Collection" to "Contra…" because `clip_text_to_lines` counted how many M glyphs fit (starting at 8) instead of measuring the real string. Titles now paint in full when they fit the column and marquee (same as the showcase card) when they do not. Tests: `test_roll_credits_panel.py`. Ship: portable client rebuild required (not run).
 - 2026-08-31: **Roll Credits loops play at 24 fps from a local cache** — the wall still never streams the MP4. First visit paints the poster while the WebP copies to `steam-artwork-cache`. Playback no longer samples a 50-frame file down to 24 (that was ~3 fps). Short clips preload; longer trims seek one frame at a time. `LOOP_MIN_DELAY_MS` is 40 so a 42ms frame is not clamped to 16 fps. Tests: `test_roll_credits_panel.py`. Ship: portable client rebuild required (not run).
 - 2026-08-31: **Roll Credits plays loops from a local cache, not over Wi‑Fi** — the wall never streamed the source MP4 (Tk cannot decode video); the hitch was downloading + decoding the animated WebP on the showcase path. First visit now paints the poster/cover (`media.still` / `thumbUrl`) while a serial background queue copies the WebP into `steam-artwork-cache`. The loop only starts once that file is complete; the next tour (or a later game in the same walk if prefetch finished) plays from disk. Playlist JSON + the next `PREFETCH_AHEAD` (3) cards warm during the dashboard without painting over it. Tests: `test_roll_credits_panel.py`, `test_steam_now_playing_panel.py`. Ship: portable client rebuild required (not run).
