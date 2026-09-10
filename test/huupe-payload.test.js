@@ -304,7 +304,17 @@ test('a solo session leads with its own score and a called game leads with the w
   assert.equal(solo.session.modeLabel, 'Free Play');
   assert.equal(modeLabel('family'), 'Family Mode');
   assert.equal(modeLabel('JUSTHUUPE'), 'Free Play');
+  assert.equal(modeLabel('countdown'), 'Countdown');
   assert.equal(modeLabel('something-new'), 'Session');
+  assert.deepEqual(
+    headlineFor({
+      status: 'live',
+      scoreKind: 'remaining',
+      players: [{ name: 'Luis', score: 12 }, { name: 'Alex', score: 18 }],
+      stats: { points: 12 },
+    }),
+    { primary: 'Luis', secondary: '12 LEFT' },
+  );
 });
 
 test('the dashboard shows only as many shooters as the board has room for', () => {

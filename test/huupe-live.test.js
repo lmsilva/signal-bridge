@@ -526,6 +526,153 @@ test('the status snapshot reports what the integration has been doing', () => {
   assert.equal(status.session, null);
 });
 
+test('a Countdown start opens the wall without waiting for two shots', () => {
+  const kit = harness();
+  kit.live.handleEvent({
+    kind: 'countdown-start',
+    id: 'm1',
+    startScore: 21,
+    difficulty: 'EXACT',
+    layupValue: 1,
+    seats: [
+      { seat: 0, id: 'p-luis', name: 'Luis', bot: false },
+      { seat: 1, id: 'p-alex', name: 'Alex', bot: false },
+    ],
+  });
+  const card = kit.latest();
+  assert.equal(card.session.mode, 'countdown');
+  assert.equal(card.session.scoreKind, 'remaining');
+  assert.equal(card.session.players[0].score, 21);
+  assert.equal(card.session.headline.secondary, '21 LEFT');
+});
+
+test('a Countdown shot mid-stream opens the session if start was missed', () => {
+  const kit = harness();
+  kit.live.handleEvent({
+    kind: 'countdown-shot',
+    id: 'm2',
+    seat: 0,
+    zone: 'three',
+    made: true,
+    points: 3,
+    left: 18,
+    bust: false,
+    win: false,
+  });
+  const card = kit.latest();
+  assert.equal(card.session.mode, 'countdown');
+  assert.equal(card.session.players[0].name, 'P1');
+  assert.equal(card.session.players[0].score, 18);
+  assert.equal(card.session.stats.points, 3);
+});
+
+test('HAL shots are ignored once Countdown is scoring', () => {
+  const kit = harness();
+  kit.live.handleEvent({
+    kind: 'countdown-start',
+    id: 'm3',
+    startScore: 21,
+    difficulty: 'RACE',
+    layupValue: 1,
+    seats: [{ seat: 0, id: 'p-luis', name: 'Luis', bot: false }],
+  });
+  kit.advance(MIN_PUSH_INTERVAL_MS);
+  kit.live.handleEvent(shot({ zone: 'three', points: 3 }));
+  assert.equal(kit.latest().session.stats.attempts, 0);
+  kit.live.handleEvent({
+    kind: 'countdown-shot',
+    id: 'm3',
+    seat: 0,
+    zone: 'two',
+    made: true,
+    points: 2,
+    left: 19,
+    bust: false,
+    win: false,
+  });
+  assert.equal(kit.latest().session.stats.attempts, 1);
+  assert.equal(kit.latest().session.players[0].score, 19);
+});
+
+test('a Countdown bust does not add points and restores remaining', () => {
+  const kit = harness();
+  kit.live.handleEvent({
+    kind: 'countdown-start',
+    id: 'm4',
+    startScore: 21,
+    difficulty: 'EXACT',
+    layupValue: 1,
+    seats: [{ seat: 0, id: 'p-luis', name: 'Luis', bot: false }],
+  });
+  kit.advance(MIN_PUSH_INTERVAL_MS);
+  kit.live.handleEvent({
+    kind: 'countdown-shot',
+    id: 'm4',
+    seat: 0,
+    zone: 'three',
+    made: true,
+    points: 3,
+    left: 2,
+    bust: true,
+    win: false,
+  });
+  const session = kit.latest().session;
+  assert.equal(session.players[0].score, 2);
+  assert.equal(session.stats.points, 0);
+  assert.equal(session.stats.made, 0);
+  assert.equal(session.stats.attempts, 1);
+});
+
+test('a Countdown end archives scored points not remaining', () => {
+  const kit = harness();
+  kit.live.handleEvent({
+    kind: 'countdown-start',
+    id: 'm5',
+    startScore: 21,
+    difficulty: 'EXACT',
+    layupValue: 1,
+    seats: [
+      { seat: 0, id: 'p-luis', name: 'Luis', bot: false },
+      { seat: 1, id: 'p-alex', name: 'Alex', bot: false },
+    ],
+  });
+  kit.advance(MIN_PUSH_INTERVAL_MS);
+  kit.live.handleEvent({
+    kind: 'countdown-shot',
+    id: 'm5',
+    seat: 0,
+    zone: 'one',
+    made: true,
+    points: 1,
+    left: 0,
+    bust: false,
+    win: true,
+  });
+  kit.advance(MIN_PUSH_INTERVAL_MS);
+  kit.live.handleEvent({
+    kind: 'countdown-end',
+    id: 'm5',
+    winnerId: 'p-luis',
+    winner: 'Luis',
+    reason: 'win',
+    seats: [
+      { seat: 0, id: 'p-luis', name: 'Luis', left: 0, scored: 21, made: 1, att: 1, threes: 0 },
+      { seat: 1, id: 'p-alex', name: 'Alex', left: 18, scored: 3, made: 1, att: 1, threes: 1 },
+    ],
+  });
+  assert.equal(kit.archived.length, 1);
+  const row = kit.archived[0];
+  assert.equal(row.mode, 'countdown');
+  assert.equal(row.endReason, 'countdown-end');
+  assert.equal(row.winner, 'Luis');
+  const luis = row.players.find((player) => player.name === 'Luis');
+  assert.equal(luis.score, 21);
+  assert.equal(luis.remaining, 0);
+  assert.equal(luis.isWinner, true);
+  assert.equal(kit.latest().session.status, 'finished');
+  assert.equal(kit.latest().session.headline.secondary, 'WINS');
+});
+
 test('a failed write still shows the final score on the wall', () => {
   // Losing the history is bad; losing the score of the game people just played,
   // while they are standing in front of the display, is worse.

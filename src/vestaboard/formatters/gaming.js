@@ -469,6 +469,7 @@ const HUUPE_BOARD_MODES = {
   dailyprize: 'DAILY',
   fitness: 'FITNESS',
   live: 'LIVE',
+  countdown: 'COUNTDOWN',
 };
 
 /** "HUUPE" plus a two-space gap leaves exactly this much of the header. */

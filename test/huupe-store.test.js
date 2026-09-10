@@ -440,6 +440,36 @@ test('the same shooter under different capitalisation is one person', () => {
   ]);
 });
 
+test('a Countdown game ranks by points scored and merges the same name', () => {
+  const data = recomputeFromSessions([
+    familyRow({
+      sessionId: 'fam',
+      endedAt: '2026-09-01T00:00:00.000Z',
+      winner: 'Luis',
+      players: [{ name: 'Luis', score: 10, position: 0, isWinner: true, made: 4, attempts: 8 }],
+      stats: { made: 4, attempts: 8, points: 10 },
+    }),
+    {
+      sessionId: 'cd1',
+      mode: 'countdown',
+      startedAt: '2026-09-09T00:00:00.000Z',
+      endedAt: '2026-09-09T00:10:00.000Z',
+      durationSec: 600,
+      winner: 'Luis',
+      players: [
+        { name: 'Luis', score: 21, remaining: 0, position: 0, isWinner: true, made: 7, attempts: 10 },
+        { name: 'Alex', score: 12, remaining: 9, position: 1, isWinner: false, made: 4, attempts: 9 },
+      ],
+      stats: { made: 11, attempts: 19, points: 33 },
+    },
+  ]);
+  const luis = data.players.find((row) => row.displayName === 'Luis');
+  assert.equal(luis.games, 2);
+  assert.equal(luis.wins, 2);
+  assert.equal(luis.points, 31);
+  assert.equal(data.totals.games, 2);
+});
+
 test('career shooting percentage is recomputed, never copied off the row', () => {
   // Per-session FG% is a percentage of that session; averaging or reusing them
   // would give a career number that does not match the career makes.

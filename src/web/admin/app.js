@@ -16351,7 +16351,7 @@
 
   // ---------------------------------------- Settings → Huupe
 
-  const HUUPE_MODES = ['family', 'justhuupe', 'dailyprize', 'fitness', 'live'];
+  const HUUPE_MODES = ['family', 'justhuupe', 'dailyprize', 'fitness', 'live', 'countdown'];
 
   let huupeSaveTimer = null;
   let huupePollTimer = null;

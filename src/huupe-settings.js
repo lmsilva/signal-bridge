@@ -6,7 +6,7 @@ const path = require('path');
 // the Autodarts equivalents.
 const INACTIVITY_OPTIONS = Object.freeze([2, 5, 10, 15, 30]);
 
-const MODES = Object.freeze(['family', 'justhuupe', 'dailyprize', 'fitness', 'live']);
+const MODES = Object.freeze(['family', 'justhuupe', 'dailyprize', 'fitness', 'live', 'countdown']);
 
 const DEFAULTS = Object.freeze({
   device: Object.freeze({
@@ -30,6 +30,7 @@ const DEFAULTS = Object.freeze({
     dailyprize: true,
     fitness: true,
     live: true,
+    countdown: true,
   }),
   dashboard: Object.freeze({
     leaderboardSize: 10,

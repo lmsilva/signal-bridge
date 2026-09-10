@@ -9,7 +9,9 @@ const {
   parseFamilyMessage,
   parseEndGameMessage,
   parseFocusMessage,
+  parseCountdownMessage,
   modeForPackage,
+  LOGCAT_TAGS,
   redactSensitive,
   pointsForZone,
   pointsTableForMode,
@@ -305,6 +307,46 @@ test('focus lines resolve a Huupe package to a mode and ignore everything else',
 
   assert.equal(parseFocusMessage('START u0 {cmp=com.android.settings/.Settings}'), null);
   assert.equal(modeForPackage('com.example.other'), null);
+  assert.equal(modeForPackage('com.huupe.countdown'), 'countdown');
+  assert.ok(LOGCAT_TAGS.includes('HuupeCountdown'));
+});
+
+test('HuupeCountdown log lines parse start, shot and end', () => {
+  const start = parseCountdownMessage(
+    '{"v":1,"ev":"start","id":"m1","start":51,"diff":"EXACT","layup":1,"seats":[{"id":"p-luis","name":"Luis","bot":false},{"id":"p-alex","name":"Alex","bot":true}]}',
+  );
+  assert.equal(start.kind, 'countdown-start');
+  assert.equal(start.startScore, 51);
+  assert.equal(start.difficulty, 'EXACT');
+  assert.equal(start.seats[1].bot, true);
+
+  const shot = parseCountdownMessage(
+    '{"v":1,"ev":"shot","id":"m1","seat":0,"zone":"DEEP","made":true,"pts":3,"left":48,"attempt":1,"bust":false,"win":false}',
+  );
+  assert.equal(shot.kind, 'countdown-shot');
+  assert.equal(shot.zone, 'three');
+  assert.equal(shot.left, 48);
+
+  const bust = parseCountdownMessage(
+    '{"v":1,"ev":"shot","id":"m1","seat":0,"zone":"DEEP","made":true,"pts":3,"left":2,"attempt":1,"bust":true,"win":false}',
+  );
+  assert.equal(bust.bust, true);
+  assert.equal(bust.left, 2);
+
+  const ended = parseCountdownMessage(
+    '{"v":1,"ev":"end","id":"m1","winnerId":"p-luis","winner":"Luis","reason":"win","seats":[{"id":"p-luis","name":"Luis","left":0,"scored":51,"made":9,"att":12,"threes":2}]}',
+  );
+  assert.equal(ended.kind, 'countdown-end');
+  assert.equal(ended.seats[0].scored, 51);
+  assert.equal(parseCountdownMessage('{"v":1,"ev":"start","id":"m1","start":12,"diff":"EXACT"}'), null);
+
+  const parser = createHuupeParser({ year: 2026 });
+  const line = parser.parse(
+    '09-09 18:01:02.120  4321  4321 I HuupeCountdown: {"v":1,"ev":"shot","id":"m1","seat":0,"zone":"SHORT","made":true,"pts":1,"left":20,"attempt":2,"bust":false,"win":false}',
+  );
+  assert.equal(line.kind, 'countdown-shot');
+  assert.equal(line.seat, 0);
+  assert.equal(line.zone, 'one');
 });
 
 test('real ActivityTaskManager lines from the hoop resolve a foreground package', () => {
