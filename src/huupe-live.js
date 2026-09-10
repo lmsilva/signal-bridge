@@ -172,6 +172,12 @@ function createHuupeLive({
       revision: 0,
       opened: false,
       familyMode: false,
+      countdownMode: false,
+      countdownId: null,
+      countdownStart: null,
+      countdownDiff: null,
+      countdownLayup: 1,
+      currentSeat: null,
       // Held back until `minShotsToOpen` so one stray bounce is not a session.
       pendingShots: [],
       stats: emptyStats(),
@@ -234,24 +240,129 @@ function createHuupeLive({
     session.recentShots = [];
   }
 
+  function ownsScoreboard() {
+    return Boolean(session?.familyMode || session?.countdownMode);
+  }
+
+  function countdownSeat(seat, extras = {}) {
+    const index = Number(seat);
+    if (!Number.isInteger(index) || index < 0 || index > 3) return null;
+    const key = `seat:${index}`;
+    let player = session.players.get(key);
+    const named = String(extras.name || '').trim();
+    if (!player) {
+      player = {
+        name: named || `P${index + 1}`,
+        id: extras.id || null,
+        bot: extras.bot === true,
+        seat: index,
+        score: Number.isFinite(Number(extras.left))
+          ? Number(extras.left)
+          : (Number(session.countdownStart) || 0),
+        scored: Number.isFinite(Number(extras.scored)) ? Number(extras.scored) : 0,
+        position: null,
+        isWinner: false,
+        stats: emptyStats(),
+      };
+      session.players.set(key, player);
+      session.playerOrder.push(key);
+    } else {
+      if (named) player.name = named;
+      if (extras.id) player.id = extras.id;
+      if (extras.bot != null) player.bot = extras.bot === true;
+      if (Number.isFinite(Number(extras.left))) player.score = Number(extras.left);
+      if (Number.isFinite(Number(extras.scored))) player.scored = Number(extras.scored);
+    }
+    return player;
+  }
+
+  function recordCountdownShot(stats, { made, zone, points, bust }) {
+    if (bust) {
+      stats.attempts += 1;
+      if (zone && stats.byZone[zone]) stats.byZone[zone].attempts += 1;
+      stats.streak = 0;
+      return stats;
+    }
+    return recordShot(stats, { made, zone, points: made ? points : 0 });
+  }
+
+  function applyCountdownMeta(event) {
+    if (!event) return;
+    if (event.id) session.countdownId = event.id;
+    if (Number.isFinite(Number(event.startScore))) {
+      session.countdownStart = Number(event.startScore);
+    }
+    if (event.difficulty) session.countdownDiff = event.difficulty;
+    if (event.layupValue === 0 || event.layupValue === 1) {
+      session.countdownLayup = event.layupValue;
+    }
+    session.combination = {
+      startScore: session.countdownStart,
+      difficulty: session.countdownDiff,
+      layupValue: session.countdownLayup,
+    };
+    for (const seat of event.seats || []) {
+      countdownSeat(seat.seat, seat);
+    }
+  }
+
+  /**
+   * Countdown names its own seats. HAL still fires the same shot, so once this
+   * stream is live the hardware totals have to be dropped or every make is
+   * counted twice — same reason Family Mode switches to Unity.
+   */
+  function enterCountdown(event, nowMs) {
+    const id = event?.id || null;
+    if (session && session.countdownMode && id && session.countdownId === id) {
+      applyCountdownMeta(event);
+      return session;
+    }
+    if (session && session.opened && !session.countdownMode) {
+      if (hasContent()) finishSession({ reason: 'left-app' });
+      else abortSession({ reason: 'left-app' });
+    } else if (session && session.countdownMode && id && session.countdownId !== id) {
+      if (hasContent()) finishSession({ reason: 'countdown-end' });
+      else abortSession({ reason: 'countdown-end' });
+    }
+    ensureSession(nowMs, 'countdown');
+    if (!session.countdownMode) {
+      session.countdownMode = true;
+      session.mode = 'countdown';
+      session.stats = emptyStats();
+      session.recentShots = [];
+      session.players = new Map();
+      session.playerOrder = [];
+    }
+    applyCountdownMeta(event);
+    return session;
+  }
+
   function sessionView() {
+    const countdown = Boolean(session.countdownMode);
     const players = session.playerOrder
       .map((key) => session.players.get(key))
       .filter(Boolean)
       .map((player) => ({
         name: player.name,
         score: round1(player.score),
+        remaining: countdown ? round1(player.score) : undefined,
+        scored: countdown
+          ? round1(Number.isFinite(player.scored)
+            ? player.scored
+            : (Number(session.countdownStart) || 0) - Number(player.score || 0))
+          : undefined,
         position: player.position,
-        isWinner: player.position === 0,
+        isWinner: Boolean(player.isWinner) || player.position === 0,
         ...statsView(player.stats),
       }));
 
     // Standings order once the game has called it; live score until then.
+    // Countdown races to zero, so the lowest remaining score is winning.
     players.sort((a, b) => {
       if (a.position != null && b.position != null) return a.position - b.position;
       if (a.position != null) return -1;
       if (b.position != null) return 1;
-      return b.score - a.score;
+      return countdown ? a.score - b.score : b.score - a.score;
     });
 
     const nowMs = now();
@@ -272,6 +383,10 @@ function createHuupeLive({
       winner: players.find((row) => row.isWinner)?.name || null,
       uniqueScoreId: session.uniqueScoreId,
       combination: session.combination,
+      scoreKind: countdown ? 'remaining' : 'points',
+      startScore: session.countdownStart,
+      difficulty: session.countdownDiff,
+      currentSeat: session.currentSeat,
       truncated: session.truncated,
       sensorErrors: session.sensorErrors,
       idleSeconds: lastEventAt ? Math.max(0, Math.round((nowMs - lastEventAt) / 1000)) : 0,
@@ -279,6 +394,32 @@ function createHuupeLive({
   }
 
   function archiveRow(view, { aborted = false, reason = null } = {}) {
+    const countdown = view.mode === 'countdown';
+    const startScore = Number(view.startScore || view.combination?.startScore);
+    const players = view.players.map((player, index) => {
+      const remaining = countdown ? Number(player.remaining ?? player.score) : undefined;
+      const scored = countdown
+        ? round1(Number.isFinite(Number(player.scored))
+          ? Number(player.scored)
+          : (Number.isFinite(startScore) ? startScore - remaining : 0))
+        : player.score;
+      return {
+        name: player.name,
+        score: scored,
+        remaining,
+        position: player.position != null ? player.position : (player.isWinner ? 0 : index),
+        isWinner: Boolean(player.isWinner),
+        made: player.made,
+        attempts: player.attempts,
+        fgPct: player.fgPct,
+        threes: player.threes,
+        bestStreak: player.bestStreak,
+        byZone: player.byZone,
+      };
+    });
+    const points = countdown
+      ? round1(players.reduce((sum, player) => sum + (Number(player.score) || 0), 0))
+      : view.stats.points;
     return {
       sessionId: view.sessionId,
       mode: view.mode,
@@ -291,22 +432,11 @@ function createHuupeLive({
       uniqueScoreId: view.uniqueScoreId,
       combination: view.combination,
       truncated: view.truncated,
-      players: view.players.map((player) => ({
-        name: player.name,
-        score: player.score,
-        position: player.position,
-        isWinner: player.isWinner,
-        made: player.made,
-        attempts: player.attempts,
-        fgPct: player.fgPct,
-        threes: player.threes,
-        bestStreak: player.bestStreak,
-        byZone: player.byZone,
-      })),
+      players,
       stats: {
         made: view.stats.made,
         attempts: view.stats.attempts,
-        points: view.stats.points,
+        points,
         fgPct: view.stats.fgPct,
         threes: view.stats.threes,
         bestStreak: view.stats.bestStreak,
@@ -377,7 +507,9 @@ function createHuupeLive({
 
   /** A session with nothing in it is noise; it is dropped without a trace. */
   function hasContent() {
-    return session && session.stats.attempts >= 2;
+    if (!session) return false;
+    if (session.countdownMode) return session.stats.attempts >= 1;
+    return session.stats.attempts >= 2;
   }
 
   /**
@@ -494,10 +626,13 @@ function createHuupeLive({
   }
 
   function applyShot(event, nowMs) {
+    // Family Mode and Countdown own the scoreboard. HAL still fires the same
+    // shot; counting it here would double every make. While Countdown is in
+    // front we also ignore HAL before the first tagged line arrives, so a
+    // mid-game deploy does not open a nameless free-play session.
+    if (deviceMode === 'countdown' && !session?.countdownMode) return;
     ensureSession(nowMs, event.mode);
-    // In Family Mode the hardware stream is only a liveness signal; Unity owns
-    // the scoreboard because it is the only source that knows whose shot it was.
-    if (session.familyMode) return;
+    if (ownsScoreboard()) return;
 
     recordShot(session.stats, {
       made: event.made,
@@ -549,6 +684,98 @@ function createHuupeLive({
     else pushLive();
   }
 
+  function applyCountdownShot(event, nowMs) {
+    enterCountdown(event, nowMs);
+    const player = countdownSeat(event.seat);
+    if (!player) return;
+    const points = Number(event.points) || 0;
+    const made = event.made === true && event.bust !== true;
+    recordCountdownShot(player.stats, {
+      made: event.made === true,
+      zone: event.zone,
+      points,
+      bust: event.bust === true,
+    });
+    recordCountdownShot(session.stats, {
+      made: event.made === true,
+      zone: event.zone,
+      points,
+      bust: event.bust === true,
+    });
+    if (Number.isFinite(Number(event.left))) {
+      player.score = Number(event.left);
+      if (Number.isFinite(Number(session.countdownStart))) {
+        player.scored = Number(session.countdownStart) - player.score;
+      }
+    }
+    session.currentSeat = event.seat;
+    session.lastShot = {
+      player: player.name,
+      made: event.made === true,
+      zone: event.zone,
+      points: made ? points : 0,
+      bust: event.bust === true,
+      at: event.at || null,
+    };
+    rememberShot(session.lastShot);
+    if (!session.opened) openSession();
+    else pushLive();
+  }
+
+  function applyCountdownEnd(event, nowMs) {
+    enterCountdown(event, nowMs);
+    applyCountdownMeta(event);
+    const startScore = Number(session.countdownStart);
+    for (const seat of event.seats || []) {
+      const player = countdownSeat(seat.seat, seat);
+      if (!player) continue;
+      if (Number.isFinite(Number(seat.left))) player.score = Number(seat.left);
+      if (Number.isFinite(Number(seat.scored))) {
+        player.scored = Number(seat.scored);
+      } else if (Number.isFinite(startScore)) {
+        player.scored = startScore - Number(player.score || 0);
+      }
+      if (Number.isFinite(Number(seat.made)) && player.stats.attempts === 0) {
+        player.stats.made = Number(seat.made) || 0;
+        player.stats.attempts = Number(seat.attempts) || player.stats.made;
+        player.stats.threes = Number(seat.threes) || 0;
+        player.stats.points = round1(player.scored);
+      }
+    }
+    if (session.stats.attempts === 0) {
+      for (const key of session.playerOrder) {
+        const player = session.players.get(key);
+        if (!player) continue;
+        session.stats.made += player.stats.made;
+        session.stats.attempts += player.stats.attempts;
+        session.stats.threes += player.stats.threes;
+        session.stats.points = round1(session.stats.points + (Number(player.scored) || 0));
+      }
+    }
+    const winnerName = String(event.winner || '').trim();
+    const winnerId = event.winnerId || null;
+    for (const key of session.playerOrder) {
+      const player = session.players.get(key);
+      if (!player) continue;
+      player.isWinner = Boolean(
+        (winnerId && player.id === winnerId) || (winnerName && player.name === winnerName),
+      );
+    }
+    const ordered = session.playerOrder
+      .map((key) => session.players.get(key))
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a.isWinner) return -1;
+        if (b.isWinner) return 1;
+        return Number(a.score) - Number(b.score);
+      });
+    ordered.forEach((player, index) => {
+      player.position = player.isWinner ? 0 : index;
+    });
+    if (!session.opened) openSession();
+    finishSession({ reason: event.reason === 'abort' ? 'countdown-abort' : 'countdown-end' });
+  }
+
   function handleEvent(event) {
     if (!event || !event.kind) return;
     const nowMs = now();
@@ -557,7 +784,7 @@ function createHuupeLive({
       deviceMode = event.mode === 'launcher' ? null : event.mode;
       // Leaving every game for the launcher ends a free-play session cleanly
       // instead of waiting out the inactivity timer.
-      if (event.mode === 'launcher' && phase === LIVE && !session.familyMode) {
+      if (event.mode === 'launcher' && phase === LIVE && !ownsScoreboard()) {
         finishSession({ reason: 'left-app' });
       }
       return;
@@ -617,6 +844,17 @@ function createHuupeLive({
           // closed the session; backfill the identity onto the archived row.
           last.uniqueScoreId = event.uniqueScoreId || null;
         }
+        break;
+      case 'countdown-start':
+        enterCountdown(event, nowMs);
+        if (!session.opened) openSession();
+        else pushLive();
+        break;
+      case 'countdown-shot':
+        applyCountdownShot(event, nowMs);
+        break;
+      case 'countdown-end':
+        applyCountdownEnd(event, nowMs);
         break;
       default:
         break;

@@ -116,8 +116,9 @@ const TAG_APP = 'ShotTracker';
 const TAG_SENSOR_ERROR = 'ShotTrackerErrorEvent';
 const TAG_ACTIVITY = 'ActivityTaskManager';
 const TAG_UNITY = 'Unity';
+const TAG_COUNTDOWN = 'HuupeCountdown';
 
-const LOGCAT_TAGS = [TAG_APP, TAG_SENSOR_ERROR, TAG_HAL, TAG_ACTIVITY, TAG_UNITY];
+const LOGCAT_TAGS = [TAG_APP, TAG_SENSOR_ERROR, TAG_HAL, TAG_ACTIVITY, TAG_UNITY, TAG_COUNTDOWN];
 
 /**
  * What a made shot is worth in Family Mode, keyed by canonical zone.
@@ -185,8 +186,21 @@ const HUUPE_PACKAGES = {
   'com.game.huupedailyprize': 'dailyprize',
   'com.game.huupeminifitness': 'fitness',
   'com.huupe.huupelive': 'live',
+  'com.huupe.countdown': 'countdown',
   'com.acdetorres.huuplauncher': 'launcher',
 };
+
+/** Countdown app zones → the same canonical names the rest of Huupe uses. */
+const COUNTDOWN_ZONES = {
+  LAYUP: 'layup',
+  SHORT: 'one',
+  MID: 'two',
+  DEEP: 'three',
+  MISS: null,
+};
+
+const COUNTDOWN_DIFFS = new Set(['RACE', 'EXACT', 'DEEP']);
+const COUNTDOWN_STARTS = new Set([21, 51, 101]);
 
 function modeForPackage(pkg) {
   return HUUPE_PACKAGES[pkg] || null;
@@ -444,6 +458,103 @@ function parseEndGameMessage(message) {
   };
 }
 
+function parseJsonObject(text) {
+  const raw = String(text ?? '').trim();
+  const start = raw.indexOf('{');
+  if (start < 0) return null;
+  try {
+    return JSON.parse(raw.slice(start));
+  } catch {
+    return null;
+  }
+}
+
+function countdownZone(value) {
+  const key = String(value || '').trim().toUpperCase();
+  return Object.prototype.hasOwnProperty.call(COUNTDOWN_ZONES, key) ? COUNTDOWN_ZONES[key] : null;
+}
+
+function countdownSeats(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 4).map((row, index) => {
+    const node = row && typeof row === 'object' ? row : {};
+    return {
+      seat: index,
+      id: typeof node.id === 'string' ? node.id : null,
+      name: String(node.name || '').trim() || `P${index + 1}`,
+      bot: node.bot === true,
+      left: Number.isFinite(Number(node.left)) ? Number(node.left) : null,
+      scored: Number.isFinite(Number(node.scored)) ? Number(node.scored) : null,
+      made: Number.isFinite(Number(node.made)) ? Number(node.made) : null,
+      attempts: Number.isFinite(Number(node.att)) ? Number(node.att) : null,
+      threes: Number.isFinite(Number(node.threes)) ? Number(node.threes) : null,
+    };
+  });
+}
+
+/**
+ * Structured lines from the house Countdown APK (`Log.i("HuupeCountdown", json)`).
+ *
+ * Three events only — start / shot / end — so a finished match can be rebuilt
+ * the same way Family Mode is, without dumping the on-device turn history.
+ */
+function parseCountdownMessage(message) {
+  const json = parseJsonObject(message);
+  if (!json || Number(json.v) !== 1) return null;
+  const ev = String(json.ev || '').trim().toLowerCase();
+  const id = typeof json.id === 'string' ? json.id.trim() : '';
+  if (!id) return null;
+
+  if (ev === 'start') {
+    const start = Number(json.start);
+    const diff = String(json.diff || '').trim().toUpperCase();
+    const layup = Number(json.layup);
+    if (!COUNTDOWN_STARTS.has(start) || !COUNTDOWN_DIFFS.has(diff)) return null;
+    return {
+      kind: 'countdown-start',
+      id,
+      startScore: start,
+      difficulty: diff,
+      layupValue: layup === 0 ? 0 : 1,
+      seats: countdownSeats(json.seats),
+    };
+  }
+
+  if (ev === 'shot') {
+    const seat = Number(json.seat);
+    const rawZone = String(json.zone || '').trim().toUpperCase();
+    if (!Number.isInteger(seat) || seat < 0 || seat > 3) return null;
+    if (!Object.prototype.hasOwnProperty.call(COUNTDOWN_ZONES, rawZone)) return null;
+    const made = json.made === true;
+    return {
+      kind: 'countdown-shot',
+      id,
+      seat,
+      rawZone,
+      zone: countdownZone(rawZone),
+      made,
+      points: Number(json.pts) || 0,
+      left: Number(json.left),
+      attempt: Number(json.attempt) || 0,
+      bust: json.bust === true,
+      win: json.win === true,
+    };
+  }
+
+  if (ev === 'end') {
+    return {
+      kind: 'countdown-end',
+      id,
+      winnerId: typeof json.winnerId === 'string' ? json.winnerId : null,
+      winner: typeof json.winner === 'string' ? json.winner.trim() : '',
+      reason: String(json.reason || 'win').trim().toLowerCase() || 'win',
+      seats: countdownSeats(json.seats),
+    };
+  }
+
+  return null;
+}
+
 function parseFocusMessage(message) {
   const displayed = FOCUS_DISPLAYED_RE.exec(message);
   const started = displayed ? null : FOCUS_START_RE.exec(message);
@@ -566,6 +677,16 @@ function createHuupeParser({ unmatchedLimit = 200, dedupeWindow = 512, year = nu
       }
     }
 
+    if (line.tag === TAG_COUNTDOWN) {
+      const countdown = parseCountdownMessage(line.message);
+      if (countdown) {
+        counters.events += 1;
+        return { ...base, ...countdown };
+      }
+      recordUnmatched({ at, tag: line.tag, message: line.message });
+      return null;
+    }
+
     if (line.tag === TAG_ACTIVITY) {
       const focus = parseFocusMessage(line.message);
       if (focus) {
@@ -599,6 +720,7 @@ module.exports = {
   parseFamilyMessage,
   parseEndGameMessage,
   parseFocusMessage,
+  parseCountdownMessage,
   shotStreamKey,
   modeForPackage,
   redactSensitive,
@@ -609,6 +731,8 @@ module.exports = {
   LOGCAT_TAGS,
   HAL_ZONES,
   UNITY_ZONES,
+  COUNTDOWN_ZONES,
+  TAG_COUNTDOWN,
   ZONE_POINTS,
   HAL_ZONE_POINTS,
   HUUPE_PACKAGES,

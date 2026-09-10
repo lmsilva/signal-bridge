@@ -19,8 +19,15 @@ const MODE_LABELS = {
   dailyprize: 'Daily Prize',
   fitness: 'Fitness',
   live: 'Huupe Live',
+  countdown: 'Countdown',
   launcher: 'Home',
   unknown: 'Session',
+};
+
+const DIFFICULTY_LABELS = {
+  RACE: 'Race to Zero',
+  EXACT: 'Exact Zero',
+  DEEP: 'Deep Finish',
 };
 
 /**
@@ -136,9 +143,18 @@ function shotWorthLabel(zone, mode) {
  * Family Mode has a named winner once the game calls it; a solo session has
  * only its own score, which is the number the shooter is chasing.
  */
+function difficultyLabel(value) {
+  const key = String(value || '').trim().toUpperCase();
+  return DIFFICULTY_LABELS[key] || '';
+}
+
 function headlineFor(session) {
   if (session.status === 'finished' && session.winner) {
     return { primary: session.winner, secondary: 'WINS' };
+  }
+  if (session.scoreKind === 'remaining' && session.players?.length) {
+    const leader = session.players[0];
+    return { primary: leader?.name || '', secondary: `${formatPoints(leader?.score)} LEFT` };
   }
   if (session.players?.length > 1) {
     const leader = session.players[0];
@@ -179,6 +195,11 @@ function buildSessionPayload(session = {}, {
       durationSec: Number(session.durationSec) || 0,
       durationLabel: formatDuration(session.durationSec),
       headline: headlineFor({ ...session, players, stats }),
+      scoreKind: session.scoreKind || (mode === 'countdown' ? 'remaining' : 'points'),
+      startScore: session.startScore ?? session.combination?.startScore ?? null,
+      difficulty: session.difficulty || session.combination?.difficulty || null,
+      difficultyLabel: difficultyLabel(session.difficulty || session.combination?.difficulty),
+      currentSeat: session.currentSeat ?? null,
       players,
       stats: {
         ...stats,
@@ -223,7 +244,13 @@ function viewFromArchivedSession(row = {}) {
     startedAt: row.startedAt || null,
     endedAt: row.endedAt || null,
     durationSec: Number(row.durationSec) || 0,
-    players: (row.players || []).map((player) => ({ ...player, streak: 0 })),
+    players: (row.players || []).map((player) => ({
+      ...player,
+      score: row.mode === 'countdown' && player.remaining != null
+        ? player.remaining
+        : player.score,
+      streak: 0,
+    })),
     stats: { streak: 0, ...(row.stats || {}) },
     lastShot: null,
     // The archive keeps totals, never the shot log, so a replayed game has a
@@ -232,6 +259,9 @@ function viewFromArchivedSession(row = {}) {
     winner: row.winner || null,
     uniqueScoreId: row.uniqueScoreId || null,
     combination: row.combination || null,
+    scoreKind: row.mode === 'countdown' ? 'remaining' : 'points',
+    startScore: row.combination?.startScore ?? null,
+    difficulty: row.combination?.difficulty || null,
     truncated: Boolean(row.truncated),
     aborted: Boolean(row.aborted),
     sensorErrors: 0,
@@ -336,6 +366,7 @@ module.exports = {
   buildDashboardPayload,
   viewFromArchivedSession,
   headlineFor,
+  difficultyLabel,
   modeLabel,
   zoneLabel,
   zoneRows,
@@ -344,6 +375,7 @@ module.exports = {
   formatDuration,
   relativeDay,
   MODE_LABELS,
+  DIFFICULTY_LABELS,
   ZONE_LABELS,
   ZONE_NOTES,
   ZONE_SHORT,
