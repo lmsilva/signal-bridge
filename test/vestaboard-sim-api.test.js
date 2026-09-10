@@ -998,6 +998,9 @@ test('the simulator page walks the drum slowly and can click', () => {
   assert.match(js, /holds\.hidden = !vbHoldsPinned\(\)/);
   assert.match(js, /function vbSkipQueue\(/);
   assert.match(js, /\/api\/vestaboard-sim\/queue\/skip/);
+  assert.match(js, /vbRenderState\(state, \{ paint: false \}\)/);
+  assert.match(js, /vbApplyLayout\(data\.state\.current, true, data\.state\.lastStrategy\)/);
+  assert.match(js, /vbUnlockAudio\(\)/);
   assert.match(js, /closest\('\.vb-queue-handle'\)/);
   assert.match(js, /function vbReleaseHolds\(/);
   assert.match(js, /\/api\/vestaboards\/release-holds/);
@@ -1040,6 +1043,9 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(js, /holds\.hidden = !holdsPinned\(\)/);
   assert.match(js, /\/api\/vestaboard-sim\/queue\/skip/);
   assert.match(js, /renderState\(data\.state, \{ paint: false \}\)/);
+  assert.match(js, /on\('sim\.state', \(state\) => renderState\(state, \{ paint: false \}\)/);
+  assert.match(js, /applyLayout\(data\.state\.current, true, data\.state\.lastStrategy\)/);
+  assert.match(js, /function unlockFlipAudio/);
   assert.match(js, /waiting on its stagger delay/);
   assert.match(userHtml, /id="vb-flip-clock"/);
   assert.match(userHtml, /id="vb-flip-remain"/);
@@ -1047,6 +1053,7 @@ test('the shared simulator UI flips tiles and can play the house clip', () => {
   assert.match(userHtml, /id="lib-cats"/);
   assert.match(userHtml, /su-display-field/);
   assert.match(userHtml, /su-row-head/);
+  assert.match(userJs, /dataset\.tab === 'board' && !document\.hidden/);
   assert.match(userJs, /PUSH_CATEGORIES/);
   assert.match(userJs, /function removeDashTile/);
   assert.match(userJs, /function startDashDrag/);

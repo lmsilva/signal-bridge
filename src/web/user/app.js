@@ -1234,7 +1234,7 @@
     window.userBoard = window.VestaboardSimUi.createVestaboardSimUi({
       fetchJson: api,
       toast,
-      watching: () => Boolean($('tab-board')?.classList.contains('active')) && !document.hidden,
+      watching: () => document.body.dataset.tab === 'board' && !document.hidden,
     });
     window.userBoard.mount();
     if (document.body.dataset.tab === 'board') window.userBoard.enter?.();

@@ -944,6 +944,28 @@ test('skipToNext on an empty queue does not flip the board', async () => {
   assert.equal(h.transport.posts.length, 1);
 });
 
+test('skipToNext wakes the board during quiet hours instead of dropping the page', async () => {
+  const h = makeQueue({
+    rateWindowSeconds: 15,
+    dwellSeconds: 60,
+    quietHours: { start: '22:00', end: '07:00', enabled: false },
+  });
+  h.queue.submit([frame('WEATHER', 1)]);
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('CHUCK', 2, { source: 'chuck.facts' })]);
+  h.queue.submit([frame('ROAST', 3, { source: 'roast.me' })]);
+  assert.equal(h.queue.pending().length, 2);
+  h.queue.setConfig({ quietHours: { start: '00:00', end: '23:59', enabled: true } });
+  assert.equal(h.queue.state().quietHours, true);
+  const skipped = await h.queue.skipToNext();
+  assert.equal(skipped.skipped, true);
+  assert.equal(skipped.reason, 'posted');
+  assert.equal(h.transport.posts.length, 2);
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  assert.equal(h.transport.posts[1].options.quietHoursExempt, true);
+  assert.equal(h.queue.pending().length, 1);
+});
+
 test('holdSeconds keeps the next snapshot off the board until the hold ends', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.submit([{ ...frame('GUEST', 1), dwellSeconds: 15, holdSeconds: 300 }]);

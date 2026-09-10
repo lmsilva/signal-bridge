@@ -3519,9 +3519,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal316/);
+  assert.match(html, /styles\.css\?v=signal317/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal316/);
+  assert.match(html, /app\.js\?v=signal317/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -5843,7 +5843,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Updating…/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Could not load status/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /AbortController/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal310/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal317/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal310/);
     assert.match(userJs, /SignalSchedulerUi/);
     assert.match(userJs, /getDisplays: \(\) => displays/);
@@ -5974,7 +5974,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal310/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal315/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal317/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal317/);
     assert.match(
       fs.readFileSync(path.join(realWebRoot, 'vestaboard-sim-ui.js'), 'utf8'),
       /Blank flaps \(spaces\) snap now/,

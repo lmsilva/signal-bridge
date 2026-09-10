@@ -21329,7 +21329,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
     vbRateTimer = window.setInterval(tick, 250);
   }
 
-  function vbRenderState(state) {
+  function vbRenderState(state, { paint = true } = {}) {
     if (!state) {
       return;
     }
@@ -21349,7 +21349,9 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
     }
     vbGuestHold = Boolean(state.guestHold);
     vbStartRateCountdown(state.cooldownMs, { game: Boolean(state.gameLock) });
-    if (Array.isArray(state.current)) {
+    // sim.state after Skip/POST races sim.flip and snaps the bezel.
+    // The flip event owns the cascade; state only keeps the pills.
+    if (paint && Array.isArray(state.current)) {
       vbApplyLayout(state.current, false);
     }
   }
@@ -21517,6 +21519,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
   }
 
   async function vbSkipQueue() {
+    vbUnlockAudio();
     try {
       const data = await apiPost('/api/vestaboard-sim/queue/skip', {});
       if (data?.queue) vbApplyQueue(data.queue, data.queueRevision);
@@ -21524,10 +21527,23 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
         vbGuestHold = Boolean(data.state.guestHold);
         vbStartRateCountdown(data.state.cooldownMs, { game: Boolean(data.state.gameLock) });
       }
+      if (data?.skipped && Array.isArray(data.state?.current)) {
+        const next = [];
+        for (const row of data.state.current) {
+          for (const code of row) next.push(Number(code) || 0);
+        }
+        const already = vbCurrent && next.length === vbCurrent.length
+          && next.every((code, index) => (vbCurrent[index] ?? 0) === code);
+        if (!already) {
+          vbApplyLayout(data.state.current, true, data.state.lastStrategy);
+        }
+      }
       if (data?.skipped) {
         toast('Skipped to the next screen', 'good');
       } else if (data?.reason === 'empty') {
         toast('Nothing queued to skip', 'bad');
+      } else if (data?.reason === 'quiet') {
+        toast('Quiet hours — nothing to skip', 'bad');
       } else {
         toast('Nothing to skip yet', 'bad');
       }
@@ -21779,7 +21795,7 @@ $('btn-vb-add')?.addEventListener('click', () => vbOpenForm(null));
       });
     };
 
-    on('sim.state', (state) => vbRenderState(state));
+    on('sim.state', (state) => vbRenderState(state, { paint: false }));
     on('sim.flip', (detail) => vbApplyLayout(detail.layout, true, detail.strategy));
     on('sim.call', (call) => {
       vbCalls.push(call);
