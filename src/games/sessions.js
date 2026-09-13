@@ -74,6 +74,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     ? deps.dropPendingBoard
     : () => 0;
   const setGameLock = typeof deps.setGameLock === 'function' ? deps.setGameLock : () => {};
+  const joinHoldSeconds = typeof deps.joinHoldSeconds === 'function'
+    ? deps.joinHoldSeconds
+    : () => 0;
   const getShortlink = typeof deps.getShortlink === 'function' ? deps.getShortlink : () => null;
   const gameOf = typeof deps.gameOf === 'function' ? deps.gameOf : defaultGameOf;
 
@@ -291,7 +294,11 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     // Take (or renew) the board lock before the card is queued, so the gap
     // between two phases never opens the line to everything parked behind us.
     try {
-      setGameLock(source, true);
+      setGameLock(source, true, {
+        joinWait: card === 'invite'
+          || session.phase === 'invited'
+          || (card === 'lobby' && session.players.length === 0),
+      });
     } catch (error) {
       log?.warn?.('Could not lock the board for the game', error?.message || error);
     }
@@ -651,7 +658,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     const settings = settingsOf(session.gameType);
     const shownAt = now();
     session.inviteShownAt = shownAt;
-    session.inviteExpiresAt = shownAt + settings.lobbySeconds * 1000;
+    const join = Number(joinHoldSeconds(sourceOf(session))) || 0;
+    const windowSec = Math.max(settings.lobbySeconds, join);
+    session.inviteExpiresAt = shownAt + windowSec * 1000;
     session.phaseEndsAt = session.inviteExpiresAt;
     emit(session, 'invite-shown');
     return true;

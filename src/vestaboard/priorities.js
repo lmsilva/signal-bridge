@@ -4,8 +4,11 @@
 //   jump       — this card goes to the front of the waiting line
 //   immediate  — also cut in now: drop the current page's dwell and flip as
 //                soon as the Local API rate window allows (alarms by default)
-//   hold       — this card owns the board until the session ends or the
-//                safety timeout fires (Word Scramble, Huupe, Autodarts)
+//   hold       — this card owns the board. For party games the minutes are
+//                the join window; once someone is playing the lock lasts
+//                until the session ends, a higher event cuts in, or the
+//                30-minute safety net fires (Huupe / Autodarts use the
+//                minutes as that safety net).
 //
 // Anything not on the board's list joins the back of the line. An empty
 // saved list means "use the house defaults", so a fresh board still treats
@@ -24,7 +27,18 @@ const {
 
 const MIN_HOLD_MINUTES = 1;
 const MAX_HOLD_MINUTES = 180;
+/** Safety net once a live game / hoop / match is underway. */
 const DEFAULT_HOLD_MINUTES = 30;
+/** Empty invite / lobby: how long to wait for people to join. */
+const DEFAULT_JOIN_HOLD_MINUTES = 2;
+
+/** Party games whose Hold minutes are the join window, not the whole match. */
+const JOIN_HOLD_SOURCES = new Set([
+  'word.scramble',
+  'party.prompts',
+  'wheel.fortune',
+  'hangman.game',
+]);
 
 /** Groups follow the Push page categories so the picker feels familiar. */
 const GROUPS = Object.freeze([
@@ -101,9 +115,9 @@ const SPECIALS = Object.freeze([
     group: 'games',
     canHold: true,
     defaultHold: true,
-    defaultHoldMinutes: 30,
+    defaultHoldMinutes: DEFAULT_JOIN_HOLD_MINUTES,
     recommended: true,
-    hint: 'Holds the board for the whole session. The timeout is a safety net.',
+    hint: 'Waits this long for people to join. Once someone is playing, the board stays until the game ends or a higher event cuts in.',
   },
   {
     source: 'party.prompts',
@@ -111,9 +125,9 @@ const SPECIALS = Object.freeze([
     group: 'games',
     canHold: true,
     defaultHold: true,
-    defaultHoldMinutes: 30,
+    defaultHoldMinutes: DEFAULT_JOIN_HOLD_MINUTES,
     recommended: true,
-    hint: 'Holds the board for the whole session. The timeout is a safety net.',
+    hint: 'Waits this long for people to join. Once someone is playing, the board stays until the game ends or a higher event cuts in.',
   },
   {
     source: 'wheel.fortune',
@@ -121,9 +135,9 @@ const SPECIALS = Object.freeze([
     group: 'games',
     canHold: true,
     defaultHold: true,
-    defaultHoldMinutes: 30,
+    defaultHoldMinutes: DEFAULT_JOIN_HOLD_MINUTES,
     recommended: true,
-    hint: 'Holds the board for the whole session. The timeout is a safety net.',
+    hint: 'Waits this long for people to join. Once someone is playing, the board stays until the game ends or a higher event cuts in.',
   },
   {
     source: 'hangman.game',
@@ -131,9 +145,9 @@ const SPECIALS = Object.freeze([
     group: 'games',
     canHold: true,
     defaultHold: true,
-    defaultHoldMinutes: 30,
+    defaultHoldMinutes: DEFAULT_JOIN_HOLD_MINUTES,
     recommended: true,
-    hint: 'Holds the board for the whole session. The timeout is a safety net.',
+    hint: 'Waits this long for people to join. Once someone is playing, the board stays until the game ends or a higher event cuts in.',
   },
   {
     source: 'huupe.session',
@@ -489,6 +503,18 @@ function minutesToMs(minutes, source) {
   return clampHoldMinutes(minutes, source) * 60 * 1000;
 }
 
+/**
+ * Invite / lobby uses the configured join window. A live round uses at least
+ * the 30-minute safety net so a 2-minute join hold cannot drop mid-match.
+ */
+function holdTtlMs(minutes, source, joinWait = false) {
+  const configured = minutesToMs(minutes, source);
+  if (joinWait || !JOIN_HOLD_SOURCES.has(source)) {
+    return configured;
+  }
+  return Math.max(configured, DEFAULT_HOLD_MINUTES * 60 * 1000);
+}
+
 function rankAt(policy, index) {
   if (!Array.isArray(policy) || index < 0 || index >= policy.length) {
     return 0;
@@ -564,7 +590,9 @@ function applyPolicy(structural = {}, priorities) {
     jump,
     immediate,
     hold,
-    ttlMs: hold ? minutesToMs(rule.holdMinutes, source) : 0,
+    ttlMs: hold
+      ? holdTtlMs(rule.holdMinutes, source, structural.joinWait === true)
+      : 0,
     coalesceKey: structural.coalesceKey ?? null,
   };
 }
@@ -585,6 +613,8 @@ module.exports = {
   MIN_HOLD_MINUTES,
   MAX_HOLD_MINUTES,
   DEFAULT_HOLD_MINUTES,
+  DEFAULT_JOIN_HOLD_MINUTES,
+  JOIN_HOLD_SOURCES,
   COMMAND_SOURCE,
   defaultPriorities,
   normalisePriorities,
@@ -592,6 +622,7 @@ module.exports = {
   catalogForClient,
   applyPolicy,
   minutesToMs,
+  holdTtlMs,
   rankAt,
   labelFor,
   clampHoldMinutes,

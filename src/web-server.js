@@ -3,6 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { AsyncLocalStorage } = require('node:async_hooks');
 const { URL } = require('url');
 const { readAuthStatus } = require('./auth-status');
 const { readTeslaAuthStatus } = require('./tesla-auth-status');
@@ -468,7 +469,15 @@ function createWebServer({
   shortlinksHealthIntervalMs = undefined,
 } = {}) {
   let schedulerAir = null;
-  let requestActor = null;
+  // Per-request, not a process global. The admin page polls /api/status and
+  // the board stream on other connections; those used to finish and null a
+  // shared `requestActor` while a Push was still fanning out, so the queue
+  // said "by System" for a tap that came from the signed-in admin.
+  const requestActorStore = new AsyncLocalStorage();
+
+  function currentActor() {
+    return requestActorStore.getStore()?.actor || null;
+  }
 
   function sendUdpPayload(payload, options = {}) {
     if (typeof sendUdpPayloadIn !== 'function') {
@@ -478,7 +487,7 @@ function createWebServer({
     // never re-route them through Event routing rules.
     return sendUdpPayloadIn(payload, {
       ...options,
-      actor: options.actor || requestActor || undefined,
+      actor: options.actor || currentActor() || undefined,
       ...(schedulerAir || {}),
       bypassEventRouting: true,
     });
@@ -487,7 +496,7 @@ function createWebServer({
   function deliverTargetedPayload(payload, targetId, extraSendOptions = {}) {
     const sendOptions = {
       ...extraSendOptions,
-      actor: extraSendOptions.actor || requestActor || undefined,
+      actor: extraSendOptions.actor || currentActor() || undefined,
       ...(schedulerAir || {}),
       bypassEventRouting: true,
     };
@@ -553,7 +562,7 @@ function createWebServer({
         explicit: options.explicit,
         breakHold: options.breakHold,
         replaceSource: options.replaceSource,
-        actor: options.actor || requestActor,
+        actor: options.actor || currentActor(),
       });
     },
     getTimeZone: () => localeSettings.get()?.timeZone || houseTimeZone(config),
@@ -576,11 +585,12 @@ function createWebServer({
       return vestaboardHub.pushEvent(payload, {
         ...options,
         // Same as Guest Book: stamp whoever pressed Push, not "System".
-        actor: options.actor || requestActor,
+        actor: options.actor || currentActor(),
       });
     },
     dropPendingBoard: (predicate) => vestaboardHub?.dropPending?.(predicate) || 0,
-    setGameLock: (source, active) => vestaboardHub?.setGameLock?.(source, active),
+    setGameLock: (source, active, options) => vestaboardHub?.setGameLock?.(source, active, options),
+    joinHoldSeconds: (source) => vestaboardHub?.joinHoldSeconds?.(source) || 0,
   });
   // The lobby clock starts when the invite actually flips, not when it was
   // queued. Dropping a game page (Clear queue, the row X, another game
@@ -5689,7 +5699,7 @@ function createWebServer({
       targetId: deliveryId,
       quietHoursExempt: Boolean(quietHoursExempt),
       ...(Number.isFinite(hold) && hold > 0 ? { holdSeconds: hold } : {}),
-      ...(manual && requestActor ? { actor: requestActor } : {}),
+      ...(manual && currentActor() ? { actor: currentActor() } : {}),
     };
     try {
       switch (commandId) {
@@ -6084,8 +6094,9 @@ function createWebServer({
   }
 
   function bindActor(session) {
-    if (session?.ok && session.actor) {
-      requestActor = session.actor;
+    const store = requestActorStore.getStore();
+    if (store && session?.ok && session.actor) {
+      store.actor = session.actor;
     }
   }
 
@@ -6773,7 +6784,7 @@ function createWebServer({
       triggeredBy: body?.triggeredBy || 'web-api',
       actor: body?.triggeredBy === 'scheduler'
         ? null
-        : (requestActor || body?.actor || null),
+        : (currentActor() || body?.actor || null),
     };
     // Fire and forget: Tesla fetches can take up to 30s (vehicle wake); the
     // voice pipeline already sends a cached preview / processing ack first.
@@ -6810,11 +6821,11 @@ function createWebServer({
       spokenResponse: null,
       targetId,
       triggeredBy: body?.triggeredBy || trigger,
-      // Capture now — requestActor is cleared when the HTTP response finishes,
-      // but Alexa enrich may post the board card seconds later.
+      // Capture now — Alexa enrich may post the board card after this
+      // request's store is gone, so the actor has to travel on the event.
       actor: body?.triggeredBy === 'scheduler'
         ? null
-        : (requestActor || body?.actor || null),
+        : (currentActor() || body?.actor || null),
     };
     const pending = recordVoiceEvent(event);
     if (body?.triggeredBy === 'scheduler') {
@@ -6837,7 +6848,7 @@ function createWebServer({
     const device = deviceFrom(body);
     const actor = body?.triggeredBy === 'scheduler'
       ? null
-      : (requestActor || body?.actor || null);
+      : (currentActor() || body?.actor || null);
     requestTimerPoll(device, { actor });
     log.info('Web push accepted (timers)', { device });
     sendJson(res, 202, { ok: true, kind: 'timers' });
@@ -6851,7 +6862,7 @@ function createWebServer({
     const device = deviceFrom(body);
     const actor = body?.triggeredBy === 'scheduler'
       ? null
-      : (requestActor || body?.actor || null);
+      : (currentActor() || body?.actor || null);
     requestAlarmPoll(device, { actor });
     log.info('Web push accepted (alarms)', { device });
     sendJson(res, 202, { ok: true, kind: 'alarms' });
@@ -8396,22 +8407,28 @@ function createWebServer({
     }
   }
 
-  function huupeSend(body) {
+  function huupeSend(body, commandId) {
     const targetId = targetIdFrom(body);
     return {
       targetId,
       send: (payload, sendOptions = {}) => {
+        const options = {
+          source: 'push',
+          explicit: true,
+          commandId: commandId || payload?.type || null,
+          ...sendOptions,
+        };
         if (typeof deliverTargetedPayload === 'function') {
-          return deliverTargetedPayload(payload, targetId, sendOptions);
+          return deliverTargetedPayload(payload, targetId, options);
         }
-        return sendUdpPayload(payload, sendOptions);
+        return sendUdpPayload(payload, options);
       },
     };
   }
 
   function handleHuupeNowPush(body, res) {
     try {
-      const { targetId, send } = huupeSend(body);
+      const { targetId, send } = huupeSend(body, 'huupe.now');
       const scheduled = body?.triggeredBy === 'scheduler';
       // A scheduled "last game" must never shove a live session off the wall.
       const mode = scheduled
@@ -8432,7 +8449,7 @@ function createWebServer({
 
   function handleHuupeLastGamePush(body, res) {
     try {
-      const { targetId, send } = huupeSend(body);
+      const { targetId, send } = huupeSend(body, 'huupe.last-game');
       const result = huupeInstance.pushLastGame({ send });
       if (!result.ok) {
         sendJson(res, 400, result);
@@ -8446,7 +8463,7 @@ function createWebServer({
 
   function handleHuupeDashboardPush(body, res) {
     try {
-      const { targetId, send } = huupeSend(body);
+      const { targetId, send } = huupeSend(body, 'huupe.dashboard');
       const result = huupeInstance.pushDashboard({ send });
       if (!result.ok) {
         sendJson(res, 400, result);
@@ -9426,6 +9443,9 @@ function createWebServer({
   }
 
   async function handleRequest(req, res) {
+    if (!requestActorStore.getStore()) {
+      return requestActorStore.run({ actor: null }, () => handleRequest(req, res));
+    }
     const reqUrl = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     const { pathname } = reqUrl;
 
@@ -11050,8 +11070,6 @@ function createWebServer({
       } else {
         res.end();
       }
-    } finally {
-      requestActor = null;
     }
   }
 

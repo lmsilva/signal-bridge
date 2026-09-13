@@ -57,7 +57,7 @@ function fakeGame() {
   };
 }
 
-function makeApi(overrides = {}) {
+function makeApi(overrides = {}, deps = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'games-'));
   let nowMs = Date.parse('2026-08-30T18:00:00Z');
   const pushes = [];
@@ -98,6 +98,7 @@ function makeApi(overrides = {}) {
       return dropped;
     },
     setGameLock: (source, active) => locks.push({ source, active }),
+    joinHoldSeconds: deps.joinHoldSeconds,
   });
   return {
     api,
@@ -329,6 +330,17 @@ test('an empty invite ends after the lobby seconds and hands the board back', ()
     false,
     'nobody sat down, so there are no scores to leave up',
   );
+});
+
+test('an empty invite uses the priority join window when it is longer than lobby seconds', () => {
+  const { api, archive, advance } = makeApi({}, { joinHoldSeconds: () => 120 });
+  const invited = api.create();
+  api.noteBoardShown({ sessionId: invited.sessionId, card: 'invite' });
+  advance(11);
+  assert.ok(api.getByCode(invited.code), 'still waiting for people to join');
+  advance(110);
+  assert.equal(api.getByCode(invited.code), null);
+  assert.equal(archive.listAll()[0].reason, 'invite-expired');
 });
 
 test('a queued invite keeps the session alive past the lobby window until it flips', () => {

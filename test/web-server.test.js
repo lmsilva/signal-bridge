@@ -151,6 +151,7 @@ async function startTestServer(options = {}) {
       || ((device, opts = {}) => alarmPolls.push({ device, actor: opts.actor || null })),
     guestSnapsAuth: options.guestSnapsAuth || null,
     vestaboardHub: options.vestaboardHub || null,
+    huupe: options.huupe || null,
     gameSessions: options.gameSessions || null,
     trivia: options.trivia || null,
     youtubeNowPlaying: options.youtubeNowPlaying || null,
@@ -2695,6 +2696,50 @@ test('a Hangman push stamps the signed-in admin as the board actor', async () =>
   }
 });
 
+test('a Huupe Live push stamps the signed-in admin, even while status polls finish', async () => {
+  const delivered = [];
+  const { webServer, base, cookie } = await startTestServer({
+    huupe: {
+      pushNow({ send }) {
+        send({
+          type: 'huupe.session',
+          session: {
+            status: 'live',
+            mode: 'countdown',
+            stats: { attempts: 0, made: 0 },
+            players: [{ name: 'Luis', score: 21, remaining: 21 }],
+          },
+        }, { source: 'push' });
+        return { ok: true, pushed: 'huupe.session' };
+      },
+      statusSnapshot: () => ({ hasLiveSession: true }),
+    },
+    deliverTargetedPayload: (payload, targetId, options) => new Promise((resolve) => {
+      setTimeout(() => {
+        delivered.push({ payload, targetId, options });
+        resolve({ ok: true, vestaboard: { boards: [{ accepted: 1 }] } });
+      }, 40);
+    }),
+  });
+  try {
+    const pending = postJson(base, '/api/push/huupe-now', {}, cookie);
+    await Promise.all([
+      getJson(base, '/api/status', cookie),
+      getJson(base, '/api/displays', cookie),
+      getJson(base, '/api/commands', cookie),
+    ]);
+    const pushed = await pending;
+    assert.equal(pushed.status, 200);
+    assert.equal(delivered.length, 1);
+    assert.equal(delivered[0].options.actor?.kind, 'user');
+    assert.match(String(delivered[0].options.actor?.name || ''), /admin/i);
+    assert.notEqual(delivered[0].options.actor?.name, 'System');
+    assert.equal(delivered[0].options.commandId, 'huupe.now');
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('guest snaps settings round-trip preferred alias and share the TinyURL token', async () => {
   const prev = process.env.TINYURL_API_TOKEN;
   delete process.env.TINYURL_API_TOKEN;
@@ -3519,15 +3564,17 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal317/);
+  assert.match(html, /styles\.css\?v=signal318/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal317/);
+  assert.match(html, /app\.js\?v=signal318/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
   assert.match(html, />Global Settings</);
   assert.match(html, /id="btn-vb-house-dwell-save">Save</);
   assert.match(html, /Events with a priority of "Now" will flip as soon as the flaps can move/);
+  assert.match(html, /Hold<\/strong> waits this many minutes for people to join a game/);
+  assert.match(html, /games wait two minutes for people to join, then hold while someone is playing/);
   assert.doesNotMatch(html, /Split-flap boards reached over the Local API/);
   assert.doesNotMatch(html, />Save dwell</);
   assert.match(html, /id="vb-house-dwell"[^>]*max="999"/);

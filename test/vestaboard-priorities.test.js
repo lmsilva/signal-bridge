@@ -34,6 +34,12 @@ test('house defaults jump household interrupts and hold only live games', () => 
     defaults.filter((rule) => rule.hold).map((rule) => rule.source),
     ['word.scramble', 'party.prompts', 'wheel.fortune', 'hangman.game', 'huupe.session', 'autodarts.match'],
   );
+  for (const source of ['word.scramble', 'party.prompts', 'wheel.fortune', 'hangman.game']) {
+    const rule = defaults.find((row) => row.source === source);
+    assert.equal(rule.holdMinutes, 2, `${source} join window`);
+  }
+  assert.equal(defaults.find((row) => row.source === 'huupe.session').holdMinutes, 30);
+  assert.equal(defaults.find((row) => row.source === 'autodarts.match').holdMinutes, 30);
 });
 
 test('null priorities become the house defaults; an empty list means nothing jumps', () => {
@@ -119,6 +125,45 @@ test('a listed hold is a game with a safety timeout', () => {
   assert.equal(hold.ttlMs, 30 * 60 * 1000);
 });
 
+test('a party-game invite uses the join window; a live round uses the safety net', () => {
+  const invite = classify(
+    { type: 'word.scramble', card: 'invite', phase: 'invited' },
+    'word.scramble',
+  );
+  assert.equal(invite.hold, true);
+  assert.equal(invite.ttlMs, 2 * 60 * 1000);
+
+  const emptyLobby = classify(
+    { type: 'word.scramble', card: 'lobby', phase: 'lobby', playerCount: 0 },
+    'word.scramble',
+  );
+  assert.equal(emptyLobby.ttlMs, 2 * 60 * 1000);
+
+  const seatedLobby = classify(
+    { type: 'word.scramble', card: 'lobby', phase: 'lobby', playerCount: 1 },
+    'word.scramble',
+  );
+  assert.equal(seatedLobby.ttlMs, 30 * 60 * 1000);
+
+  const round = classify(
+    { type: 'word.scramble', card: 'round', phase: 'round', playerCount: 2 },
+    'word.scramble',
+  );
+  assert.equal(round.ttlMs, 30 * 60 * 1000);
+
+  const custom = classify(
+    { type: 'word.scramble', card: 'invite' },
+    'word.scramble',
+    null,
+    {
+      priorities: [
+        { source: 'word.scramble', jump: true, hold: true, holdMinutes: 4 },
+      ],
+    },
+  );
+  assert.equal(custom.ttlMs, 4 * 60 * 1000);
+});
+
 test('YouTube can hold when the board asks it to', () => {
   const hold = classify(
     { type: 'youtube.now-playing', youtube: { mode: 'playing' } },
@@ -180,6 +225,10 @@ test('the add-event catalog includes board pushes like Roast Me and Dad Jokes', 
   }
   assert.ok(catalog.events.length >= 40, `expected a full catalog, got ${catalog.events.length}`);
   assert.ok(catalog.groups.some((group) => group.id === 'language'));
+  for (const source of ['word.scramble', 'party.prompts', 'wheel.fortune', 'hangman.game']) {
+    const item = catalog.events.find((row) => row.source === source);
+    assert.equal(item.defaultHoldMinutes, 2, `${source} catalog join window`);
+  }
 });
 
 test('the add-event catalog hides phase cards and command aliases', () => {

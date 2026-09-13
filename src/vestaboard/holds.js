@@ -5,8 +5,9 @@
 //   jump       — this card goes to the front of the waiting line
 //   immediate  — also replace what is showing as soon as flaps can move
 //                (alarms / doorbell / announce by default)
-//   hold       — this card owns the board until the session ends or the
-//                safety timeout fires (Word Scramble, Huupe, Autodarts)
+//   hold       — this card owns the board. Party-game minutes are the join
+//                window; a live round stays until the session ends or a
+//                higher event cuts in (safety timeout still applies).
 //
 // Anything not on the board's priority list joins the back of the line.
 // Detected now-playing (YouTube / Plex / Steam / PSN) is a snapshot unless
@@ -47,6 +48,15 @@ const CLOSE_TO_SOURCE = Object.freeze({
 
 function baseType(value) {
   return String(value || '').split(' ')[0];
+}
+
+/** Empty invite / empty lobby: still filling the room. A seated lobby is live. */
+function isJoinWaitCard(payload = {}) {
+  const card = String(payload.card || payload.phase || '');
+  if (card === 'invite' || card === 'invited') return true;
+  const seated = Number(payload.playerCount) > 0
+    || (Array.isArray(payload.players) && payload.players.length > 0);
+  return card === 'lobby' && !seated;
 }
 
 function isPlayingMode(mode) {
@@ -110,6 +120,7 @@ function classifyStructural(payload = {}, type, frameSource) {
       source: 'word.scramble',
       sessionLive: true,
       close: false,
+      joinWait: isJoinWaitCard(payload),
       // Phases line up (lobby, then the grid). Do not collapse them.
       coalesceKey: null,
     };
@@ -121,6 +132,7 @@ function classifyStructural(payload = {}, type, frameSource) {
       source: 'party.prompts',
       sessionLive: true,
       close: false,
+      joinWait: isJoinWaitCard(payload),
       // Prompt, then voting, then the winner — every card is a beat of the
       // round and collapsing them would skip the reveal.
       coalesceKey: null,
@@ -133,6 +145,7 @@ function classifyStructural(payload = {}, type, frameSource) {
       source: 'wheel.fortune',
       sessionLive: true,
       close: false,
+      joinWait: isJoinWaitCard(payload),
       // Spin, letter, solve — each board refresh is a beat, not a score tick.
       coalesceKey: null,
     };
@@ -144,6 +157,7 @@ function classifyStructural(payload = {}, type, frameSource) {
       source: 'hangman.game',
       sessionLive: true,
       close: false,
+      joinWait: isJoinWaitCard(payload),
       // A letter, a life, a turn — collapsing them would skip the gallows.
       coalesceKey: null,
     };
@@ -270,4 +284,5 @@ module.exports = {
   classifyStructural,
   lockTtlMs,
   isHoldLane,
+  isJoinWaitCard,
 };
