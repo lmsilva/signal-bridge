@@ -325,16 +325,17 @@ function createQueue({
 
   const ownedByGame = ownedByLock;
 
-  function policyFor(source) {
+  function policyFor(source, { joinWait = false } = {}) {
     const policy = normalisePriorities(config.priorities == null ? null : config.priorities);
     const index = policy.findIndex((rule) => rule.source === source);
     if (index < 0) {
       return { rank: LANES.game, ttlMs: GAME_LOCK_TTL_MS };
     }
     const rule = policy[index];
+    const configured = rule.hold ? minutesToMs(rule.holdMinutes, source) : GAME_LOCK_TTL_MS;
     return {
       rank: rankAt(policy, index),
-      ttlMs: rule.hold ? minutesToMs(rule.holdMinutes, source) : GAME_LOCK_TTL_MS,
+      ttlMs: joinWait ? configured : Math.max(configured, GAME_LOCK_TTL_MS),
     };
   }
 
@@ -344,10 +345,10 @@ function createQueue({
     return LANES[lock.lane] || 0;
   }
 
-  function acquireLaneLock(source, lane = 'game', { ttlMs, rank } = {}) {
+  function acquireLaneLock(source, lane = 'game', { ttlMs, rank, joinWait = false } = {}) {
     const owner = String(source || '');
     if (!owner || !isHoldLane(lane)) return false;
-    const policy = policyFor(owner);
+    const policy = policyFor(owner, { joinWait });
     const ttl = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : policy.ttlMs;
     const storedRank = Number.isFinite(rank) ? rank : policy.rank;
     const previous = state.laneLock && state.laneLock.source !== owner
@@ -1107,8 +1108,8 @@ function createQueue({
      * how the session pushes the safety deadline out.
      */
     acquireLaneLock,
-    acquireGameLock(source, { ttlMs, lane = 'game' } = {}) {
-      return acquireLaneLock(source, lane, { ttlMs });
+    acquireGameLock(source, { ttlMs, lane = 'game', joinWait = false } = {}) {
+      return acquireLaneLock(source, lane, { ttlMs, joinWait });
     },
     /** The session ended — finished, stopped, or abandoned. */
     releaseLaneLock,

@@ -20170,7 +20170,7 @@
       jump: rule.jump !== false,
       immediate: rule.immediate !== false,
       hold: Boolean(rule.hold),
-      holdMinutes: Number(rule.holdMinutes) || vbCatalogEvent(rule.source)?.defaultHoldMinutes || 30,
+      holdMinutes: Number(rule.holdMinutes) || vbCatalogEvent(rule.source)?.defaultHoldMinutes || 2,
     }));
   }
 
@@ -20259,7 +20259,7 @@
     if (rule.hold && item?.holdCaution) {
       name.title = 'Holding this pins the board. Alarms usually cut in now, then the queue continues.';
     } else if (rule.hold) {
-      name.title = `Holds the board · gives up after ${rule.holdMinutes} min`;
+      name.title = `Waits ${rule.holdMinutes} min for people to join · stays up while someone is playing`;
     } else if (rule.immediate !== false) {
       name.title = 'Goes to the front and replaces what is showing as soon as flaps can move';
     } else {
@@ -20312,14 +20312,14 @@
       minInput.min = String(vbPriorityCatalog?.minHoldMinutes || 1);
       minInput.max = String(vbPriorityCatalog?.maxHoldMinutes || 180);
       minInput.value = String(rule.holdMinutes);
-      minInput.title = 'Max hold time';
+      minInput.title = 'How long to wait for people to join';
       minInput.addEventListener('change', () => {
         const raw = Number(minInput.value);
         const lo = vbPriorityCatalog?.minHoldMinutes || 1;
         const hi = vbPriorityCatalog?.maxHoldMinutes || 180;
         rule.holdMinutes = Number.isFinite(raw)
           ? Math.min(hi, Math.max(lo, Math.round(raw)))
-          : (item?.defaultHoldMinutes || 30);
+          : (item?.defaultHoldMinutes || 2);
         minInput.value = String(rule.holdMinutes);
         vbRenderPriorityList();
       });
@@ -20429,7 +20429,7 @@
             jump: true,
             immediate: true,
             hold: Boolean(item.defaultHold),
-            holdMinutes: item.defaultHoldMinutes || 30,
+            holdMinutes: item.defaultHoldMinutes || 2,
           });
           const picker = $('vb-priority-picker');
           if (picker) picker.hidden = true;

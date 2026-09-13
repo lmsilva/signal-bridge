@@ -12,7 +12,7 @@ const { resolveGuestPhotoboothSettings } = require('../guest-photobooth');
 const { createVestaboardSettings, SIMULATOR_ID, DEFAULTS } = require('./settings');
 const { createTransport } = require('./transport');
 const { createQueue, inQuietHours, sameLayout } = require('./queue');
-const { catalogForClient } = require('./priorities');
+const { catalogForClient, normalisePriorities } = require('./priorities');
 const { identityFrame } = require('./formatters/signal');
 const { routeEvent } = require('./router');
 const { houseTimeZone } = require('./clock');
@@ -489,15 +489,31 @@ function createVestaboardHub({
    * this. Huupe / Autodarts take the same lock from the queue when the
    * board's Priorities list marks them as holds.
    */
-  function setGameLock(source, active) {
+  function setGameLock(source, active, options = {}) {
     if (!houseQueue) {
       return;
     }
     if (active) {
-      houseQueue.acquireGameLock?.(source);
+      houseQueue.acquireGameLock?.(source, {
+        joinWait: options.joinWait === true,
+        ttlMs: options.ttlMs,
+      });
     } else {
       houseQueue.releaseGameLock?.(source);
     }
+  }
+
+  /**
+   * How long an empty invite should stay on the board, in seconds.
+   * Party-game Hold minutes are this join window.
+   */
+  function joinHoldSeconds(source) {
+    const list = normalisePriorities(settings.house().priorities);
+    const rule = list.find((row) => row.source === source);
+    if (!rule?.hold) return 2 * 60;
+    const minutes = Number(rule.holdMinutes);
+    if (!Number.isFinite(minutes) || minutes <= 0) return 2 * 60;
+    return Math.round(minutes) * 60;
   }
 
   /**
@@ -579,6 +595,7 @@ function createVestaboardHub({
     submit,
     dropPending,
     setGameLock,
+    joinHoldSeconds,
     releaseHolds,
     testFlip,
     boards: () => [...boards.values()].map((entry) => ({ ...entry.board })),
