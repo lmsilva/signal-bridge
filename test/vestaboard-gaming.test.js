@@ -530,6 +530,42 @@ test('two stray shots are not worth flipping the board for', () => {
   );
 });
 
+test('a named Countdown tip-off reaches the board before anyone has shot', () => {
+  // The software display opens on `start`. The old `attempts < 2` gate
+  // returned no frames, so Vestaboard stayed on whatever was already up.
+  const frames = gaming.huupeSessionFrames(huupeSession({
+    mode: 'countdown',
+    modeLabel: 'Countdown',
+    scoreKind: 'remaining',
+    startScore: 21,
+    stats: { made: 0, attempts: 0, fgPct: 0, points: 0, streak: 0 },
+    lastShot: null,
+    players: [
+      { name: 'TRASHPANDA', score: 21, remaining: 21 },
+      { name: 'TOMMY', score: 21, remaining: 21 },
+    ],
+  }));
+
+  assertLayout(frames[0].rows, [
+    'oo HUUPE  COUNTDOWN oo',
+    ' TRASHPANDA   21 LEFT',
+    ' TOMMY        21 LEFT',
+    ' PLAYING TO 21',
+    '',
+    'oo   SHOOTING NOW   oo',
+  ], 'huupe countdown tip-off');
+});
+
+test('the first named Family Mode shot is already a game', () => {
+  const frames = gaming.huupeSessionFrames(huupeSession({
+    stats: { made: 1, attempts: 1, fgPct: 100, points: 3, streak: 1 },
+    players: [{ name: 'Luis', score: 3, made: 1, attempts: 1 }],
+    lastShot: { player: 'Luis', zone: 'three', made: true, points: 3, worthLabel: '3PT' },
+  }));
+  assert.equal(frames.length, 1);
+  assert.match(formatLayout(frames[0].rows), /LUIS/);
+});
+
 test('the huupe dashboard fits a four-digit shot count', () => {
   // "SESSIONS" plus 3371 ran off the end of the board and printed "SHO".
   const frames = gaming.huupeDashboardFrames({
