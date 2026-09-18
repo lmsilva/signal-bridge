@@ -484,6 +484,19 @@ function huupeModeText(session = {}) {
   return truncate(firstWord, HUUPE_MODE_WIDTH);
 }
 
+/**
+ * Remaining is the live Countdown number; "21" on its own reads as a score.
+ * Shrink the name so `101 LEFT` still fits the twenty-column body.
+ */
+function huupePlayerRow(player, session = {}) {
+  const remaining = session.scoreKind === 'remaining';
+  const value = remaining ? (player.remaining ?? player.score) : player.score;
+  const amount = scoreText(value);
+  const right = remaining && amount ? `${amount} LEFT` : amount;
+  const nameWidth = BODY_WIDTH - (right ? right.length + 1 : 0);
+  return lr(fitName(player.name, nameWidth), right);
+}
+
 function huupeSessionFrames(payload = {}) {
   const session = payload.session;
   if (!session) {
@@ -492,22 +505,31 @@ function huupeSessionFrames(payload = {}) {
 
   const stats = session.stats || {};
   const attempts = toNumber(stats.attempts) || 0;
-  // A board flip costs 6 seconds of flapping — two stray shots is not a game.
-  if (attempts < 2) {
+  const finished = session.status === 'finished';
+  const players = (session.players || []).filter((player) => player?.name);
+  // A board flip is six seconds of flapping, so two stray HAL ticks from
+  // someone walking past are not a game. A named match already is one —
+  // Countdown opens on `start` with nobody having shot yet, and Family Mode
+  // opens on the first Unity line. Those already reach the software display;
+  // returning [] here is how the board stayed on the weather while the wall
+  // showed the live card.
+  const namedGame = players.length > 0 || session.mode === 'countdown';
+  if (!namedGame && attempts < 2) {
     return [];
   }
 
-  const finished = session.status === 'finished';
-  const players = (session.players || []).filter((player) => player?.name);
   const mode = huupeModeText(session);
 
   if (!finished) {
     // Four body rows either way: a scoreboard keeps one for the last shot, and
     // free play spends the fourth on the make streak when there is one.
+    const target = session.scoreKind === 'remaining' && session.startScore
+      ? `PLAYING TO ${scoreText(session.startScore)}`
+      : '';
     const rows = players.length
       ? [
-        ...players.slice(0, 3).map((player) => lr(fitName(player.name), scoreText(player.score))),
-        lastShotRow(session),
+        ...players.slice(0, 3).map((player) => huupePlayerRow(player, session)),
+        lastShotRow(session) || target,
       ].filter(Boolean)
       : [
         `${scoreText(stats.points)} POINTS`,

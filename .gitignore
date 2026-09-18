@@ -43,6 +43,10 @@ git-diff-capture.txt
 sig-commit-msg.txt
 bridge-client-test-run.txt
 client-test-log.txt
+agent_*.txt
+run_*.txt
+test-run*.txt
+test-results*.txt
 
 # WikDict SQLite caches used by tools/build-learn-language-words.js
 tools/.wikdict/
