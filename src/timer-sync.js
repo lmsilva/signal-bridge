@@ -399,7 +399,7 @@ function createTimerSync({
     }
   }
 
-  function emitSnapshot({ trigger, device, event, actor = null }) {
+  function emitSnapshot({ trigger, device, event, actor = null, targetId = null }) {
     let timers = listActiveTimers();
     if (event?.kind === 'fired' && event.timer) {
       timers = [{
@@ -415,6 +415,7 @@ function createTimerSync({
       trigger,
       event,
       ...(actor ? { actor } : {}),
+      ...(targetId ? { targetId } : {}),
     });
   }
 
@@ -468,6 +469,9 @@ function createTimerSync({
       device: event.timer?.device || device,
       event,
       actor: options.actor || null,
+      // Only the display someone asked on. A timer *firing* is unsolicited and
+      // belongs to the whole house, so it carries no target.
+      targetId: trigger === 'show-timers' ? (options.targetId || null) : null,
     });
   }
 

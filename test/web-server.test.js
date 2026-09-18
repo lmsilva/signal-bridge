@@ -146,9 +146,17 @@ async function startTestServer(options = {}) {
     displayRegistry: options.displayRegistry || null,
     deliverTargetedPayload: options.deliverTargetedPayload || null,
     requestTimerPoll: options.requestTimerPoll
-      || ((device, opts = {}) => timerPolls.push({ device, actor: opts.actor || null })),
+      || ((device, opts = {}) => timerPolls.push({
+        device,
+        actor: opts.actor || null,
+        targetId: opts.targetId || null,
+      })),
     requestAlarmPoll: options.requestAlarmPoll
-      || ((device, opts = {}) => alarmPolls.push({ device, actor: opts.actor || null })),
+      || ((device, opts = {}) => alarmPolls.push({
+        device,
+        actor: opts.actor || null,
+        targetId: opts.targetId || null,
+      })),
     guestSnapsAuth: options.guestSnapsAuth || null,
     vestaboardHub: options.vestaboardHub || null,
     huupe: options.huupe || null,
@@ -1511,6 +1519,77 @@ test('chuck norris push delivers a board-fit fact and settings can add one', asy
     });
     assert.equal(added.status, 200);
     assert.ok(added.body.customCount >= 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('a game invite goes to the chosen board and refuses a software display', async () => {
+  const displays = {
+    sim: { id: 'sim', name: 'Vestaboard Simulator', kind: 'vestaboard' },
+    poster: { id: 'poster', name: 'Movie Poster', kind: 'full', host: '10.0.0.9' },
+  };
+  const created = [];
+  const { webServer, base } = await startTestServer({
+    displayRegistry: { get: (id) => displays[String(id || '')] || null },
+    gameSessions: {
+      create: (options) => {
+        created.push(options);
+        return { id: 'session-1', code: 'WXYZ', gameType: options.gameType };
+      },
+      listActive: () => [],
+      tick: () => {},
+    },
+  });
+  try {
+    // Every phase card of a session follows the invite, so the board choice
+    // has to reach `create` rather than being hardcoded to every board.
+    const one = await postJson(base, '/api/push/word-scramble', { targetId: 'sim' });
+    assert.equal(one.status, 200, one.body?.error);
+    assert.equal(created.at(-1).targetId, 'sim');
+
+    const house = await postJson(base, '/api/push/hangman', { targetId: '*' });
+    assert.equal(house.status, 200, house.body?.error);
+    assert.equal(created.at(-1).targetId, 'vestaboard');
+
+    // A game on a software display would open a session showing a join code
+    // that nothing ever paints. Say so instead.
+    const bad = await postJson(base, '/api/push/wheel-of-fortune', { targetId: 'poster' });
+    assert.equal(bad.status, 409);
+    assert.match(bad.body.error, /needs a Vestaboard/);
+    assert.match(bad.body.error, /Movie Poster/);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('a board-only push aimed at one board keeps that board as the target', async () => {
+  const displays = {
+    sim: { id: 'sim', name: 'Vestaboard Simulator', kind: 'vestaboard' },
+    poster: { id: 'poster', name: 'Movie Poster', kind: 'full', host: '10.0.0.9' },
+  };
+  const delivered = [];
+  const { webServer, base } = await startTestServer({
+    displayRegistry: { get: (id) => displays[String(id || '')] || null },
+    deliverTargetedPayload: (payload, targetId) => {
+      delivered.push({ type: payload?.type, targetId });
+      return { ok: true };
+    },
+  });
+  try {
+    // Picking the simulator must stay the simulator. It used to be coerced to
+    // the whole `vestaboard` class, which flipped every board in the house.
+    await postJson(base, '/api/push/chuck-norris', { targetId: 'sim' });
+    assert.deepEqual(delivered.at(-1), { type: 'chuck.facts', targetId: 'sim' });
+
+    // A named software display is a deliberate choice too — it must not turn
+    // into "every Vestaboard".
+    await postJson(base, '/api/push/chuck-norris', { targetId: 'poster' });
+    assert.deepEqual(delivered.at(-1), { type: 'chuck.facts', targetId: 'poster' });
+
+    // All displays still means every board: these cards have nowhere else.
+    await postJson(base, '/api/push/chuck-norris', { targetId: '*' });
+    assert.deepEqual(delivered.at(-1), { type: 'chuck.facts', targetId: 'vestaboard' });
   } finally {
     webServer.stop();
   }
@@ -4639,6 +4718,28 @@ test('timers quick-push tile requests an immediate timer poll', async () => {
     assert.equal(timerPolls.length, 1);
     assert.equal(timerPolls[0].device, 'iPhone');
     assert.equal(timerPolls[0].actor?.kind, 'user');
+    // No display chosen: the snapshot stays house-wide, exactly as before.
+    assert.equal(timerPolls[0].targetId, null);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('a timers or alarms push carries the display that was chosen', async () => {
+  const { webServer, base, timerPolls, alarmPolls } = await startTestServer();
+  try {
+    // These two tiles poll Amazon and then send, so the picker used to be
+    // dropped on the floor and the snapshot went to every display.
+    await postJson(base, '/api/push/timers', { device: 'iPhone', targetId: 'sim' });
+    assert.equal(timerPolls.at(-1).targetId, 'sim');
+
+    await postJson(base, '/api/push/alarms', { device: 'iPhone', targetId: 'poster' });
+    assert.equal(alarmPolls.at(-1).targetId, 'poster');
+
+    for (const targetId of ['*', 'all', '']) {
+      await postJson(base, '/api/push/timers', { device: 'iPhone', targetId });
+      assert.equal(timerPolls.at(-1).targetId, null, `target ${targetId || '(empty)'}`);
+    }
   } finally {
     webServer.stop();
   }
@@ -5883,6 +5984,16 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /listLoadingHtml/);
     assert.match(userJs, /Looking for live games/);
     assert.match(userApp.text, /id="games-empty"[^>]*\bhidden\b/);
+    // The household Display picker is All displays or one named display. The
+    // whole-class rows ("every Vestaboard", "every software display") are gone.
+    const pushTargetSelect = userApp.text.match(
+      /<select id="push-target"[\s\S]*?<\/select>/,
+    )?.[0] || '';
+    assert.match(pushTargetSelect, /value="\*">All displays</);
+    assert.doesNotMatch(pushTargetSelect, /value="vestaboard"/);
+    assert.doesNotMatch(pushTargetSelect, /value="full"/);
+    assert.doesNotMatch(userJs, /<option value="vestaboard">/);
+    assert.doesNotMatch(userJs, /<option value="full">/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'styles.css'), 'utf8'), /\.list-loading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8'), /\.list-loading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /paintSchedRulesLoading/);
@@ -5890,7 +6001,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Updating…/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /Could not load status/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /AbortController/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal317/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal318/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal310/);
     assert.match(userJs, /SignalSchedulerUi/);
     assert.match(userJs, /getDisplays: \(\) => displays/);
@@ -6022,7 +6133,7 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal310/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal317/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal317/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal318/);
     assert.match(
       fs.readFileSync(path.join(realWebRoot, 'vestaboard-sim-ui.js'), 'utf8'),
       /Blank flaps \(spaces\) snap now/,

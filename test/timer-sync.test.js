@@ -362,6 +362,50 @@ test('voice-hint followup delays keep polling until close to the next background
   }
 });
 
+test('show-timers carries the chosen display, but a firing timer does not', () => {
+  const os = require('os');
+  const path = require('path');
+  const fs = require('fs');
+  const { createTimerSync } = require('../src/timer-sync');
+  const mirrorPath = path.join(os.tmpdir(), `timer-mirror-target-${Date.now()}.json`);
+  const snapshots = [];
+
+  try {
+    const sync = createTimerSync({
+      alexa: {
+        getNotifications(_all, callback) {
+          callback(null, { notifications: [] });
+        },
+      },
+      config: {
+        sessionPath: path.join(os.tmpdir(), 'alexa-session-test.json'),
+        timerMirrorPath: mirrorPath,
+        timerSync: { enabled: true },
+      },
+      log: { info() {}, warn() {}, debug() {} },
+      onSnapshot: (snapshot) => snapshots.push(snapshot),
+    });
+
+    // Someone pressed the tile with one display selected.
+    sync.requestImmediatePoll('show-timers', 'iPhone', { targetId: 'sim' });
+    assert.equal(snapshots.at(-1)?.targetId, 'sim');
+
+    snapshots.length = 0;
+    sync.requestImmediatePoll('show-timers', 'iPhone', {});
+    assert.equal(snapshots.at(-1)?.targetId, undefined, 'no choice stays house-wide');
+
+    // A background poll is nobody's request; a firing timer must reach the
+    // whole house even if a target somehow rode along.
+    snapshots.length = 0;
+    sync.requestImmediatePoll('scheduled', 'iPhone', { targetId: 'sim' });
+    for (const snapshot of snapshots) {
+      assert.equal(snapshot.targetId, undefined);
+    }
+  } finally {
+    fs.rmSync(mirrorPath, { force: true });
+  }
+});
+
 test('requestImmediatePoll schedules a followup poll for every configured delay on cancel', () => {
   const os = require('os');
   const path = require('path');

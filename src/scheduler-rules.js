@@ -156,12 +156,24 @@ function defaultTargetForCommand(command) {
   return 'full';
 }
 
+function isBoardOnlyCommand(command) {
+  const kinds = kindsOf(command);
+  return kinds.length === 1 && kinds[0] === 'vestaboard';
+}
+
 function normaliseTarget(value, { command = null } = {}) {
   const raw = String(value == null ? '' : value).trim();
   if (!raw) {
     return defaultTargetForCommand(command);
   }
   const lower = raw.toLowerCase();
+  const isClass = lower === '*' || lower === 'all' || TARGET_CLASSES.has(lower);
+  // Rules written before boards existed still say `full`, and Air now / ticks
+  // have always sent those to the flaps anyway. Say so, rather than badging a
+  // board-only skill "Software" and sending it to the Vestaboard.
+  if (isClass && isBoardOnlyCommand(command)) {
+    return 'vestaboard';
+  }
   if (lower === '*' || lower === 'all') {
     return 'all';
   }

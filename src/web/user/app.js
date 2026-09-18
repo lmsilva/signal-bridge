@@ -652,11 +652,17 @@
     if (empty) empty.hidden = list.length > 0;
   }
 
+  // All displays or one named display — the whole-class choices ("every
+  // Vestaboard", "every software display") only ever confused the picker.
   function fillTargets() {
     const select = $('push-target');
     if (!select) return;
+    const chosen = select.value;
     const extras = displays.map((row) => `<option value="${row.id}">${row.name || row.id}</option>`).join('');
-    select.innerHTML = `<option value="*">All displays</option><option value="vestaboard">Vestaboard</option><option value="full">Software</option>${extras}`;
+    select.innerHTML = `<option value="*">All displays</option>${extras}`;
+    if (chosen && [...select.options].some((option) => option.value === chosen)) {
+      select.value = chosen;
+    }
   }
 
   function bindKind(id, setter) {

@@ -180,12 +180,31 @@ function createVestaboardHub({
     return { id: entry.board.id, outcome };
   }
 
+  /**
+   * The boards a page is for. No list means the whole house; a list is a
+   * deliberate choice (the Push picker, a scheduler rule) and every other
+   * board must stay on what it is showing.
+   */
+  function boardsFor(boardIds) {
+    const entries = [...boards.values()];
+    if (!Array.isArray(boardIds) || !boardIds.length) {
+      return entries;
+    }
+    const wanted = new Set(boardIds.map((id) => String(id).toLowerCase()));
+    return entries.filter((entry) => wanted.has(String(entry.board.id).toLowerCase()));
+  }
+
   function createFanoutTransport() {
     return {
       async post(rows, opts = {}) {
-        const entries = [...boards.values()];
-        if (!entries.length) {
+        if (!boards.size) {
           return { ok: false, reason: 'offline', retryable: true };
+        }
+        const entries = boardsFor(opts.boardIds);
+        if (!entries.length) {
+          // The board this page named was switched off while it waited.
+          // Retrying forever would park everything behind it.
+          return { ok: false, reason: 'gone', retryable: false };
         }
         const results = await Promise.all(
           entries.map((entry) => postToBoard(entry, rows, opts)),
@@ -219,7 +238,10 @@ function createVestaboardHub({
     catchingUp = true;
     try {
       const at = now();
-      for (const entry of boards.values()) {
+      // A page aimed at one board is not the house page; no other board
+      // should catch up to it.
+      const targets = boardsFor(houseQueue.state()?.currentBoardIds);
+      for (const entry of targets) {
         if (sameLayout(entry.follower.lastAccepted, current)) {
           continue;
         }
@@ -472,6 +494,13 @@ function createVestaboardHub({
   function submit(_boardId, frames, options = {}) {
     if (!houseQueue) {
       return { ok: false, error: 'That board is not enabled' };
+    }
+    // A named board that is switched off is a mistake worth reporting, not a
+    // page to queue for whoever else happens to be running.
+    if (Array.isArray(options.boardIds)
+      && options.boardIds.length
+      && !boardsFor(options.boardIds).length) {
+      return { ok: false, accepted: 0, error: 'That board is not enabled' };
     }
     const outcome = houseQueue.submit(frames, {
       ...options,

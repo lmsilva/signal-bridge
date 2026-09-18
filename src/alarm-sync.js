@@ -269,7 +269,9 @@ function createAlarmSync({
     saveMirror(mirrorPath, mirror);
   }
 
-  function emitSnapshot({ trigger, device, event, highlightAmazonId, actor = null }) {
+  function emitSnapshot({
+    trigger, device, event, highlightAmazonId, actor = null, targetId = null,
+  }) {
     const alarms = listActiveAlarms(mirror.alarms);
     onSnapshot?.({
       alarms,
@@ -279,6 +281,7 @@ function createAlarmSync({
       event,
       highlightAmazonId: highlightAmazonId || pickHighlightAmazonId(alarms, event, trigger),
       ...(actor ? { actor } : {}),
+      ...(targetId ? { targetId } : {}),
     });
   }
 
@@ -334,6 +337,9 @@ function createAlarmSync({
       event: mappedEvent,
       highlightAmazonId: pickHighlightAmazonId(activeAlarms, mappedEvent, trigger),
       actor: options.actor || null,
+      // Only the display someone asked on. An alarm *firing* is unsolicited and
+      // belongs to the whole house, so it carries no target.
+      targetId: trigger === 'show-alarms' ? (options.targetId || null) : null,
     });
   }
 

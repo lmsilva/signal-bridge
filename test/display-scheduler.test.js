@@ -252,11 +252,21 @@ test('Vestaboard-only commands default onto the boards', () => {
     { command: { id: 'world.population', title: 'World Population', kinds: ['vestaboard'] } },
   );
   assert.equal(world.target, 'vestaboard');
-  // An explicit full target is still honoured in storage (Air now coerces delivery).
+  // A stale class target from a pre-board rule file is corrected on load. It
+  // always aired on the flaps; the saved "Software" only mislabelled it.
   assert.equal(normaliseRule(
     { commandId: 'stoic.quotes', target: 'full' },
     { command: { id: 'stoic.quotes', kinds: ['vestaboard'] } },
-  ).target, 'full');
+  ).target, 'vestaboard');
+  assert.equal(normaliseRule(
+    { commandId: 'stoic.quotes', target: 'all' },
+    { command: { id: 'stoic.quotes', kinds: ['vestaboard'] } },
+  ).target, 'vestaboard');
+  // A named display is a deliberate choice and stays put.
+  assert.equal(normaliseRule(
+    { commandId: 'stoic.quotes', target: 'sim' },
+    { command: { id: 'stoic.quotes', kinds: ['vestaboard'] } },
+  ).target, 'sim');
 });
 
 test('a vestaboard-targeted rule airs even while the overlay is busy', async () => {

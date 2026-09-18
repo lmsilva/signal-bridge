@@ -94,6 +94,29 @@ function sameLayout(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+/**
+ * Which boards a page is for. `null` means every board the hub is running,
+ * now and later; a list names them. Anything unusable reads as `null` rather
+ * than an empty list, because "no boards" would silently swallow the page.
+ */
+function normaliseBoardIds(value) {
+  if (!Array.isArray(value)) return null;
+  const ids = [...new Set(
+    value.map((id) => String(id == null ? '' : id).trim()).filter(Boolean),
+  )];
+  return ids.length ? ids : null;
+}
+
+/** Two pages aimed at the same set of boards. */
+function sameBoardTargets(a, b) {
+  const left = normaliseBoardIds(a);
+  const right = normaliseBoardIds(b);
+  if (left === null || right === null) return left === right;
+  if (left.length !== right.length) return false;
+  const seen = new Set(left);
+  return right.every((id) => seen.has(id));
+}
+
 function actorNameFor(kind, name, scheduler) {
   if (name) return name;
   if (kind === 'scheduler' || scheduler) return 'Scheduled';
@@ -133,6 +156,8 @@ function createQueue({
 
   const state = {
     current: null,
+    /** Boards the current page went to; `null` when it went to all of them. */
+    currentBoardIds: null,
     lastSnapshot: null,
     lastPostAt: null,
     lastSchedulerFlipAt: null,
@@ -176,6 +201,16 @@ function createQueue({
   function rateWindowMs() {
     const seconds = Number(config.rateWindowSeconds);
     return (Number.isFinite(seconds) ? seconds : DEFAULT_RATE_WINDOW_SECONDS) * 1000;
+  }
+
+  /**
+   * The board would not flip for this page, so the queue should not post it.
+   * Same layout aimed at a *different* board is not a duplicate — those
+   * flaps have not moved yet.
+   */
+  function alreadyShowing(item) {
+    return sameLayout(item?.frame?.rows, state.current)
+      && sameBoardTargets(item?.boardIds, state.currentBoardIds);
   }
 
   function rotationGapMs() {
@@ -628,6 +663,7 @@ function createQueue({
     const cutIn = Boolean(hold.immediate);
     const priority = (hold.lane === 'alert' && cutIn) ? 'alert' : 'snapshot';
     const coalesceKey = options.coalesceKey || hold.coalesceKey || null;
+    const boardIds = normaliseBoardIds(options.boardIds);
 
     if (cutIn) {
       state.snapshotUntil = null;
@@ -645,7 +681,10 @@ function createQueue({
     // Same-source live updates always replace the pending card. Rotation
     // coalescing still uses the five-minute window (smart-home, etc.).
     if (coalesceKey) {
-      const existing = items.find((item) => item.coalesceKey === coalesceKey);
+      // Only a page for the same boards may be replaced; a card aimed at the
+      // kitchen must not swallow the one still waiting for the simulator.
+      const existing = items.find((item) => item.coalesceKey === coalesceKey
+        && sameBoardTargets(item.boardIds, boardIds));
       const seenAt = coalesceSeen.get(coalesceKey);
       const holdReplace = isHoldLane(hold.lane) || hold.lane === 'alert';
       const inWindow = seenAt === undefined || at - seenAt < COALESCE_WINDOW_MS;
@@ -654,6 +693,7 @@ function createQueue({
         existing.priority = priority;
         existing.lane = hold.lane;
         existing.rank = hold.rank;
+        existing.boardIds = boardIds;
         existing.quietHoursExempt = isExempt(list[0], options.quietHoursExempt);
         existing.actor = resolveActor(options);
         coalesceSeen.set(coalesceKey, at);
@@ -687,6 +727,7 @@ function createQueue({
       notBefore: null,
       sequenceId: list.length > 1 ? sequenceId : null,
       coalesceKey,
+      boardIds,
       quietHoursExempt: isExempt(frame, options.quietHoursExempt),
       scheduler: Boolean(options.scheduler),
       ownerSource: ownerSource ? String(ownerSource) : null,
@@ -858,6 +899,7 @@ function createQueue({
 
   function onPosted(item, at) {
     state.current = item.frame.rows;
+    state.currentBoardIds = item.boardIds || null;
     state.lastPostAt = at;
     state.failures = 0;
     state.retryNotBefore = null;
@@ -978,7 +1020,7 @@ function createQueue({
     const skip = Boolean(opts.skip);
     let index = 0;
     while (index < items.length && itemHeld(items[index], at)) {
-      if (sameLayout(items[index].frame.rows, state.current)) {
+      if (alreadyShowing(items[index])) {
         dropAt(index, 'dedupe drop', items[index]);
         return 'duplicate';
       }
@@ -1013,7 +1055,7 @@ function createQueue({
     }
 
     // The physical board would not move for this, so neither should we.
-    if (sameLayout(item.frame.rows, state.current)) {
+    if (alreadyShowing(item)) {
       dropAt(index, 'dedupe drop', item);
       return 'duplicate';
     }
@@ -1025,6 +1067,7 @@ function createQueue({
       outcome = await transport.post(item.frame.rows, {
         strategy: config.transitionStrategy || null,
         quietHoursExempt: Boolean(item.quietHoursExempt) || skip,
+        boardIds: item.boardIds || null,
       });
     } catch (error) {
       outcome = { ok: false, reason: 'network', retryable: true, message: error?.message };
@@ -1061,6 +1104,14 @@ function createQueue({
       return 'quiet';
     }
 
+    if (outcome.reason === 'gone') {
+      // The board this page was aimed at is no longer enabled. Drop it rather
+      // than hold the line for a display that cannot answer.
+      log?.warn?.(`Vestaboard ${config.id} dropped a page for a board that is gone`);
+      dropAt(index, 'skip (board gone)', item);
+      return 'rejected';
+    }
+
     if (outcome.reason === 'layout') {
       // Retrying an unshowable frame forever would wedge everything behind it.
       log?.warn?.(`Vestaboard ${config.id} refused a layout: ${outcome.message || 'invalid'}`);
@@ -1088,6 +1139,7 @@ function createQueue({
     },
     state: () => ({
       boardId: config.id,
+      currentBoardIds: state.currentBoardIds,
       health: state.health,
       healthReason: state.healthReason,
       queued: items.length,
@@ -1189,7 +1241,7 @@ function createQueue({
       // A leftover invite of what is already showing is not the next
       // screen. Drop it first, or Skip keeps the game lock and parks
       // every scheduler page behind it.
-      while (items.length && sameLayout(items[0].frame.rows, state.current)) {
+      while (items.length && alreadyShowing(items[0])) {
         dropHead('dedupe drop', items[0]);
       }
       if (!items.length) {

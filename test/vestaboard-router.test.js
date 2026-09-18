@@ -112,8 +112,21 @@ test('matchBoards treats all / vestaboard as every board and full as none', () =
   assert.equal(matchBoards(boards, '').length, 2);
   assert.equal(matchBoards(boards, 'vestaboard').length, 2);
   assert.deepEqual(matchBoards(boards, 'full'), []);
-  assert.deepEqual(matchBoards(boards, 'kitchen').map((entry) => entry.board.id), ['sim', 'kitchen']);
-  assert.deepEqual(matchBoards(boards, 'sim').map((entry) => entry.board.id), ['sim', 'kitchen']);
+});
+
+test('matchBoards gives a named board that board alone', () => {
+  const boards = twoBoards();
+  assert.deepEqual(matchBoards(boards, 'kitchen').map((entry) => entry.board.id), ['kitchen']);
+  assert.deepEqual(matchBoards(boards, 'sim').map((entry) => entry.board.id), ['sim']);
+  assert.deepEqual(matchBoards(boards, 'KITCHEN').map((entry) => entry.board.id), ['kitchen']);
+});
+
+test('matchBoards never hands a software display to a board', () => {
+  const boards = twoBoards();
+  // A Windows display id is not a board id, so no flaps move for it. This is
+  // how a "Software" scheduler rule stops reaching the Vestaboards.
+  assert.deepEqual(matchBoards(boards, 'Movie Poster'), []);
+  assert.deepEqual(matchBoards(boards, 'full'), []);
 });
 
 test('a photo push never submits frames and logs one skip line per board', () => {
@@ -160,20 +173,35 @@ test('a weather push posts to every board that allows it', () => {
   assert.equal(submitted[0].options.priority, 'snapshot');
 });
 
-test('a single-board target still submits once for the whole house', () => {
+test('a single-board target submits once, for that board only', () => {
   const submitted = [];
   const results = routeEvent({
     payload: WEATHER,
     boards: twoBoards(),
     targetId: 'kitchen',
-    submit: (boardId, frames) => {
-      submitted.push(boardId);
+    submit: (boardId, frames, options) => {
+      submitted.push({ boardId, options });
       return { ok: true, accepted: frames.length };
     },
   });
   assert.equal(submitted.length, 1);
-  assert.equal(results.length, 2);
+  assert.deepEqual(submitted[0].options.boardIds, ['kitchen']);
+  assert.deepEqual(results.map((row) => row.boardId), ['kitchen']);
   assert.ok(results.every((row) => row.reason === 'posted'));
+});
+
+test('a house target carries no board list, so later boards are included too', () => {
+  const submitted = [];
+  routeEvent({
+    payload: WEATHER,
+    boards: twoBoards(),
+    targetId: 'all',
+    submit: (boardId, frames, options) => {
+      submitted.push(options);
+      return { ok: true, accepted: frames.length };
+    },
+  });
+  assert.equal(submitted[0].boardIds, null);
 });
 
 test('empty content is skipped silently, even when someone asked', () => {
