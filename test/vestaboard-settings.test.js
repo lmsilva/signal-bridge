@@ -499,7 +499,7 @@ test('a house push still flips the simulator when another board is unreachable',
     });
     h.hub.settings.upsert({ id: 'sim', quietHours: null, rateWindowSeconds: 0 });
     h.hub.settings.setHouse({ dwellSeconds: 15 });
-    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'kitchen', explicit: true });
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'all', explicit: true });
     assert.ok(outcome.boards.some((row) => row.accepted > 0));
     await waitForFlip(h);
     assert.ok(hasFace(h.simulator.state().current), 'the simulator still flipped');
@@ -567,7 +567,7 @@ test('every enabled board receives the same posted house page', async () => {
   const h = await makeHub();
   const kitchen = await attachKitchen(h);
   try {
-    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'kitchen', explicit: true });
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'all', explicit: true });
     assert.ok(outcome.boards.some((row) => row.accepted > 0));
     await waitForFlip(h, { kitchenSim: kitchen.kitchenSim });
     const shown = h.simulator.state().current;
@@ -575,6 +575,57 @@ test('every enabled board receives the same posted house page', async () => {
     assert.deepEqual(kitchen.kitchenSim.state().current, shown);
   } finally {
     await kitchen.stop();
+    await h.stop();
+  }
+});
+
+test('a push aimed at one board leaves every other board alone', async () => {
+  const h = await makeHub();
+  const kitchen = await attachKitchen(h);
+  try {
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'kitchen', explicit: true });
+    assert.deepEqual(outcome.boards.map((row) => row.boardId), ['kitchen']);
+    await waitForFlip(h, { kitchenSim: kitchen.kitchenSim });
+    assert.ok(hasFace(kitchen.kitchenSim.state().current), 'the chosen board flipped');
+    assert.ok(
+      !hasFace(h.simulator.state().current),
+      'the simulator was not chosen and must not flip',
+    );
+  } finally {
+    await kitchen.stop();
+    await h.stop();
+  }
+});
+
+test('the same card aimed at a second board is not dropped as a duplicate', async () => {
+  const h = await makeHub();
+  const kitchen = await attachKitchen(h);
+  try {
+    h.hub.pushEvent(weatherPayload(), { targetId: 'kitchen', explicit: true });
+    await waitForFlip(h, { kitchenSim: kitchen.kitchenSim });
+    assert.ok(hasFace(kitchen.kitchenSim.state().current), 'the kitchen flipped');
+
+    // Those flaps moved; the simulator's have not. The identical layout must
+    // still be accepted for it rather than read as "already showing".
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'sim', explicit: true });
+    assert.ok(outcome.boards.some((row) => row.accepted > 0), 'accepted for the simulator');
+    const queued = h.hub.queueFor('sim').pending();
+    assert.equal(queued.length, 1, 'waiting its turn rather than deduped away');
+  } finally {
+    await kitchen.stop();
+    await h.stop();
+  }
+});
+
+test('a push naming a board that is switched off says so instead of flipping the house', async () => {
+  const h = await makeHub();
+  try {
+    h.hub.settings.upsert({ id: 'sim', quietHours: null, rateWindowSeconds: 0 });
+    const outcome = h.hub.pushEvent(weatherPayload(), { targetId: 'kitchen', explicit: true });
+    assert.deepEqual(outcome.boards, []);
+    await waitForFlip(h);
+    assert.ok(!hasFace(h.simulator.state().current), 'nothing reached the running board');
+  } finally {
     await h.stop();
   }
 });

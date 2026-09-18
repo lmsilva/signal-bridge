@@ -1113,6 +1113,19 @@ function createWebServer({
     return String(body.targetId).trim();
   }
 
+  /**
+   * The chosen display, or `null` for "all displays". Callers that only need to
+   * narrow a house-wide send use this so the default path stays untouched.
+   */
+  function chosenDisplayId(body) {
+    const targetId = targetIdFrom(body);
+    const raw = String(targetId).trim().toLowerCase();
+    if (!raw || raw === ALL_TARGET_ID || raw === 'all') {
+      return null;
+    }
+    return targetId;
+  }
+
   /* ------------------------------------------------------------------ Trivia */
 
   function triviaService() {
@@ -2035,6 +2048,15 @@ function createWebServer({
     return typeof plexNowPlaying === 'function' ? plexNowPlaying() : plexNowPlaying;
   }
 
+  /**
+   * Where a board-only skill should go.
+   *
+   * A named board is that board and nothing else. "All displays" (and the
+   * board class) means every board, because these cards have nowhere else to
+   * land. A named **software** display is passed through untouched: it is a
+   * deliberate choice, and coercing it used to flip every Vestaboard in the
+   * house for a push the user aimed somewhere else.
+   */
   function plexTargetId(body) {
     const targetId = targetIdFrom(body);
     const raw = String(targetId || '').trim().toLowerCase();
@@ -2043,7 +2065,7 @@ function createWebServer({
     }
     if (typeof displayRegistry?.get === 'function') {
       const entry = displayRegistry.get(targetId);
-      if (entry && (entry.static || entry.kind === 'vestaboard')) {
+      if (entry) {
         return targetId;
       }
     }
@@ -2654,10 +2676,28 @@ function createWebServer({
     sendJson(res, 200, { ...scrambleSettingsPayload(), shortlink });
   }
 
+  /**
+   * A game invite goes to the display that was chosen and stays there for the
+   * whole session. Games only render on the flaps, so a software display is
+   * refused rather than quietly opening a session nobody can see.
+   */
+  function gameBoardTargetId(body, title) {
+    const targetId = plexTargetId(body);
+    if (targetId === 'vestaboard') {
+      return targetId;
+    }
+    const entry = displayRegistry?.get?.(targetId);
+    if (entry && !(entry.static || entry.kind === 'vestaboard')) {
+      throw new Error(`${title} needs a Vestaboard — "${entry.name || targetId}" is a software display`);
+    }
+    return targetId;
+  }
+
   async function handleWordScramblePush(body, res) {
     try {
       await ensureGamesShortlink('Word Scramble');
-      const session = gameSessions.create({ gameType: 'scramble' });
+      const targetId = gameBoardTargetId(body, 'Word Scramble');
+      const session = gameSessions.create({ gameType: 'scramble', targetId });
       log.info('Word Scramble invite', { code: session.code });
       sendJson(res, 200, { ok: true, type: 'word.scramble', session });
     } catch (error) {
@@ -2712,7 +2752,8 @@ function createWebServer({
   async function handlePartyPromptsPush(body, res) {
     try {
       await ensureGamesShortlink('Party Prompts');
-      const session = gameSessions.create({ gameType: 'prompts' });
+      const targetId = gameBoardTargetId(body, 'Party Prompts');
+      const session = gameSessions.create({ gameType: 'prompts', targetId });
       log.info('Party Prompts invite', { code: session.code });
       sendJson(res, 200, { ok: true, type: 'party.prompts', session });
     } catch (error) {
@@ -2765,7 +2806,8 @@ function createWebServer({
   async function handleWheelOfFortunePush(body, res) {
     try {
       await ensureGamesShortlink('Wheel of Fortune');
-      const session = gameSessions.create({ gameType: 'wheel' });
+      const targetId = gameBoardTargetId(body, 'Wheel of Fortune');
+      const session = gameSessions.create({ gameType: 'wheel', targetId });
       log.info('Wheel of Fortune invite', { code: session.code });
       sendJson(res, 200, { ok: true, type: 'wheel.fortune', session });
     } catch (error) {
@@ -2825,7 +2867,8 @@ function createWebServer({
   async function handleHangmanPush(body, res) {
     try {
       await ensureGamesShortlink('Hangman');
-      const session = gameSessions.create({ gameType: 'hangman' });
+      const targetId = gameBoardTargetId(body, 'Hangman');
+      const session = gameSessions.create({ gameType: 'hangman', targetId });
       log.info('Hangman invite', { code: session.code });
       sendJson(res, 200, { ok: true, type: 'hangman.game', session });
     } catch (error) {
@@ -6849,9 +6892,10 @@ function createWebServer({
     const actor = body?.triggeredBy === 'scheduler'
       ? null
       : (currentActor() || body?.actor || null);
-    requestTimerPoll(device, { actor });
-    log.info('Web push accepted (timers)', { device });
-    sendJson(res, 202, { ok: true, kind: 'timers' });
+    const targetId = chosenDisplayId(body);
+    requestTimerPoll(device, { actor, targetId });
+    log.info('Web push accepted (timers)', { device, targetId });
+    sendJson(res, 202, { ok: true, kind: 'timers', targetId });
   }
 
   function handleAlarmsPush(body, res) {
@@ -6863,9 +6907,10 @@ function createWebServer({
     const actor = body?.triggeredBy === 'scheduler'
       ? null
       : (currentActor() || body?.actor || null);
-    requestAlarmPoll(device, { actor });
-    log.info('Web push accepted (alarms)', { device });
-    sendJson(res, 202, { ok: true, kind: 'alarms' });
+    const targetId = chosenDisplayId(body);
+    requestAlarmPoll(device, { actor, targetId });
+    log.info('Web push accepted (alarms)', { device, targetId });
+    sendJson(res, 202, { ok: true, kind: 'alarms', targetId });
   }
 
   function handleNotificationsPush(body, res) {

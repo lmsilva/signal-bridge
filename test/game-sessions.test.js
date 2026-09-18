@@ -124,6 +124,30 @@ test('pushing a second game ends the first so sessions cannot stack', () => {
   assert.equal(archive.listAll()[0].reason, 'preempted');
 });
 
+test('a game aimed at one board keeps that board for every phase card', () => {
+  const { api, pushes, advance } = makeApi();
+  const session = api.create({ gameType: 'scramble', targetId: 'sim' });
+  api.join({ code: session.code, name: 'Luis' });
+  advance(60);
+  assert.ok(pushes.length >= 2, 'invite plus at least one later card');
+  assert.deepEqual(
+    [...new Set(pushes.map((row) => row.options.targetId))],
+    ['sim'],
+    'the invite and every card after it stay on the chosen board',
+  );
+});
+
+test('a game with no display chosen still goes to every board', () => {
+  const { api, pushes } = makeApi();
+  api.create({ gameType: 'scramble' });
+  assert.equal(pushes[0].options.targetId, 'vestaboard');
+  for (const value of ['*', 'all', 'full', '']) {
+    pushes.length = 0;
+    api.create({ gameType: 'scramble', targetId: value });
+    assert.equal(pushes[0].options.targetId, 'vestaboard', `target ${value || '(empty)'}`);
+  }
+});
+
 test('codes are unique 4-letter pins from the unambiguous alphabet', () => {
   const { api } = makeApi();
   const first = api.create();

@@ -62,6 +62,21 @@ function iso(ms) {
   return new Date(ms).toISOString();
 }
 
+/**
+ * Which board a session's cards go to, for its whole life. A named board is
+ * kept; "all displays" and the board class both mean every board, which is
+ * what a game with no display chosen has always done. Callers decide whether
+ * a named display is a board at all — this module cannot see display kinds.
+ */
+function normaliseBoardTarget(value) {
+  const raw = String(value == null ? '' : value).trim();
+  const lower = raw.toLowerCase();
+  if (!raw || raw === '*' || lower === 'all' || lower === 'full') {
+    return 'vestaboard';
+  }
+  return raw;
+}
+
 function createGameSessions(config = {}, log = console, deps = {}) {
   const now = typeof deps.now === 'function' ? deps.now : () => Date.now();
   const random = typeof deps.random === 'function' ? deps.random : Math.random;
@@ -228,7 +243,9 @@ function createGameSessions(config = {}, log = console, deps = {}) {
 
   function boardOptions(source, holdSeconds, { takeover = false, card = '', session = null } = {}) {
     return {
-      targetId: 'vestaboard',
+      // Whoever pushed the invite chose a display; every later phase card of
+      // this session goes to the same place. No choice means every board.
+      targetId: session?.targetId || 'vestaboard',
       explicit: true,
       // Only the first invite should wrest the board from whatever was showing.
       // Later cards stay in front of held non-game pages. `replaceCard` drops
@@ -602,7 +619,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
     return { ended };
   }
 
-  function create({ gameType = 'scramble' } = {}) {
+  function create({ gameType = 'scramble', targetId = null } = {}) {
     const mode = gameOf(gameType);
     if (!mode) {
       throw new Error(`Unknown game: ${gameType}`);
@@ -621,6 +638,7 @@ function createGameSessions(config = {}, log = console, deps = {}) {
       id: crypto.randomUUID(),
       gameType,
       code,
+      targetId: normaliseBoardTarget(targetId),
       phase: 'invited',
       createdAt: now(),
       inviteShownAt: null,

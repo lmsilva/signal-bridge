@@ -125,7 +125,7 @@ test('an alert still posts during the rotation gap', async () => {
   }
 });
 
-test('a scheduler target of sim still lands on the house line', async () => {
+test('a scheduler target of sim uses the house line but only flips sim', async () => {
   const h = await makeHub({ minRotationGapSeconds: 0 });
   try {
     h.hub.settings.upsert({
@@ -141,8 +141,32 @@ test('a scheduler target of sim still lands on the house line', async () => {
       scheduler: true,
       explicit: false,
     });
-    assert.ok(outcome.boards.some((row) => row.boardId === 'kitchen'));
+    // One queue for the whole house, but a rule that names a board is that
+    // board's page — the kitchen keeps whatever it was showing.
+    assert.deepEqual(outcome.boards.map((row) => row.boardId), ['sim']);
     assert.ok(outcome.boards.every((row) => row.reason === 'queued' || row.accepted > 0));
+  } finally {
+    await h.stop();
+  }
+});
+
+test('a scheduler target of a software display never reaches a board', async () => {
+  const h = await makeHub({ minRotationGapSeconds: 0 });
+  try {
+    // "Software" rules (and any named Windows display) are UDP only. This is
+    // the Chuck Norris case: the badge said Software, the flaps moved anyway.
+    for (const targetId of ['full', 'Movie Poster']) {
+      const outcome = h.hub.pushEvent(weatherPayload(), {
+        targetId,
+        scheduler: true,
+        explicit: false,
+      });
+      assert.deepEqual(outcome.boards, [], targetId);
+    }
+    await h.hub.queueFor('sim').tick();
+    const messagePosts = h.simulator.calls()
+      .filter((entry) => String(entry.method).includes('POST message'));
+    assert.deepEqual(messagePosts, []);
   } finally {
     await h.stop();
   }

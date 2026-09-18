@@ -1825,6 +1825,18 @@ function createListener({
     return voiceFanout;
   }
 
+  /**
+   * A snapshot someone asked for on a chosen display goes only there; an
+   * unsolicited one (a timer or alarm firing) still reaches the whole house.
+   */
+  function sendSnapshotPayload(payload, snapshot) {
+    const options = snapshot?.actor ? { actor: snapshot.actor } : {};
+    if (snapshot?.targetId) {
+      return deliverTargetedPayload(payload, snapshot.targetId, options);
+    }
+    return sendUdpPayload(payload, options);
+  }
+
   function handleAlarmSnapshot(snapshot) {
     const payload = buildAlarmSnapshotPayload(snapshot, config);
     voiceEventsLog.append({
@@ -1833,7 +1845,7 @@ function createListener({
       alarmCount: payload.alarms.length,
       event: payload.event,
     });
-    sendUdpPayload(payload, snapshot?.actor ? { actor: snapshot.actor } : {});
+    sendSnapshotPayload(payload, snapshot);
     lastCaptureAt = Date.now();
     log.info(`Alarm snapshot sent (${payload.trigger})`, {
       activeAlarms: payload.alarms.length,
@@ -1850,7 +1862,7 @@ function createListener({
       timerCount: payload.timers.length,
       event: payload.event,
     });
-    sendUdpPayload(payload, snapshot?.actor ? { actor: snapshot.actor } : {});
+    sendSnapshotPayload(payload, snapshot);
     lastCaptureAt = Date.now();
     log.info(`Timer snapshot sent (${payload.trigger})`, {
       activeTimers: payload.timers.length,

@@ -162,18 +162,26 @@ function isAllTarget(targetId) {
   return !raw || raw === '*' || raw.toLowerCase() === 'all';
 }
 
+/** `all` / `*` / empty / `vestaboard` mean the whole house of boards. */
+function isEveryBoardTarget(targetId) {
+  const raw = String(targetId == null ? '' : targetId).trim();
+  return isAllTarget(raw) || raw.toLowerCase() === 'vestaboard';
+}
+
 /**
  * Which running boards should see this event.
  *
- * Vestaboard events are house-wide: `all`, `vestaboard`, and a single board
- * id all mean every enabled board. `full` means none — that class is UDP only.
+ * `all` / `vestaboard` are house-wide. A single **board** id is that board
+ * and nothing else — picking the simulator must not flip the kitchen. Any
+ * other id is a Windows display (and `full` is the whole software class),
+ * so no board hears it: those classes are UDP only.
  */
 function matchBoards(boards, targetId) {
-  const raw = String(targetId == null ? '' : targetId).trim();
-  if (raw.toLowerCase() === 'full') {
-    return [];
+  if (isEveryBoardTarget(targetId)) {
+    return boards;
   }
-  return boards;
+  const wanted = String(targetId == null ? '' : targetId).trim().toLowerCase();
+  return boards.filter((entry) => String(entry?.board?.id || '').toLowerCase() === wanted);
 }
 
 /**
@@ -204,6 +212,11 @@ function routeEvent({
   const type = typeOf(payload, commandId);
   const formatter = formatterFor(type);
   const targets = matchBoards(boards, targetId);
+  // `null` is "every board, now and later". A named board travels with the
+  // page so the one house queue posts it to that board alone.
+  const boardIds = isEveryBoardTarget(targetId)
+    ? null
+    : targets.map((entry) => entry.board.id);
   const results = [];
   const housePriorities = ctx.priorities != null
     ? ctx.priorities
@@ -238,6 +251,7 @@ function routeEvent({
     const boardId = houseBoard.id || targets[0]?.board?.id || 'house';
     return submit(boardId, frames, {
       priority,
+      boardIds,
       scheduler,
       quietHoursExempt: quietHoursExempt != null
         ? Boolean(quietHoursExempt)

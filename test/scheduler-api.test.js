@@ -274,7 +274,10 @@ test('air-now for Vestaboard-only skills reaches the boards even when the rule s
         target: 'full',
       },
     });
-    assert.equal(stoic.body.rule.target, 'full');
+    // A board-only skill has nothing to show on a Windows overlay, and Air
+    // now / ticks always sent it to the flaps. Say Vestaboard rather than
+    // badging the rule "Software" and then flipping the board anyway.
+    assert.equal(stoic.body.rule.target, 'vestaboard');
     const firedStoic = await api(`${ROUTE}/rules/${stoic.body.rule.id}/air`, { method: 'POST' });
     assert.equal(firedStoic.status, 202, firedStoic.body?.error || 'stoic air');
     assert.equal(firedStoic.body.event.outcome, 'aired');
