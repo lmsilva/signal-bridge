@@ -61,6 +61,13 @@
     return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
   }
 
+  /** Same rule as command-registry.kindsMatchDisplayFilter (browser cannot require). */
+  function kindsMatchDisplayFilter(kinds, filter) {
+    const kind = String(filter || 'all').toLowerCase();
+    if (!kind || kind === 'all' || kind === '*') return true;
+    return Array.isArray(kinds) && kinds.includes(kind);
+  }
+
   function setSegmentedActive(rootId, dataAttr, value) {
     document.querySelectorAll(`#${rootId} .segmented-btn`).forEach((btn) => {
       btn.classList.toggle('active', btn.dataset[dataAttr] === String(value));
@@ -815,11 +822,37 @@
 
     function filterSchedCommandCatalog(query) {
       const q = normalizeSchedQuery(query);
-      if (!q) return schedCommandCatalog.slice();
       const terms = q.split(' ').filter(Boolean);
       return schedCommandCatalog.filter((entry) => (
-        terms.every((term) => entry.haystack.includes(term))
+        kindsMatchDisplayFilter(entry.kinds, schedDisplayFilter)
+        && terms.every((term) => entry.haystack.includes(term))
       ));
+    }
+
+    function schedSuggestedTarget(commandId) {
+      if (schedDisplayFilter !== 'full' && schedDisplayFilter !== 'vestaboard') return null;
+      const command = schedCommandById(commandId);
+      const kinds = Array.isArray(command?.kinds) && command.kinds.length
+        ? command.kinds
+        : (schedCommandCatalog.find((entry) => entry.id === commandId)?.kinds || []);
+      return kindsMatchDisplayFilter(kinds, schedDisplayFilter) ? schedDisplayFilter : null;
+    }
+
+    function refreshSchedCommandPickerForFilter() {
+      const hidden = $('sched-add-command');
+      const search = $('sched-add-command-search');
+      const list = $('sched-add-command-list');
+      const selectedId = hidden?.value || search?.dataset.selectedId || '';
+      const entry = selectedId
+        ? schedCommandCatalog.find((item) => item.id === selectedId)
+        : null;
+      if (selectedId && (!entry || !kindsMatchDisplayFilter(entry.kinds, schedDisplayFilter))) {
+        if (hidden) hidden.value = '';
+        if (search) search.dataset.selectedId = '';
+      }
+      if (list && !list.hidden && search) {
+        renderSchedCommandList(filterSchedCommandCatalog(search.value));
+      }
     }
 
     function renderSchedCommandList(items) {
@@ -873,6 +906,7 @@
           id: command.id,
           title: command.title,
           group: command.group || 'Other',
+          kinds: Array.isArray(command.kinds) ? command.kinds : ['full'],
           haystack: [command.title, command.subtitle, command.group, command.id]
             .join(' ')
             .toLowerCase()
@@ -882,7 +916,10 @@
       const search = $('sched-add-command-search');
       const previousId = hidden?.value || search?.dataset.selectedId || '';
       const current = previousId
-        ? schedCommandCatalog.find((entry) => entry.id === previousId)
+        ? schedCommandCatalog.find((entry) => (
+          entry.id === previousId
+          && kindsMatchDisplayFilter(entry.kinds, schedDisplayFilter)
+        ))
         : null;
       setSchedAddCommand(current || null);
     }
@@ -1070,6 +1107,7 @@
           schedDisplayFilter = displayFilterBtn.dataset.schedDisplayFilter || 'all';
           try { localStorage.setItem(SCHED_DISPLAY_FILTER_KEY, schedDisplayFilter); } catch { /* ignore */ }
           renderSchedRules();
+          refreshSchedCommandPickerForFilter();
           return;
         }
         const kindFilterBtn = target.closest('[data-sched-kind-filter]');
@@ -1122,9 +1160,12 @@
           return;
         }
         try {
+          const body = { commandId, intervalSeconds: 2700, probability: 90 };
+          const target = schedSuggestedTarget(commandId);
+          if (target) body.target = target;
           const result = await apiFetch(`${SCHED_ROUTE}/rules`, {
             method: 'POST',
-            body: { commandId, intervalSeconds: 2700, probability: 90 },
+            body,
           });
           const newId = result?.rule?.id || null;
           const search = $('sched-rule-search');

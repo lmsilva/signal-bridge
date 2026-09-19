@@ -9,6 +9,7 @@ const {
   PUSH_CATEGORIES,
   kindsOf,
   supportsKind,
+  kindsMatchDisplayFilter,
   pushCategoryOf,
   assertValid,
   createCommandRegistry,
@@ -276,6 +277,20 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('iss.track', 'full'), false);
   assert.equal(supportsKind('starlink.track', 'vestaboard'), true);
   assert.equal(supportsKind('starlink.track', 'full'), false);
+});
+
+test('kindsMatchDisplayFilter follows All / Software / Vestaboards', () => {
+  assert.equal(kindsMatchDisplayFilter(['full'], 'all'), true);
+  assert.equal(kindsMatchDisplayFilter(['vestaboard'], 'all'), true);
+  assert.equal(kindsMatchDisplayFilter(['full', 'vestaboard'], 'all'), true);
+  assert.equal(kindsMatchDisplayFilter(['full'], 'full'), true);
+  assert.equal(kindsMatchDisplayFilter(['vestaboard'], 'full'), false);
+  assert.equal(kindsMatchDisplayFilter(['full', 'vestaboard'], 'full'), true);
+  assert.equal(kindsMatchDisplayFilter(['full'], 'vestaboard'), false);
+  assert.equal(kindsMatchDisplayFilter(['vestaboard'], 'vestaboard'), true);
+  assert.equal(kindsMatchDisplayFilter(['full', 'vestaboard'], 'vestaboard'), true);
+  assert.equal(kindsMatchDisplayFilter([], 'full'), false);
+  assert.equal(kindsMatchDisplayFilter(undefined, 'full'), false);
 });
 
 test('every board-capable command has a Vestaboard formatter', () => {

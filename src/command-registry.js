@@ -145,6 +145,19 @@ function supportsKind(commandOrId, kind) {
 }
 
 /**
+ * Scheduler All / Software / Vestaboards chips: All shows every command;
+ * Software needs `full`; Vestaboards needs `vestaboard`. Dual-capable
+ * events appear under both chips.
+ */
+function kindsMatchDisplayFilter(kinds, filter) {
+  const kind = String(filter || 'all').toLowerCase();
+  if (!kind || kind === 'all' || kind === '*') {
+    return true;
+  }
+  return Array.isArray(kinds) && kinds.includes(kind);
+}
+
+/**
  * Sub-tabs of the admin Push page, in the order they are shown.
  *
  * The grid outgrew a single scrolling column, so tiles are filed under a
@@ -1842,6 +1855,7 @@ module.exports = {
   PUSH_CATEGORIES,
   kindsOf,
   supportsKind,
+  kindsMatchDisplayFilter,
   pushCategoryOf,
   assertValid,
   createCommandRegistry,
