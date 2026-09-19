@@ -748,8 +748,15 @@
       if (typeof vbUnlockAudio === 'function') vbUnlockAudio();
       if (typeof vbOnBoardTabEnter === 'function') vbOnBoardTabEnter();
       loadVestaboardSim().then(() => startVestaboardSimEvents());
+    } else if (tabId === 'artwork') {
+      if (typeof enterVestaboardArtworkTab === 'function') enterVestaboardArtworkTab();
     } else if (tabId === 'flightplan') {
       loadFlightplanTrips({ force: false });
+    }
+    // The Settings card mirrors the gallery counts, so re-read them on the way out.
+    if (previousTab === 'artwork' && tabId !== 'artwork'
+      && typeof loadVestaboardArtworkStatus === 'function') {
+      loadVestaboardArtworkStatus();
     }
     if (typeof updateStickyOffsets === 'function') updateStickyOffsets();
     if (switching) {
@@ -10688,8 +10695,8 @@
     }
     if (detail) {
       detail.textContent = data.available != null
-        ? `${vestaboardArtworkCountsLine(data)}. Manage the gallery in a sheet, or push a random one to test.`
-        : 'Painted boards rather than sentences. Manage the gallery in a sheet, or push a random one to test.';
+        ? `${vestaboardArtworkCountsLine(data)}. Paint and manage the gallery on the Vestaboard Artwork tab, or push a random one to test.`
+        : 'Painted boards rather than sentences. Paint and manage the gallery on the Vestaboard Artwork tab, or push a random one to test.';
     }
     if (summary) {
       summary.textContent = data.available != null
@@ -10797,12 +10804,14 @@
     }
   }
 
-  async function openVestaboardArtworkManageSheet() {
-    const sheet = $('vestaboard-artwork-manage-sheet');
-    if (!sheet) {
+  /**
+   * Opening the Artwork tab: fill the template picker once, park the painter on
+   * a blank board and load the first page of the gallery.
+   */
+  async function enterVestaboardArtworkTab() {
+    if (!$('vestaboard-artwork-grid')) {
       return;
     }
-    sheet.hidden = false;
     if (!vestaboardArtworkTemplates.length) {
       try {
         const data = await apiGet('/api/vestaboard-artwork/templates');
@@ -10823,29 +10832,25 @@
     loadVestaboardArtwork(1);
   }
 
-  function closeVestaboardArtworkManageSheet() {
-    const sheet = $('vestaboard-artwork-manage-sheet');
-    if (sheet) {
-      sheet.hidden = true;
-    }
-    loadVestaboardArtworkStatus();
-  }
+  $('btn-vestaboard-artwork-manage')?.addEventListener('click', () => activateTab('artwork', { scroll: 'top' }));
 
-  $('btn-vestaboard-artwork-manage')?.addEventListener('click', () => openVestaboardArtworkManageSheet());
-  $('btn-vestaboard-artwork-manage-close')?.addEventListener('click', () => closeVestaboardArtworkManageSheet());
-  registerSheetDismiss('vestaboard-artwork-manage-sheet', () => closeVestaboardArtworkManageSheet());
-
-  $('btn-vestaboard-artwork-push')?.addEventListener('click', async (event) => {
-    const button = event.currentTarget;
-    button.disabled = true;
+  async function pushRandomVestaboardArtwork(button) {
+    if (button) button.disabled = true;
     try {
       const result = await apiPost('/api/push/vestaboard-artwork', withTarget());
       toast(`${result.artwork?.name || 'Artwork'} on the board`, 'good');
     } catch (error) {
       toast(error?.message || 'Could not push Vestaboard Artwork', 'bad');
     } finally {
-      button.disabled = false;
+      if (button) button.disabled = false;
     }
+  }
+
+  $('btn-vestaboard-artwork-push')?.addEventListener('click', (event) => {
+    pushRandomVestaboardArtwork(event.currentTarget);
+  });
+  $('btn-vestaboard-artwork-tab-push')?.addEventListener('click', (event) => {
+    pushRandomVestaboardArtwork(event.currentTarget);
   });
 
   $('vestaboard-artwork-tools')?.addEventListener('click', (event) => {

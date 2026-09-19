@@ -549,9 +549,11 @@ button.app-title:focus-visible {
    one tab widens the content column instead of stranding the board in the
    middle of a wide screen. Higher specificity than the responsive `.content`
    rules further down, so it wins wherever it applies. */
-body[data-tab="board"] .content { max-width: 1180px; }
+body[data-tab="board"] .content,
+body[data-tab="artwork"] .content { max-width: 1180px; }
 @media (min-width: 1320px) {
-  body[data-tab="board"] .content { max-width: 1460px; }
+  body[data-tab="board"] .content,
+  body[data-tab="artwork"] .content { max-width: 1460px; }
 }
 
 /* Inactive panels must stay fully out of flow. `[hidden]` must beat

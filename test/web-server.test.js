@@ -3649,14 +3649,29 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
+  // Artwork is a tab of its own now; the Settings card only reports and pushes.
   assert.match(html, /id="vestaboard-artwork-settings-card"/);
-  assert.match(html, /id="vestaboard-artwork-manage-sheet"/);
+  assert.doesNotMatch(html, /id="vestaboard-artwork-manage-sheet"/);
+  assert.match(html, /data-tab="artwork"/);
+  assert.match(html, /id="tab-artwork"/);
+  assert.match(html, /tab-label-full">Vestaboard Artwork/);
+  assert.match(html, /tab-label-short">Artwork/);
   assert.match(html, /id="btn-vestaboard-artwork-manage"/);
   assert.match(html, /id="btn-vestaboard-artwork-push"/);
+  assert.match(html, /id="btn-vestaboard-artwork-tab-push"/);
   assert.match(html, /id="vestaboard-artwork-grid"/);
   assert.match(html, /id="vestaboard-artwork-template"/);
-  assert.match(html, /flap-paint\.js\?v=signal323/);
-  assert.match(html, /flap-paint\.css\?v=signal323/);
+  assert.match(js, /activateTab\('artwork'/);
+  assert.match(js, /function enterVestaboardArtworkTab/);
+  // The two Vestaboard tabs sit together, artwork first.
+  {
+    const artworkTab = html.indexOf('data-tab="artwork"');
+    const boardTab = html.indexOf('data-tab="board"');
+    assert.ok(artworkTab > 0 && boardTab > artworkTab, 'Artwork sits just before the simulator');
+  }
+  assert.match(css, /body\[data-tab="artwork"\] \.content/);
+  assert.match(html, /flap-paint\.js\?v=signal324/);
+  assert.match(html, /flap-paint\.css\?v=signal324/);
   assert.match(js, /\/api\/vestaboard-artwork/);
   assert.match(js, /\/api\/push\/vestaboard-artwork/);
   assert.match(js, /createFlapPainter/);
@@ -3670,9 +3685,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal323/);
+  assert.match(html, /styles\.css\?v=signal324/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal323/);
+  assert.match(html, /app\.js\?v=signal324/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -5785,7 +5800,7 @@ test('the games page modules bind and paint every phase without throwing', () =>
   assert.doesNotThrow(() => hangman.teardown());
 });
 
-test('admin app.js parses and tab bar order is Push → Slideshow → Credits → Flight → Scheduler → Board → Settings', () => {
+test('admin app.js parses and tab bar order is Push → Slideshow → Credits → Flight → Scheduler → Artwork → Board → Settings', () => {
   const { Script } = require('node:vm');
   const html = fs.readFileSync(path.join(__dirname, '../src/web/admin/index.html'), 'utf8');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
@@ -5799,6 +5814,7 @@ test('admin app.js parses and tab bar order is Push → Slideshow → Credits �
   const credits = html.indexOf('data-tab="credits"');
   const flightplan = html.indexOf('data-tab="flightplan"');
   const scheduler = html.indexOf('data-tab="scheduler"');
+  const artwork = html.indexOf('data-tab="artwork"');
   const board = html.indexOf('data-tab="board"');
   const settings = html.indexOf('data-tab="settings"');
   assert.ok(
@@ -5809,9 +5825,10 @@ test('admin app.js parses and tab bar order is Push → Slideshow → Credits �
       && credits > slideshow
       && flightplan > credits
       && scheduler > flightplan
-      && board > scheduler
+      && artwork > scheduler
+      && board > artwork
       && settings > board,
-    'tab order must be Push → Remote → Control → Slideshow → Roll Credits → Flight Plan → Scheduler → Vestaboard Simulator → Settings',
+    'tab order must be Push → Remote → Control → Slideshow → Roll Credits → Flight Plan → Scheduler → Vestaboard Artwork → Vestaboard Simulator → Settings',
   );
   assert.match(html, /id="tab-btn-remote"[^>]*\bhidden\b/);
   assert.match(html, /id="tab-btn-control"[^>]*\bhidden\b/);
@@ -6003,11 +6020,32 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /tab-label-short">Artwork/);
     assert.match(userApp.text, /id="art-sheet"/);
     assert.match(userApp.text, /id="art-gallery"/);
-    assert.match(userApp.text, /flap-paint\.js\?v=signal323/);
-    assert.match(userApp.text, /flap-paint\.css\?v=signal323/);
+    assert.match(userApp.text, /flap-paint\.js\?v=signal324/);
+    assert.match(userApp.text, /flap-paint\.css\?v=signal324/);
+    // The Artwork tab wears the household portal's own kit — the page head with
+    // a Display picker, su-* inputs and buttons — not the scheduler's, whose
+    // .field-input / .btn only exist inside .su-sched-root.
+    {
+      const artTab = userApp.text.slice(
+        userApp.text.indexOf('id="tab-artwork"'),
+        userApp.text.indexOf('</section>', userApp.text.indexOf('id="tab-artwork"')),
+      );
+      assert.match(artTab, /class="su-display-field"/);
+      assert.match(artTab, /id="art-target"/);
+      assert.match(artTab, /All Vestaboards/);
+      assert.match(artTab, /id="art-search" class="su-input"/);
+      assert.match(artTab, /class="su-seg" id="art-filter"/);
+      assert.doesNotMatch(artTab, /field-input|field-label|trivia-check|class="btn /);
+      const artSheet = userApp.text.slice(
+        userApp.text.indexOf('id="art-sheet"'),
+        userApp.text.indexOf('id="profile-sheet"'),
+      );
+      assert.doesNotMatch(artSheet, /field-input|field-label|class="btn /);
+      assert.match(artSheet, /class="su-input" type="text" id="art-name"/);
+    }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal323/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal323/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal324/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal324/);
     // The rule editor offers a closing artwork on anything that reaches a board.
     assert.match(userApp.text, /id="sched-sheet-closing"/);
     assert.match(userApp.text, /id="sched-sheet-closing-mode"/);
@@ -6076,8 +6114,18 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(pushTargetSelect, /value="\*">All displays</);
     assert.doesNotMatch(pushTargetSelect, /value="vestaboard"/);
     assert.doesNotMatch(pushTargetSelect, /value="full"/);
-    assert.doesNotMatch(userJs, /<option value="vestaboard">/);
-    assert.doesNotMatch(userJs, /<option value="full">/);
+    const fillTargetsBody = userJs.slice(
+      userJs.indexOf('function fillTargets'),
+      userJs.indexOf('function fillArtTargets'),
+    );
+    assert.ok(fillTargetsBody, 'fillTargets must come before fillArtTargets');
+    assert.doesNotMatch(fillTargetsBody, /<option value="vestaboard">/);
+    assert.doesNotMatch(fillTargetsBody, /<option value="full">/);
+    // Artwork only reaches flaps, so its own picker is boards — all of them or
+    // one — and the push carries that choice rather than the Skills tab's.
+    assert.match(userJs, /function fillArtTargets/);
+    assert.match(userJs, /row\.kind === 'vestaboard'/);
+    assert.match(userJs, /targetId: artTargetId\(\)/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'styles.css'), 'utf8'), /\.list-loading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8'), /\.list-loading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /paintSchedRulesLoading/);
@@ -6119,8 +6167,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.equal(painted.status, 200);
     assert.match(painted.headers['content-type'], /javascript/);
 
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal323/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal323/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal324/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal324/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /id="sched-group-fold"/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /data-sched-group-fold="expand"/);
     assert.match(userJs, /SignalSchedulerUi/);
@@ -6251,9 +6299,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal323/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal324/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal317/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal323/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal324/);
     assert.match(
       fs.readFileSync(path.join(realWebRoot, 'vestaboard-sim-ui.js'), 'utf8'),
       /Blank flaps \(spaces\) snap now/,

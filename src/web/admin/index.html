@@ -26,8 +26,8 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal323">
-  <link rel="stylesheet" href="/flap-paint.css?v=signal323">
+  <link rel="stylesheet" href="styles.css?v=signal324">
+  <link rel="stylesheet" href="/flap-paint.css?v=signal324">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -1903,10 +1903,10 @@
             <span class="status-pill" id="vestaboard-artwork-status-pill">…</span>
           </div>
           <p class="auth-detail" id="vestaboard-artwork-status-detail">
-            Painted boards rather than sentences. Eleven shipped designs to start from, plus anything the household draws. Manage the gallery in a sheet, or push a random one to test.
+            Painted boards rather than sentences. Eleven shipped designs to start from, plus anything the household draws. Paint and manage the gallery on the Vestaboard Artwork tab, or push a random one to test.
           </p>
           <div class="btn-row cn-settings-actions">
-            <button type="button" class="btn btn-outline" id="btn-vestaboard-artwork-manage">Manage artwork</button>
+            <button type="button" class="btn btn-outline" id="btn-vestaboard-artwork-manage">Open Artwork tab</button>
             <button type="button" class="btn btn-accent" id="btn-vestaboard-artwork-push">Push Random</button>
           </div>
         </div>
@@ -3737,6 +3737,78 @@
       </div>
     </section>
 
+    <!-- ====================== VESTABOARD ARTWORK TAB ====================== -->
+    <section class="tab-panel" id="tab-artwork">
+      <div class="card-grid">
+        <div class="section-label">Vestaboard Artwork</div>
+
+        <div class="card">
+          <div class="auth-head">
+            <div class="auth-name" id="vestaboard-artwork-edit-hint">New drawing</div>
+            <button type="button" class="btn btn-accent btn-sm" id="btn-vestaboard-artwork-tab-push">Push Random</button>
+          </div>
+          <p class="hint" id="vestaboard-artwork-manage-summary">Loading…</p>
+
+          <div class="fp-editor-row">
+            <div class="fp-editor-name">
+              <label class="field-label" for="vestaboard-artwork-name">Name</label>
+              <input type="text" class="field-input" id="vestaboard-artwork-name" maxlength="48" placeholder="Sunset over the hill" autocomplete="off">
+            </div>
+            <div>
+              <label class="field-label" for="vestaboard-artwork-template">Start from</label>
+              <select class="field-input" id="vestaboard-artwork-template"></select>
+            </div>
+          </div>
+
+          <div class="fp-tools" id="vestaboard-artwork-tools" role="toolbar" aria-label="Colour and tools">
+            <button type="button" class="fp-tool fp-tool-chip-red is-active" data-art-tool="chip" data-art-chip="red" title="Red chip" aria-label="Red chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-orange" data-art-tool="chip" data-art-chip="orange" title="Orange chip" aria-label="Orange chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-yellow" data-art-tool="chip" data-art-chip="yellow" title="Yellow chip" aria-label="Yellow chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-green" data-art-tool="chip" data-art-chip="green" title="Green chip" aria-label="Green chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-blue" data-art-tool="chip" data-art-chip="blue" title="Blue chip" aria-label="Blue chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-violet" data-art-tool="chip" data-art-chip="violet" title="Violet chip" aria-label="Violet chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-white" data-art-tool="chip" data-art-chip="white" title="White chip" aria-label="White chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-black" data-art-tool="chip" data-art-chip="black" title="Black chip" aria-label="Black chip"></button>
+            <button type="button" class="fp-tool fp-tool-chip-filled" data-art-tool="chip" data-art-chip="filled" title="Filled chip" aria-label="Filled chip"></button>
+            <span class="fp-tool-sep" aria-hidden="true"></span>
+            <button type="button" class="fp-tool fp-tool-wide" data-art-tool="erase" title="Clear flaps">Erase</button>
+          </div>
+
+          <p class="hint">Drag across the flaps to paint. Click one and type to lay in a word.</p>
+
+          <div class="vb-bezel preview-bezel">
+            <div class="vb-grid fp-editor-grid" id="vestaboard-artwork-grid" role="application" aria-label="Vestaboard artwork editor"></div>
+            <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
+          </div>
+
+          <div class="fp-editor-row">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-undo">Undo</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-clear">Clear</button>
+            <span style="flex:1"></span>
+            <button type="button" class="btn btn-accent" id="btn-vestaboard-artwork-save">Save drawing</button>
+          </div>
+        </div>
+
+        <div class="section-label">Gallery</div>
+
+        <div class="card">
+          <div class="cn-toolbar">
+            <input type="search" class="field-input" id="vestaboard-artwork-search" placeholder="Search artwork" autocomplete="off">
+            <label class="trivia-check">
+              <input type="checkbox" id="vestaboard-artwork-show-hidden">
+              <span>Show hidden</span>
+            </label>
+          </div>
+          <div class="fp-gallery" id="vestaboard-artwork-list"></div>
+          <div class="cn-pager">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-prev">Previous</button>
+            <span class="hint" id="vestaboard-artwork-page-label"></span>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-next">Next</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="tab-panel" id="tab-board">
       <div class="card-grid">
         <div class="card vb-head-card">
@@ -3818,6 +3890,10 @@
     <button class="tab-btn" data-tab="scheduler">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
       <span class="tab-label"><span class="tab-label-full">Scheduler</span><span class="tab-label-short">Sched</span></span>
+    </button>
+    <button class="tab-btn" data-tab="artwork">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14.5h18"/><path d="M9 4v16M15 4v16"/></svg>
+      <span class="tab-label"><span class="tab-label-full">Vestaboard Artwork</span><span class="tab-label-short">Artwork</span></span>
     </button>
     <button class="tab-btn" data-tab="board">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="M2.5 12h19"/><path d="M8 5v14M15.5 5v14"/></svg>
@@ -3933,71 +4009,6 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-family-quotes-prev">Previous</button>
         <span class="hint" id="family-quotes-page-label"></span>
         <button type="button" class="btn btn-outline btn-sm" id="btn-family-quotes-next">Next</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Vestaboard Artwork manager -->
-  <div class="sheet-backdrop" id="vestaboard-artwork-manage-sheet" hidden>
-    <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="vestaboard-artwork-manage-title">
-      <div class="credits-sheet-head">
-        <div class="sheet-title" id="vestaboard-artwork-manage-title">Manage Vestaboard artwork</div>
-        <button type="button" class="credits-sheet-close" id="btn-vestaboard-artwork-manage-close" aria-label="Close">×</button>
-      </div>
-      <p class="hint" id="vestaboard-artwork-manage-summary">Loading…</p>
-
-      <div class="fp-editor-row">
-        <div class="fp-editor-name">
-          <label class="field-label" for="vestaboard-artwork-name">Name</label>
-          <input type="text" class="field-input" id="vestaboard-artwork-name" maxlength="48" placeholder="Sunset over the hill" autocomplete="off">
-        </div>
-        <div>
-          <label class="field-label" for="vestaboard-artwork-template">Start from</label>
-          <select class="field-input" id="vestaboard-artwork-template"></select>
-        </div>
-      </div>
-
-      <div class="fp-tools" id="vestaboard-artwork-tools" role="toolbar" aria-label="Colour and tools">
-        <button type="button" class="fp-tool fp-tool-chip-red is-active" data-art-tool="chip" data-art-chip="red" title="Red chip" aria-label="Red chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-orange" data-art-tool="chip" data-art-chip="orange" title="Orange chip" aria-label="Orange chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-yellow" data-art-tool="chip" data-art-chip="yellow" title="Yellow chip" aria-label="Yellow chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-green" data-art-tool="chip" data-art-chip="green" title="Green chip" aria-label="Green chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-blue" data-art-tool="chip" data-art-chip="blue" title="Blue chip" aria-label="Blue chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-violet" data-art-tool="chip" data-art-chip="violet" title="Violet chip" aria-label="Violet chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-white" data-art-tool="chip" data-art-chip="white" title="White chip" aria-label="White chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-black" data-art-tool="chip" data-art-chip="black" title="Black chip" aria-label="Black chip"></button>
-        <button type="button" class="fp-tool fp-tool-chip-filled" data-art-tool="chip" data-art-chip="filled" title="Filled chip" aria-label="Filled chip"></button>
-        <span class="fp-tool-sep" aria-hidden="true"></span>
-        <button type="button" class="fp-tool fp-tool-wide" data-art-tool="erase" title="Clear flaps">Erase</button>
-      </div>
-
-      <p class="hint">Drag across the flaps to paint. Click one and type to lay in a word.</p>
-
-      <div class="vb-bezel preview-bezel">
-        <div class="vb-grid fp-editor-grid" id="vestaboard-artwork-grid" role="application" aria-label="Vestaboard artwork editor"></div>
-        <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
-      </div>
-
-      <div class="fp-editor-row">
-        <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-undo">Undo</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-clear">Clear</button>
-        <span class="hint" id="vestaboard-artwork-edit-hint"></span>
-        <span style="flex:1"></span>
-        <button type="button" class="btn btn-accent" id="btn-vestaboard-artwork-save">Save drawing</button>
-      </div>
-
-      <div class="cn-toolbar">
-        <input type="search" class="field-input" id="vestaboard-artwork-search" placeholder="Search artwork" autocomplete="off">
-        <label class="trivia-check">
-          <input type="checkbox" id="vestaboard-artwork-show-hidden">
-          <span>Show hidden</span>
-        </label>
-      </div>
-      <div class="fp-gallery" id="vestaboard-artwork-list"></div>
-      <div class="cn-pager">
-        <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-prev">Previous</button>
-        <span class="hint" id="vestaboard-artwork-page-label"></span>
-        <button type="button" class="btn btn-outline btn-sm" id="btn-vestaboard-artwork-next">Next</button>
       </div>
     </div>
   </div>
@@ -5157,9 +5168,9 @@
   <script type="application/json" id="push-catalog">"__PUSH_CATALOG__"</script>
   <script src="jsqr.min.js"></script>
   <script src="/flap-grid.js?v=2"></script>
-  <script src="/flap-paint.js?v=signal323"></script>
+  <script src="/flap-paint.js?v=signal324"></script>
   <script src="/red-letter-presets.js?v=signal260"></script>
-  <script src="/push-icons.js?v=signal323"></script>
+  <script src="/push-icons.js?v=signal324"></script>
   <div class="sheet-backdrop" id="word-scramble-sessions-sheet" hidden>
     <div class="sheet cn-manage-sheet" role="dialog" aria-modal="true" aria-labelledby="word-scramble-sessions-title">
       <div class="credits-sheet-head">
@@ -5614,6 +5625,6 @@
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal299"></script>
   <script src="settings-filter.js?v=signal307"></script>
-  <script src="app.js?v=signal323"></script>
+  <script src="app.js?v=signal324"></script>
 </body>
 </html>
