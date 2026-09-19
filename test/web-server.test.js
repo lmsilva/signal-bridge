@@ -3645,9 +3645,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal320/);
+  assert.match(html, /styles\.css\?v=signal321/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal320/);
+  assert.match(html, /app\.js\?v=signal321/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -4142,7 +4142,7 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
     'sched-active', 'sched-nextup', 'sched-rule-list', 'sched-add-command', 'sched-add-command-search',
     'sched-add-command-list', 'btn-sched-add',
     'sched-setup-card', 'sched-rule-search', 'sched-rule-meta', 'sched-rule-empty',
-    'sched-display-filter', 'sched-kind-filter', 'sched-rule-sheet', 'sched-week-grid',
+    'sched-display-filter', 'sched-kind-filter', 'sched-group-fold', 'sched-rule-sheet', 'sched-week-grid',
     'sched-view-schedule', 'sched-view-activity', 'sched-view-simulation', 'sched-view-settings',
     'sched-min-gap', 'sched-tick', 'sched-quiet-enabled', 'sched-retention', 'btn-sched-simulate',
     'sched-simulation', 'sched-simulation-working', 'sched-simulation-status', 'sched-simulation-results',
@@ -4172,6 +4172,12 @@ test('admin has a Scheduler tab with schedule, activity, simulation and settings
   assert.match(js, /kindsMatchDisplayFilter\(entry\.kinds, schedDisplayFilter\)/);
   assert.match(js, /function refreshSchedCommandPickerForFilter/);
   assert.match(js, /function schedSuggestedTarget/);
+  assert.match(js, /function setAllSchedGroupsCollapsed/);
+  assert.match(js, /function visibleSchedGroupNames/);
+  assert.match(js, /data-sched-group-fold/);
+  assert.match(html, /id="sched-group-fold"/);
+  assert.match(html, /data-sched-group-fold="expand"/);
+  assert.match(html, /data-sched-group-fold="collapse"/);
   // Compact mode used a single scroll threshold; collapsing the Add row then
   // yanked scrollY back under it and the page jumped to the top in a loop.
   assert.match(js, /const leaveAt = 16/);
@@ -5966,8 +5972,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
       );
     }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal320/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal320/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal321/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal321/);
     assert.match(userApp.text, /week-grid\.js\?v=signal310/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
@@ -6043,8 +6049,12 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /kindsMatchDisplayFilter\(entry\.kinds, schedDisplayFilter\)/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function refreshSchedCommandPickerForFilter/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function paintSchedNextUpLine/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function setAllSchedGroupsCollapsed/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function visibleSchedGroupNames/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal318/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal320/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal321/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /id="sched-group-fold"/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /data-sched-group-fold="expand"/);
     assert.match(userJs, /SignalSchedulerUi/);
     assert.match(userJs, /getDisplays: \(\) => displays/);
     assert.match(
