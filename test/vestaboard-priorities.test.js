@@ -252,12 +252,12 @@ test('priority labels match Push command titles', () => {
   const bySource = new Map(catalogForClient().events.map((item) => [item.source, item.label]));
 
   assert.equal(bySource.get('ring.doorbell'), 'Ring Doorbell');
-  assert.equal(bySource.get('steam.now-playing'), 'Steam');
-  assert.equal(bySource.get('psn.now-playing'), 'PSN');
-  assert.equal(bySource.get('youtube.now-playing'), 'YouTube');
+  assert.equal(bySource.get('steam.now-playing'), 'Steam Live / Last Played');
+  assert.equal(bySource.get('psn.now-playing'), 'PSN Live / Last Played');
+  assert.equal(bySource.get('youtube.now-playing'), 'YouTube Live / Last Played');
   assert.equal(bySource.get('plex.now-playing'), 'Feature Presentation');
-  assert.equal(bySource.get('huupe.session'), 'Huupe Live');
-  assert.equal(bySource.get('autodarts.match'), 'Autodarts');
+  assert.equal(bySource.get('huupe.session'), 'Huupe Live / Last Played');
+  assert.equal(bySource.get('autodarts.match'), 'Autodarts Live / Last Played');
   assert.equal(bySource.get('word.scramble'), 'Word Scramble');
   assert.equal(bySource.get('wheel.fortune'), 'Wheel of Fortune');
   assert.equal(bySource.get('hangman.game'), 'Hangman');

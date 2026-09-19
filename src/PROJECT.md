@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-18 (A chosen display is the only display)
+**Last updated:** 2026-09-18 (Live / Last Played is one scheduled action)
 
 ---
 
@@ -373,7 +373,7 @@ The abort path is the one that matters on the wall: a live card with no end even
 
 **Config:** Settings → Huupe. Address + ADB port, Discover (explicit — the bridge does not sweep the LAN uninvited), auto-rediscover on a moved DHCP lease, live behaviour, which modes take the screen, leaderboard/display seconds, and a troubleshooting panel showing unrecognised log lines.
 
-**Commands:** `huupe.now` (**Huupe Live** — live session if one is running, else the last finished game), `huupe.dashboard` — both pushable, schedulable, and board-capable. `huupe.last-game` remains as an API route for explicit last-game pushes but is not on Quick Push or the scheduler picker.
+**Commands:** `huupe.now` (**Huupe Live / Last Played** — live session if one is running, else the last finished game), `huupe.dashboard` — both pushable, schedulable, and board-capable. `huupe.last-game` remains as an API route for explicit last-game pushes but is not on Quick Push or the scheduler picker.
 
 ---
 
@@ -941,6 +941,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-18: **Live / Last Played is one scheduled action** — Steam, PSN, YouTube and Autodarts each had a live rule *and* a last-played rule, and the live one forced `now-playing` so a tick with nobody playing failed instead of showing last played. One command remains: **Steam / PSN / YouTube / Autodarts / Huupe Live / Last Played**. Live if something is on, otherwise last played. Library tours and dashboards stay separate. Saved last-played rules remap on load. Tests: `command-registry`, `display-scheduler`, `youtube-now-playing`, `web-server`, `autodarts-api`.
 - 2026-09-18: **Huupe tip-off reaches the board** — `huupeSessionFrames` returned nothing until two shots, so a named Countdown or Family Mode game showed on the wall while the flaps stayed on the previous page. A named session or Countdown mode now flips immediately; Countdown scores read `N LEFT`. Two anonymous stray shots still do not. Tests: `vestaboard-gaming`.
 - 2026-09-18: **A chosen display is the only display, part 2 (admin paths)** — three more places threw the picker away. The four **party games** hardcoded `targetId: 'vestaboard'`, so pushing Word Scramble at the simulator flipped every board; a session now stores the chosen board at `create()` and every later phase card follows it (`normaliseBoardTarget`: `*` / `all` / `full` / empty still mean every board). A game aimed at a **software** display is refused with a 409 rather than opening a session showing a join code nothing paints. **Show Timers / Show Alarms** never passed the target at all — they poll Amazon and send from the snapshot callback — so `targetId` now rides the same channel `actor` already used (`timer-sync` / `alarm-sync` → `listener.sendSnapshotPayload`), and **only** for the explicit `show-timers` / `show-alarms` trigger: a timer or alarm *firing* is unsolicited and stays house-wide. Audited every `/api/push/` handler: the rest already read the picker. Tests: `game-sessions`, `timer-sync`, `web-server`.
 - 2026-09-18: **A chosen display is the only display** — `matchBoards` returned *every* enabled board for anything that was not the literal string `full`, so picking the Vestaboard Simulator flipped every board in the house, and a scheduler rule (or Push) aimed at a named **software** display flipped the boards too. A board id now matches that board alone and a display id matches none. The target travels with the page (`boardIds` on the queue item) so the one house queue posts it to that board only — the fan-out transport, the follower catch-up, the dedupe check and coalescing all respect it. Board-only skills no longer coerce a named display onto the whole `vestaboard` class (`plexTargetId`); All displays still means every board. A board-only scheduler rule holding a stale `full` target now reads `vestaboard`, because that is where it was always airing — the "Software" badge was the lie, not the delivery. The household Display picker drops the whole-class rows: All displays, or one named display. Cache-bust user `signal318`. Tests: `vestaboard-router`, `vestaboard-settings`, `display-scheduler`, `scheduler-api`, `web-server`.

@@ -174,6 +174,26 @@ test('expected-per-day and the gap profile match the §4.5 formulas', () => {
   assert.equal(gapProfile({ intervalSeconds: 600, probability: 0 }).typicalSeconds, null);
 });
 
+test('retired last-played twins become the auto Live / Last Played action', () => {
+  const remaps = [
+    ['steam.last-played', 'steam.now-playing', 'Steam — last played', 'Steam Live / Last Played'],
+    ['psn.last-played', 'psn.now-playing', 'PSN — last played', 'PSN Live / Last Played'],
+    ['youtube.last-played', 'youtube.now-playing', 'YouTube — last played', 'YouTube Live / Last Played'],
+    ['autodarts.last-match', 'autodarts.now', 'Autodarts — last match', 'Autodarts Live / Last Played'],
+    ['huupe.last-game', 'huupe.now', 'Huupe — last game', 'Huupe Live / Last Played'],
+  ];
+  for (const [from, to, oldLabel, newLabel] of remaps) {
+    const rule = normaliseRule({
+      commandId: from,
+      label: oldLabel,
+      params: { mode: from.endsWith('match') ? 'last-match' : from.endsWith('game') ? 'last-game' : 'last-played' },
+    });
+    assert.equal(rule.commandId, to, from);
+    assert.equal(rule.label, newLabel, from);
+    assert.equal(rule.params.mode, undefined, from);
+  }
+});
+
 test('retired plex.last-played rules become Feature Presentation auto', () => {
   const rule = normaliseRule({
     commandId: 'plex.last-played',

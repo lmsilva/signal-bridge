@@ -412,8 +412,8 @@ const COMMANDS = [
   },
   {
     id: 'steam.now-playing',
-    title: 'Steam',
-    subtitle: 'Now playing, or last played',
+    title: 'Steam Live / Last Played',
+    subtitle: 'Live if a game is on, otherwise last played',
     group: 'Steam',
     route: '/api/push/steam-now-playing',
     icon: 'steam',
@@ -433,9 +433,9 @@ const COMMANDS = [
     route: '/api/push/steam-now-playing',
     icon: 'steam',
     body: { mode: 'last-played' },
-    // Scheduler-only: the Push tab exposes one Steam tile that auto-picks.
+    // Settings can still force last-played. The scheduler uses the auto tile.
     pushable: false,
-    schedulable: true,
+    schedulable: false,
     supportsContentCheck: false,
     variableDuration: false,
     defaultDurationSeconds: 90,
@@ -464,8 +464,8 @@ const COMMANDS = [
   },
   {
     id: 'psn.now-playing',
-    title: 'PSN',
-    subtitle: 'Now playing, or last played',
+    title: 'PSN Live / Last Played',
+    subtitle: 'Live if a game is on, otherwise last played',
     group: 'PSN',
     route: '/api/push/psn-now-playing',
     icon: 'psn',
@@ -485,7 +485,7 @@ const COMMANDS = [
     icon: 'psn',
     body: { mode: 'last-played' },
     pushable: false,
-    schedulable: true,
+    schedulable: false,
     supportsContentCheck: false,
     variableDuration: false,
     defaultDurationSeconds: 90,
@@ -531,8 +531,8 @@ const COMMANDS = [
   },
   {
     id: 'autodarts.now',
-    title: 'Autodarts',
-    subtitle: 'Live match, or the last one',
+    title: 'Autodarts Live / Last Played',
+    subtitle: 'Live if a match is on, otherwise the last one',
     group: 'Autodarts',
     route: '/api/push/autodarts-now',
     icon: 'autodarts',
@@ -552,7 +552,7 @@ const COMMANDS = [
     icon: 'autodarts',
     body: { mode: 'last-match' },
     pushable: false,
-    schedulable: true,
+    schedulable: false,
     supportsContentCheck: true,
     variableDuration: false,
     defaultDurationSeconds: 90,
@@ -572,8 +572,8 @@ const COMMANDS = [
   },
   {
     id: 'huupe.now',
-    title: 'Huupe Live',
-    subtitle: 'Live session, or the last one',
+    title: 'Huupe Live / Last Played',
+    subtitle: 'Live if a session is on, otherwise the last one',
     group: 'Huupe',
     route: '/api/push/huupe-now',
     icon: 'huupe',
@@ -1294,8 +1294,8 @@ const COMMANDS = [
   },
   {
     id: 'youtube.now-playing',
-    title: 'YouTube',
-    subtitle: 'Now playing, or last played',
+    title: 'YouTube Live / Last Played',
+    subtitle: 'Live if a video is on, otherwise last played',
     group: 'YouTube',
     route: '/api/push/youtube-now-playing',
     icon: 'youtube',
@@ -1315,7 +1315,7 @@ const COMMANDS = [
     icon: 'youtube',
     body: { mode: 'last-played' },
     pushable: false,
-    schedulable: true,
+    schedulable: false,
     // Empty history used to look "ready" and Air now returned a cryptic 502.
     supportsContentCheck: true,
     variableDuration: false,
@@ -1473,18 +1473,23 @@ function createCommandRegistry(deps = {}) {
   const contentChecks = {
     'steam.now-playing': () => {
       const status = call(getSteamStatus);
-      return Boolean(status?.session && !status.session.suppressed);
+      if (!status) return false;
+      // Auto: a live card if someone is playing, otherwise last played.
+      if (status.session && !status.session.suppressed) return true;
+      return Boolean(status.lastAccountAppId || status.configured);
     },
     'steam.library-tour': () => Number(call(getSteamLibraryCount) || 0) > 0,
     'psn.now-playing': () => {
       const status = call(getPsnStatus);
-      return Boolean(status?.session && !status.session.suppressed);
+      if (!status) return false;
+      if (status.session && !status.session.suppressed) return true;
+      return Boolean(status.configured);
     },
     'psn.library-tour': () => Number(call(getPsnLibraryCount) || 0) > 0,
     'credits.show': () => Number(call(getRollCreditsStatus)?.gameCount || 0) > 0,
     'youtube.now-playing': () => {
       const status = call(getYoutubeStatus);
-      return Boolean(status?.playing);
+      return Boolean(status?.playing || status?.hasHistory || status?.lastPlayed);
     },
     'youtube.last-played': () => {
       const status = call(getYoutubeStatus);
