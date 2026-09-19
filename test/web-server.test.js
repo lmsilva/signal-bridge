@@ -2182,6 +2182,10 @@ test('event routing settings default to all displays and round-trip restrictions
     assert.equal(empty.status, 200);
     assert.ok(Array.isArray(empty.body.catalog));
     assert.ok(empty.body.catalog.length > 5);
+    assert.ok(
+      empty.body.catalog.some((row) => row.id === 'alexa.smarthome' && row.label === 'Alexa Smarthome'),
+      'catalog lists Alexa Smarthome separately from Broadcasts',
+    );
     assert.equal(empty.body.settings.version, 2);
     assert.deepEqual(empty.body.settings.families['media.plex'], {
       routes: [{ destinations: 'all', slots: [] }],
