@@ -60,6 +60,7 @@
   let artPainter = null;
   let artEditingId = null;
   let artSearchTimer = null;
+  let artFilter = 'all';
   const DATE_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DATE_MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -662,10 +663,27 @@
   // Vestaboard", "every software display") only ever confused the picker.
   function fillTargets() {
     const select = $('push-target');
+    if (select) {
+      const chosen = select.value;
+      const extras = displays.map((row) => `<option value="${row.id}">${row.name || row.id}</option>`).join('');
+      select.innerHTML = `<option value="*">All displays</option>${extras}`;
+      if (chosen && [...select.options].some((option) => option.value === chosen)) {
+        select.value = chosen;
+      }
+    }
+    fillArtTargets();
+  }
+
+  /** The Artwork tab's own Display picker — boards only, since flaps are the point. */
+  function fillArtTargets() {
+    const select = $('art-target');
     if (!select) return;
     const chosen = select.value;
-    const extras = displays.map((row) => `<option value="${row.id}">${row.name || row.id}</option>`).join('');
-    select.innerHTML = `<option value="*">All displays</option>${extras}`;
+    const boards = displays.filter((row) => row.kind === 'vestaboard');
+    const extras = boards
+      .map((row) => `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name || row.id)}</option>`)
+      .join('');
+    select.innerHTML = `<option value="vestaboard">All Vestaboards</option>${extras}`;
     if (chosen && [...select.options].some((option) => option.value === chosen)) {
       select.value = chosen;
     }
@@ -771,8 +789,13 @@
     const params = new URLSearchParams({ pageSize: '50' });
     const needle = String($('art-search')?.value || '').trim();
     if (needle) params.set('q', needle);
-    if ($('art-favourites-only')?.checked) params.set('favourites', '1');
+    if (artFilter === 'favourites') params.set('favourites', '1');
     return params.toString();
+  }
+
+  /** Artwork is flaps-only, so the picker offers boards rather than every display. */
+  function artTargetId() {
+    return $('art-target')?.value || 'vestaboard';
   }
 
   function renderArtwork() {
@@ -790,10 +813,10 @@
           <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
         </div>
         <div class="fp-card-actions">
-          <button type="button" class="btn btn-accent btn-sm" data-art-push="${escapeHtml(art.id)}">Push</button>
-          <button type="button" class="btn btn-outline btn-sm fp-star${art.favourite ? ' is-on' : ''}" data-art-star="${escapeHtml(art.id)}" aria-pressed="${art.favourite ? 'true' : 'false'}">${art.favourite ? '\u2605' : '\u2606'} Favourite</button>
-          <button type="button" class="btn btn-outline btn-sm" data-art-edit="${escapeHtml(art.id)}">Edit</button>
-          <button type="button" class="btn btn-outline btn-sm" data-art-remove="${escapeHtml(art.id)}">Remove</button>
+          <button type="button" class="su-btn su-btn-sm" data-art-push="${escapeHtml(art.id)}">Push</button>
+          <button type="button" class="su-btn su-btn-ghost su-btn-sm fp-star${art.favourite ? ' is-on' : ''}" data-art-star="${escapeHtml(art.id)}" aria-pressed="${art.favourite ? 'true' : 'false'}" aria-label="Favourite" title="${art.favourite ? 'Remove from favourites' : 'Add to favourites'}">${art.favourite ? '\u2605' : '\u2606'}</button>
+          <button type="button" class="su-btn su-btn-ghost su-btn-sm" data-art-edit="${escapeHtml(art.id)}">Edit</button>
+          <button type="button" class="su-btn su-btn-ghost su-btn-sm" data-art-remove="${escapeHtml(art.id)}">Remove</button>
         </div>
       </article>
     `).join('');
@@ -803,7 +826,7 @@
     });
     if (empty) {
       empty.hidden = artwork.length > 0;
-      empty.textContent = $('art-search')?.value || $('art-favourites-only')?.checked
+      empty.textContent = $('art-search')?.value || artFilter === 'favourites'
         ? 'Nothing matches that.'
         : 'Nothing here yet.';
     }
@@ -826,7 +849,7 @@
 
   async function pushArtwork(body) {
     try {
-      const result = await api('/api/push/vestaboard-artwork', targetBody(body));
+      const result = await api('/api/push/vestaboard-artwork', { ...body, targetId: artTargetId() });
       toast(result.fellBack
         ? `Sent ${result.artwork.name} — nothing is favourited yet`
         : `Sent ${result.artwork.name}`);
@@ -894,7 +917,15 @@
     $('btn-art-push')?.addEventListener('click', () => {
       pushArtwork({ mode: $('art-push-mode')?.value || 'random' });
     });
-    $('art-favourites-only')?.addEventListener('change', loadArtwork);
+    $('art-filter')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-art-filter]');
+      if (!btn) return;
+      artFilter = btn.dataset.artFilter;
+      $('art-filter').querySelectorAll('button').forEach((node) => {
+        node.classList.toggle('active', node === btn);
+      });
+      loadArtwork();
+    });
     $('art-search')?.addEventListener('input', () => {
       clearTimeout(artSearchTimer);
       artSearchTimer = setTimeout(loadArtwork, 220);

@@ -10,9 +10,9 @@
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=signal250">
   <link rel="stylesheet" href="/guestbook/guestbook.css">
-  <link rel="stylesheet" href="styles.css?v=signal323">
-  <link rel="stylesheet" href="/scheduler.css?v=signal323">
-  <link rel="stylesheet" href="/flap-paint.css?v=signal323">
+  <link rel="stylesheet" href="styles.css?v=signal324">
+  <link rel="stylesheet" href="/scheduler.css?v=signal324">
+  <link rel="stylesheet" href="/flap-paint.css?v=signal324">
 </head>
 <body>
   <header class="su-head">
@@ -315,38 +315,35 @@
     </section>
 
     <section class="tab-panel" id="tab-artwork" hidden>
-      <div class="su-page-head">
-        <div class="su-page-head-copy">
-          <h2 class="su-h">Vestaboard Artwork</h2>
-          <p class="hint" id="art-summary">Paint the board flap by flap, or start from one of the shipped designs.</p>
-        </div>
-        <button type="button" class="su-btn su-btn-sm" id="btn-art-new">New drawing</button>
+      <!-- Artwork only ever lands on flaps, so this picker lists boards, not every display. -->
+      <div class="su-display-field">
+        <label class="su-label" for="art-target">Display</label>
+        <select id="art-target" class="su-input">
+          <option value="vestaboard">All Vestaboards</option>
+        </select>
       </div>
-
-      <div class="fp-push-row">
-        <div>
-          <label class="field-label" for="art-push-mode">Send</label>
-          <select class="field-input" id="art-push-mode">
+      <input id="art-search" class="su-input" type="search" placeholder="Search your drawings…" autocomplete="off">
+      <div class="su-filter-bar">
+        <div class="su-seg" id="art-filter" role="group" aria-label="Which drawings">
+          <button type="button" class="active" data-art-filter="all">All</button>
+          <button type="button" data-art-filter="favourites">Favourites</button>
+        </div>
+        <div class="art-send">
+          <select id="art-push-mode" class="su-input" aria-label="What to send">
             <option value="random">Any of them</option>
             <option value="favorite">One of my favourites</option>
           </select>
+          <button type="button" class="su-btn su-btn-sm" id="btn-art-push">Push to board</button>
         </div>
-        <button type="button" class="btn btn-accent" id="btn-art-push">Push to board</button>
       </div>
-
-      <div class="fp-editor-row">
-        <div class="fp-editor-name">
-          <label class="field-label" for="art-search">Search</label>
-          <input class="field-input" type="search" id="art-search" placeholder="Name" autocomplete="off">
-        </div>
-        <label class="trivia-check">
-          <input type="checkbox" id="art-favourites-only">
-          <span>Favourites only</span>
-        </label>
+      <div class="su-row-head">
+        <h2 class="su-h">Vestaboard Artwork</h2>
+        <button type="button" class="su-btn su-btn-sm" id="btn-art-new">New drawing</button>
       </div>
+      <p class="hint" id="art-summary">Paint the board flap by flap, or start from one of the shipped designs.</p>
 
       <div class="fp-gallery" id="art-gallery"></div>
-      <p class="fp-empty" id="art-empty" hidden>Nothing here yet.</p>
+      <p class="hint fp-empty" id="art-empty" hidden>Nothing here yet.</p>
     </section>
   </main>
 
@@ -357,14 +354,14 @@
         <button type="button" class="su-text" id="btn-art-close">Close</button>
       </div>
 
-      <div class="fp-editor-row">
-        <div class="fp-editor-name">
-          <label class="field-label" for="art-name">Name</label>
-          <input class="field-input" type="text" id="art-name" maxlength="48" placeholder="Sunset over the hill" autocomplete="off">
+      <div class="art-dialog-fields">
+        <div>
+          <label class="su-label" for="art-name">Name</label>
+          <input class="su-input" type="text" id="art-name" maxlength="48" placeholder="Sunset over the hill" autocomplete="off">
         </div>
         <div>
-          <label class="field-label" for="art-template">Start from</label>
-          <select class="field-input" id="art-template"></select>
+          <label class="su-label" for="art-template">Start from</label>
+          <select class="su-input" id="art-template"></select>
         </div>
       </div>
 
@@ -389,11 +386,10 @@
         <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
       </div>
 
-      <div class="fp-editor-row">
-        <button type="button" class="btn btn-outline btn-sm" id="btn-art-undo">Undo</button>
-        <button type="button" class="btn btn-outline btn-sm" id="btn-art-clear">Clear</button>
-        <span style="flex:1"></span>
-        <button type="button" class="btn btn-accent" id="btn-art-save">Save</button>
+      <div class="su-dialog-actions art-dialog-actions">
+        <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-art-undo">Undo</button>
+        <button type="button" class="su-btn su-btn-ghost su-btn-sm" id="btn-art-clear">Clear</button>
+        <button type="button" class="su-btn su-btn-sm" id="btn-art-save">Save</button>
       </div>
     </div>
   </div>
@@ -793,15 +789,15 @@
   </div>
 
   <script src="/flap-grid.js"></script>
-  <script src="/flap-paint.js?v=signal323"></script>
+  <script src="/flap-paint.js?v=signal324"></script>
   <script src="/red-letter-presets.js?v=signal260"></script>
-  <script src="/push-icons.js?v=signal323"></script>
+  <script src="/push-icons.js?v=signal324"></script>
   <script src="/vestaboard-sim-ui.js?v=signal317"></script>
   <script src="/guestbook/guestbook.js"></script>
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="/ui-dialog.js?v=signal310"></script>
   <script src="/week-grid.js?v=signal310"></script>
-  <script src="/scheduler-ui.js?v=signal323"></script>
-  <script src="app.js?v=signal323"></script>
+  <script src="/scheduler-ui.js?v=signal324"></script>
+  <script src="app.js?v=signal324"></script>
 </body>
 </html>

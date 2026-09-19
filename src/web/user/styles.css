@@ -1090,6 +1090,46 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
 .profile-dialog { max-width: 640px; }
 .gb-name-hidden .gb-header { padding-top: 0; }
 
+/*
+ * Vestaboard Artwork. The gallery and the painter come from the shared
+ * flap-paint.css so admin gets the same tiles; everything around them is the
+ * household portal's own kit, which is what keeps the type matching the rest
+ * of the tabs.
+ */
+#tab-artwork #art-search { margin-bottom: 4px; }
+.art-send {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+.art-send .su-input { width: auto; max-width: 240px; padding: 8px 12px; font-size: 0.9rem; }
+.art-send .su-btn { flex: 0 0 auto; }
+/* Wide enough for 22 columns of flaps to stay legible while painting. */
+.art-dialog { max-width: 900px; }
+.art-dialog-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 14px;
+}
+/* Undo and Clear belong to the board; Save is the way out, so it sits apart. */
+.art-dialog-actions { justify-content: flex-start; }
+.art-dialog-actions .su-btn { flex: 0 0 auto; }
+.art-dialog-actions #btn-art-save { margin-left: auto; }
+/* Four actions per card, so they have to be smaller than a page button — and
+   the star carries its own meaning, so it goes without a caption. */
+#tab-artwork .fp-card-actions .su-btn {
+  padding: 6px 9px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+#tab-artwork .fp-card-actions .fp-star {
+  padding: 6px 8px;
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
 /* Message tab — phone keeps a readable column; tablet/desktop fill the
    leftover viewport so the board and send controls never need a scrollbar. */
 #tab-main .gb-name-hidden .gb-main {
@@ -1249,6 +1289,8 @@ body.vb-queue-dragging .vb-queue-handle { cursor: grabbing; }
   .avatar-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .date-list, .game-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .date-form-grid { grid-template-columns: 1fr 1fr; }
+  .art-dialog { width: min(900px, calc(100vw - 48px)); }
+  .art-dialog-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 220px); }
   .su-toolbar .su-btn, .su-dialog-actions .su-btn { width: auto; }
   .su-backdrop {
     align-items: center;
