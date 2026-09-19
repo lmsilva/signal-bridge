@@ -39,10 +39,33 @@ test('destinations accept class shortcuts and specific display lists', () => {
 
 test('classify maps common automated payload types', () => {
   assert.equal(classifyPayload({ type: 'alarm.fired' }), 'alexa.alarms');
+  assert.equal(classifyPayload({ type: 'broadcast' }), 'alexa.broadcast');
+  assert.equal(classifyPayload({ type: 'smart-home.command' }), 'alexa.smarthome');
   assert.equal(classifyPayload({ type: 'plex.now-playing' }), 'media.plex');
   assert.equal(classifyPayload({ type: 'youtube.now-playing' }), 'media.youtube');
   assert.equal(classifyPayload({ type: 'steam.now-playing.close' }), 'media.steam');
   assert.equal(classifyPayload({ type: 'unknown.thing' }), null);
+  assert.ok(FAMILIES.some((row) => row.id === 'alexa.smarthome' && row.label === 'Alexa Smarthome'));
+});
+
+test('smarthome routing is independent of broadcasts', () => {
+  const settings = sanitiseSettings({
+    families: {
+      'alexa.smarthome': {
+        routes: [{ destinations: 'vestaboard', slots: [] }],
+      },
+    },
+  });
+
+  const lights = resolveRoute({ type: 'smart-home.command' }, {}, settings);
+  assert.equal(lights.skip, false);
+  assert.equal(lights.family, 'alexa.smarthome');
+  assert.deepEqual(lights.targets, ['vestaboard']);
+
+  const dinner = resolveRoute({ type: 'broadcast' }, {}, settings);
+  assert.equal(dinner.skip, false);
+  assert.equal(dinner.family, 'alexa.broadcast');
+  assert.equal(dinner.targets, null);
 });
 
 test('manual and scheduler sends bypass routing', () => {

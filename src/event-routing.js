@@ -18,6 +18,7 @@ const FAMILIES = Object.freeze([
   { id: 'alexa.timers', label: 'Timers', blurb: 'Kitchen and reminder timers' },
   { id: 'alexa.reminders', label: 'Reminders', blurb: 'Alexa reminder fires' },
   { id: 'alexa.broadcast', label: 'Broadcasts', blurb: 'Alexa announce / broadcast messages' },
+  { id: 'alexa.smarthome', label: 'Alexa Smarthome', blurb: 'Turn lights, plugs, and other devices on or off' },
   { id: 'alexa.music', label: 'Alexa music', blurb: 'Now Playing cards from Echo speakers' },
   { id: 'alexa.shopping', label: 'Shopping list', blurb: 'Shopping list snapshots' },
   { id: 'alexa.voice', label: 'Voice answers', blurb: 'Weather, time, Tesla, and other spoken answers' },
@@ -44,6 +45,7 @@ const TYPE_TO_FAMILY = Object.freeze({
   'timer.fired': 'alexa.timers',
   'reminder.fired': 'alexa.reminders',
   broadcast: 'alexa.broadcast',
+  'smart-home.command': 'alexa.smarthome',
   'music.playing': 'alexa.music',
   'shopping-list.snapshot': 'alexa.shopping',
   'weather.query': 'alexa.voice',
@@ -271,6 +273,7 @@ function classifyPayload(payload = {}, options = {}) {
   if (type.startsWith('reminder.')) return 'alexa.reminders';
   if (type.startsWith('music.')) return 'alexa.music';
   if (type.startsWith('shopping')) return 'alexa.shopping';
+  if (type.startsWith('smart-home')) return 'alexa.smarthome';
   return null;
 }
 
