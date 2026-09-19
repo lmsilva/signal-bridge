@@ -225,16 +225,31 @@ function resolveStatusBase(flight = {}, options = {}) {
   };
 }
 
+/**
+ * `1:45PM` — the one clock shape this file prints.
+ *
+ * No leading zero on the hour and no space before the meridiem, matching
+ * `vestaboard/clock.js` so a flight card reads like every other board card.
+ */
+function twelveHour(hour24, minute) {
+  const h = Number(hour24);
+  const m = Number(minute);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return '';
+  const meridiem = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')}${meridiem}`;
+}
+
+/** `1:45PM` for a status line. Never 24-hour — the house reads AM/PM. */
 function formatTimeShort(value) {
   const ms = parseIsoMs(value);
   if (ms == null) {
     const text = String(value || '').trim();
     const match = text.match(/(\d{1,2}):(\d{2})/);
-    if (match) return `${match[1].padStart(2, '0')}:${match[2]}`;
+    if (match) return twelveHour(Number(match[1]), Number(match[2]));
     return '';
   }
   const d = new Date(ms);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return twelveHour(d.getHours(), d.getMinutes());
 }
 
 function parseHourMinute(value) {
@@ -253,20 +268,16 @@ function parseHourMinute(value) {
   return { hour: d.getHours(), minute: d.getMinutes() };
 }
 
-function formatBoardTime(value) {
-  const parts = parseHourMinute(value);
-  if (!parts) return '----';
-  return `${String(parts.hour).padStart(2, '0')}${String(parts.minute).padStart(2, '0')}`;
-}
-
-/** 12-hour clock with A/P suffix for a tracker card: 13:45 → 1:45P. */
+/**
+ * Airport-local 12-hour clock for a tracker card: 13:45-07:00 → 1:45PM.
+ *
+ * Seven columns at worst (`12:05AM`), so a departure and an arrival still sit
+ * either side of the badge frame's 16-column band with room between them.
+ */
 function formatTrackerClock(value) {
   const parts = parseHourMinute(value);
   if (!parts) return '';
-  const ampm = parts.hour >= 12 ? 'P' : 'A';
-  let hour = parts.hour % 12;
-  if (hour === 0) hour = 12;
-  return `${hour}:${String(parts.minute).padStart(2, '0')}${ampm}`;
+  return twelveHour(parts.hour, parts.minute);
 }
 
 function stampFromLeg(node = {}) {
@@ -321,7 +332,6 @@ module.exports = {
   minutesBetween,
   parseIsoMs,
   formatTimeShort,
-  formatBoardTime,
   formatTrackerClock,
   formatTrackerFlightNumber,
   formatBoardFlightNumber,

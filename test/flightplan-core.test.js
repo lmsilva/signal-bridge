@@ -249,11 +249,13 @@ test('flightPlanBoardFrames builds a valid Vestaboard layout for a trip board', 
   assert.match(text, /DL 167/);
   assert.match(text, /SEA -/);
   assert.match(text, /HND/);
-  assert.match(text, /1:45P/);
-  assert.match(text, /4:00P/);
+  assert.match(text, /1:45PM/);
+  assert.match(text, /4:00PM/);
   assert.match(text, /ON TIME/);
   assert.match(text, /AS OF/);
-  assert.match(text, /12:00/); // 18:00Z → noon MDT
+  assert.match(text, /12:00PM/); // 18:00Z → noon MDT
+  // Nothing on the card may fall back to a 24-hour clock.
+  assert.doesNotMatch(text, /\b1[3-9]:\d{2}\b/);
   assert.match(text, /D-\d+/);
   assert.doesNotMatch(text, /DEP\s+FLIGHT/);
 });
@@ -268,12 +270,16 @@ test('tracker flight number is readable', () => {
   assert.equal(formatTrackerFlightNumber('DL', 'DL167'), 'DL 167');
 });
 
-test('formatBoardTime keeps airport-local wall clock from ISO offset', () => {
-  const { formatBoardTime, formatTrackerClock } = require('../src/flightplan-status');
-  assert.equal(formatBoardTime('2027-06-24T13:45:00-07:00'), '1345');
-  assert.equal(formatBoardTime('2027-06-24T19:00:00'), '1900');
-  assert.equal(formatTrackerClock('2027-06-24T13:45:00-07:00'), '1:45P');
-  assert.equal(formatTrackerClock('2027-06-24T19:00:00'), '7:00P');
-  assert.equal(formatTrackerClock('2027-06-24T00:05:00'), '12:05A');
-  assert.equal(formatTrackerClock('2027-06-24T12:00:00'), '12:00P');
+test('formatTrackerClock keeps airport-local wall clock and prints AM/PM', () => {
+  const { formatTrackerClock, formatTimeShort } = require('../src/flightplan-status');
+  assert.equal(formatTrackerClock('2027-06-24T13:45:00-07:00'), '1:45PM');
+  assert.equal(formatTrackerClock('2027-06-24 10:15-06:00'), '10:15AM');
+  assert.equal(formatTrackerClock('2027-06-24T19:00:00'), '7:00PM');
+  assert.equal(formatTrackerClock('2027-06-24T00:05:00'), '12:05AM');
+  assert.equal(formatTrackerClock('2027-06-24T12:00:00'), '12:00PM');
+  // Widest shape is seven columns, so two of them fit the 16-column badge band.
+  assert.ok(formatTrackerClock('2027-06-24T00:05:00').length <= 7);
+  // Status lines share the shape rather than falling back to 24-hour.
+  assert.equal(formatTimeShort('2027-06-24T13:45:00'), '1:45PM');
+  assert.equal(formatTimeShort('departs 09:05'), '9:05AM');
 });

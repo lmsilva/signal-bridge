@@ -410,9 +410,9 @@ test('next flight is a Flight Tracker card: trip name, route, both clocks, statu
     'gg    JAPAN 2027    gg',
     ' DL 167         TODAY',
     ' SEA -            HND',
-    ' 1:45P          4:40P',
+    ' 1:45PM        4:40PM',
     ' ON TIME     GATE B14',
-    'gg   AS OF    12:00 gg',
+    'gg  AS OF   12:00PM gg',
   ], 'next flight tracker');
 });
 
@@ -446,9 +446,9 @@ test('a delayed flight uses estimated time, orange chips, and DELAYED 25 MIN', (
     'oo   NEXT FLIGHT    oo',
     ' UA 1234        TODAY',
     ' SLC -            NRT',
-    ' 10:25A         1:20P',
+    ' 10:25AM       1:20PM',
     ' DELAYED 25 MIN',
-    'oo   AS OF    12:00 oo',
+    'oo  AS OF   12:00PM oo',
   ], 'delayed flight tracker');
 });
 
@@ -475,9 +475,9 @@ test('an airborne flight reads IN FLIGHT with blue chips', () => {
     'bb   NEXT FLIGHT    bb',
     ' DL 167           NOW',
     ' SEA -            HND',
-    ' 10:00A         2:00P',
+    ' 10:00AM       2:00PM',
     ' IN FLIGHT',
-    'bb   AS OF    12:00 bb',
+    'bb  AS OF   12:00PM bb',
   ], 'airborne flight tracker');
 });
 
@@ -515,16 +515,16 @@ test('a trip board pages one tracker card per flight', () => {
     'gg    JAPAN 2027    gg',
     ' DL 167     TODAY 1/2',
     ' SEA -            HND',
-    ' 1:45P          4:40P',
+    ' 1:45PM        4:40PM',
     ' ON TIME',
-    'gg   AS OF    12:00 gg',
+    'gg  AS OF   12:00PM gg',
   ], 'trip board page 1');
   assertLayout(frames[1].rows, [
     'gg    JAPAN 2027    gg',
     ' DL 168       D-3 2/2',
     ' HND -            SEA',
-    ' 11:00A         5:30A',
+    ' 11:00AM       5:30AM',
     ' ON TIME',
-    'gg   AS OF    12:00 gg',
+    'gg  AS OF   12:00PM gg',
   ], 'trip board page 2');
 });

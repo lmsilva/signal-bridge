@@ -71,7 +71,9 @@ const { wordRows } = require('../../word-of-the-day-layout');
 const { versePages } = require('../../bible-verse-layout');
 const { stateRows } = require('../../us-state-facts-layout');
 const { redLetterRows } = require('../../red-letter');
-const { dateParts, daysBetween, houseTimeZone } = require('../clock');
+const {
+  clockLabel, dateParts, daysBetween, houseTimeZone,
+} = require('../clock');
 
 const BODY_WIDTH = BODY_TO - BODY_FROM + 1;
 // Spec text says 22; the drawing wraps at the 20-column body so a 22-letter
@@ -507,9 +509,7 @@ function flightPlanTripTitle(payload = {}) {
 
 function flightPlanAsOfLabel(payload = {}, ctx = {}) {
   const zone = ctx.timeZone || houseTimeZone(ctx.config);
-  const parts = dateParts(payload.asOf || new Date(), zone);
-  if (!parts) return '';
-  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+  return clockLabel(payload.asOf || new Date(), { timeZone: zone });
 }
 
 function flightPlanStatusRow(headline, gate) {
