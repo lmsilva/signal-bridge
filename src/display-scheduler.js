@@ -754,7 +754,12 @@ function createDisplayScheduler(deps = {}) {
       const dueAt = rule.pending ? nowMs : Date.parse(rule.nextEvalAt);
       if (!Number.isFinite(dueAt)) continue;
       if (!best || dueAt < best.dueAt) {
-        best = { ruleId: rule.id, label: rule.label, dueAt };
+        best = {
+          ruleId: rule.id,
+          label: rule.label,
+          target: rule.target || 'full',
+          dueAt,
+        };
       }
     }
     if (!best) {
