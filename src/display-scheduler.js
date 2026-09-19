@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   createRuleStore, scoreRule, expectedPerDay, gapProfile, normaliseTarget, resolveCommandId,
-  mondayIndexToSunday, DEFAULT_HOLD_SECONDS,
+  mondayIndexToSunday, DEFAULT_HOLD_SECONDS, DEFAULT_CLOSING_HOLD_MINUTES,
 } = require('./scheduler-rules');
 const { kindsOf, COMMANDS } = require('./command-registry');
 const {
@@ -137,6 +137,9 @@ function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
 /**
  * @param {Object} deps
  * @param {Function} deps.air            (rule, command) => Promise|void — fires the page.
+ * @param {Function} [deps.airClosingArtwork] (rule, closing) => Promise — the
+ *   clean-up board a rule finishes with. Injected so the engine never needs to
+ *   know about the Artwork gallery or the push routes.
  * @param {Function} deps.isBusy         () => boolean — §6 precedence check.
  * @param {Object}   deps.commandRegistry
  * @param {Function} [deps.now]          Injectable clock (ms).
@@ -148,6 +151,7 @@ function createDisplayScheduler(deps = {}) {
     log = console,
     commandRegistry = null,
     air = null,
+    airClosingArtwork = null,
     isBusy = () => false,
     isPresent = () => true,
     now = () => Date.now(),
@@ -618,6 +622,52 @@ function createDisplayScheduler(deps = {}) {
   }
 
   /**
+   * Finish a board airing by clearing the flaps with a piece from the Artwork
+   * gallery, then parking the queue behind it (§ rule `closingArtwork`).
+   *
+   * Only chases a page that actually reached a board: a Windows-only rule has
+   * nothing to clean up, and neither does an airing the board queue dropped
+   * for the rotation gap or quiet hours.
+   */
+  async function airClosing(rule, event, airResult) {
+    const closing = rule.closingArtwork;
+    if (!closing || typeof airClosingArtwork !== 'function') {
+      return null;
+    }
+    const landed = Array.isArray(airResult?.boardOutcomes)
+      && airResult.boardOutcomes.some((row) => Number(row?.accepted) > 0);
+    if (!landed) {
+      return null;
+    }
+
+    const holdMinutes = Number(closing.holdMinutes) || DEFAULT_CLOSING_HOLD_MINUTES;
+    const holdSeconds = Math.max(60, Math.round(holdMinutes * 60));
+    const clearQueue = closing.clearQueue !== false;
+    try {
+      const outcome = await airClosingArtwork(rule, {
+        mode: closing.mode || 'random',
+        artworkId: closing.artworkId || null,
+        holdSeconds,
+        clearQueue,
+      });
+      const name = outcome?.artwork?.name || 'artwork';
+      activity.amend(event?.id, {
+        detail: `Cleared with ${name}, held ${holdMinutes} min`
+          + (clearQueue ? ', then dropped the scheduled pages behind it' : ''),
+      });
+      return outcome;
+    } catch (error) {
+      // The airing itself went out. An empty gallery, or a pinned piece
+      // someone deleted, must not turn a good airing into an error.
+      log?.warn?.('Closing artwork did not air', error?.message || error);
+      activity.amend(event?.id, {
+        detail: `Closing artwork did not air: ${error?.message || error}`,
+      });
+      return null;
+    }
+  }
+
+  /**
    * Fire one rule and hold the display for its duration.
    *
    * `lastAiringAt` is stamped when the sequence **completes**, not when it
@@ -655,8 +705,9 @@ function createDisplayScheduler(deps = {}) {
     const lockDisplay = holdsDisplay !== false && !isBoardOnlyRule(rule);
 
     let event;
+    let airResult = null;
     try {
-      const airResult = await air?.(rule, command, {
+      airResult = await air?.(rule, command, {
         durationSeconds: planned,
         // Only an explicit rule hold parks the Vestaboard queue. Cadence
         // page time is dwell, not a guest hold — Roast Me! (and the rest
@@ -680,6 +731,8 @@ function createDisplayScheduler(deps = {}) {
       store.persist();
       return event2;
     }
+
+    await airClosing(rule, event, airResult);
 
     rule.pending = false;
     delete rule.pendingSince;

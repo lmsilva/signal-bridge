@@ -55,6 +55,11 @@
   let confirmResolver = null;
   let schedulerUi = null;
   let schedulerNeedsRefresh = false;
+  let artwork = [];
+  let artTemplates = [];
+  let artPainter = null;
+  let artEditingId = null;
+  let artSearchTimer = null;
   const DATE_WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const DATE_MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -141,6 +146,7 @@
       if (schedulerUi?.refresh) schedulerUi.refresh();
       else schedulerNeedsRefresh = true;
     }
+    if (name === 'artwork') loadArtwork();
   }
 
   function escapeHtml(value) {
@@ -742,18 +748,212 @@
     const canSlides = me.isAdmin || me.permissions?.slideshow;
     const canDates = me.isAdmin || me.permissions?.redLetter;
     const canSched = me.isAdmin || me.permissions?.scheduler;
+    const canArtwork = me.isAdmin || me.permissions?.vestaboardArtwork;
     document.querySelector('[data-tab="flight"]').hidden = !canFlight;
     document.querySelector('[data-tab="slideshow"]').hidden = !canSlides;
     document.querySelector('[data-tab="dates"]').hidden = !canDates;
     document.querySelector('[data-tab="scheduler"]').hidden = !canSched;
+    document.querySelector('[data-tab="artwork"]').hidden = !canArtwork;
     $('tab-flight').hidden = !canFlight;
     $('tab-slideshow').hidden = !canSlides;
     $('tab-dates').hidden = !canDates;
     $('tab-scheduler').hidden = !canSched;
+    $('tab-artwork').hidden = !canArtwork;
     const active = document.body.dataset.tab;
     if (active && !isRestorableUserTab(active)) showTab('main');
     renderAvatars();
     renderDash();
+  }
+
+  // ---------------------------------------------------------------- artwork
+
+  function artQuery() {
+    const params = new URLSearchParams({ pageSize: '50' });
+    const needle = String($('art-search')?.value || '').trim();
+    if (needle) params.set('q', needle);
+    if ($('art-favourites-only')?.checked) params.set('favourites', '1');
+    return params.toString();
+  }
+
+  function renderArtwork() {
+    const host = $('art-gallery');
+    const empty = $('art-empty');
+    if (!host) return;
+    host.innerHTML = artwork.map((art) => `
+      <article class="fp-card" data-art-id="${escapeHtml(art.id)}">
+        <div class="fp-card-head">
+          <span class="fp-card-name">${escapeHtml(art.name)}</span>
+          <span class="fp-card-tag">${art.custom ? 'Yours' : (art.edited ? 'Edited' : 'Template')}</span>
+        </div>
+        <div class="vb-bezel preview-bezel">
+          <div class="vb-grid" data-art-preview="${escapeHtml(art.id)}"></div>
+          <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
+        </div>
+        <div class="fp-card-actions">
+          <button type="button" class="btn btn-accent btn-sm" data-art-push="${escapeHtml(art.id)}">Push</button>
+          <button type="button" class="btn btn-outline btn-sm fp-star${art.favourite ? ' is-on' : ''}" data-art-star="${escapeHtml(art.id)}" aria-pressed="${art.favourite ? 'true' : 'false'}">${art.favourite ? '\u2605' : '\u2606'} Favourite</button>
+          <button type="button" class="btn btn-outline btn-sm" data-art-edit="${escapeHtml(art.id)}">Edit</button>
+          <button type="button" class="btn btn-outline btn-sm" data-art-remove="${escapeHtml(art.id)}">Remove</button>
+        </div>
+      </article>
+    `).join('');
+    artwork.forEach((art) => {
+      const grid = host.querySelector(`[data-art-preview="${CSS.escape(art.id)}"]`);
+      if (grid) window.renderFlapGrid(grid, art.cells, { interactive: false });
+    });
+    if (empty) {
+      empty.hidden = artwork.length > 0;
+      empty.textContent = $('art-search')?.value || $('art-favourites-only')?.checked
+        ? 'Nothing matches that.'
+        : 'Nothing here yet.';
+    }
+  }
+
+  async function loadArtwork() {
+    try {
+      const result = await api(`/api/vestaboard-artwork?${artQuery()}`);
+      artwork = result.artwork || [];
+      const summary = $('art-summary');
+      if (summary) {
+        summary.textContent = `${result.available} ready to send, ${result.favourites} favourite`
+          + `${result.favourites === 1 ? '' : 's'}.`;
+      }
+      renderArtwork();
+    } catch (error) {
+      toast(error.message || 'Could not load artwork');
+    }
+  }
+
+  async function pushArtwork(body) {
+    try {
+      const result = await api('/api/push/vestaboard-artwork', targetBody(body));
+      toast(result.fellBack
+        ? `Sent ${result.artwork.name} — nothing is favourited yet`
+        : `Sent ${result.artwork.name}`);
+    } catch (error) {
+      toast(error.message || 'Push failed');
+    }
+  }
+
+  function syncArtToolUi() {
+    const tool = artPainter?.getTool() || {};
+    document.querySelectorAll('#art-tools [data-art-tool]').forEach((btn) => {
+      const active = btn.dataset.artTool === tool.kind
+        && (tool.kind !== 'chip' || btn.dataset.artChip === tool.chip);
+      btn.classList.toggle('is-active', active);
+    });
+  }
+
+  function openArtEditor(art) {
+    const sheet = $('art-sheet');
+    if (!sheet) return;
+    artEditingId = art?.id || null;
+    $('art-sheet-title').textContent = art ? `Edit ${art.name}` : 'New drawing';
+    $('art-name').value = art?.name || '';
+    const template = $('art-template');
+    if (template) {
+      template.innerHTML = '<option value="">blank board</option>'
+        + artTemplates.map((row) => (
+          `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name)}</option>`
+        )).join('');
+      template.value = '';
+    }
+    sheet.hidden = false;
+    if (!artPainter) {
+      artPainter = window.createFlapPainter($('art-grid'), { onToolChange: syncArtToolUi });
+    }
+    artPainter?.setCells(art?.cells || null);
+    artPainter?.setTool({ kind: 'chip', chip: 'red' });
+    syncArtToolUi();
+  }
+
+  async function saveArtwork() {
+    if (!artPainter) return;
+    if (artPainter.isBlank()) {
+      toast('Paint something before saving');
+      return;
+    }
+    const body = { name: String($('art-name')?.value || '').trim(), cells: artPainter.getCells() };
+    if (artEditingId) body.id = artEditingId;
+    try {
+      await api('/api/vestaboard-artwork', body);
+      $('art-sheet').hidden = true;
+      toast(artEditingId ? 'Drawing saved' : 'Drawing added');
+      await loadArtwork();
+    } catch (error) {
+      toast(error.message || 'Could not save');
+    }
+  }
+
+  function wireArtwork() {
+    $('btn-art-new')?.addEventListener('click', () => openArtEditor(null));
+    $('btn-art-close')?.addEventListener('click', () => { $('art-sheet').hidden = true; });
+    $('btn-art-save')?.addEventListener('click', saveArtwork);
+    $('btn-art-undo')?.addEventListener('click', () => artPainter?.undo());
+    $('btn-art-clear')?.addEventListener('click', () => artPainter?.clear());
+    $('btn-art-push')?.addEventListener('click', () => {
+      pushArtwork({ mode: $('art-push-mode')?.value || 'random' });
+    });
+    $('art-favourites-only')?.addEventListener('change', loadArtwork);
+    $('art-search')?.addEventListener('input', () => {
+      clearTimeout(artSearchTimer);
+      artSearchTimer = setTimeout(loadArtwork, 220);
+    });
+
+    $('art-template')?.addEventListener('change', (event) => {
+      const found = artTemplates.find((row) => row.id === event.target.value);
+      if (found) artPainter?.setCells(found.cells, { resetUndo: false });
+    });
+
+    $('art-tools')?.addEventListener('click', (event) => {
+      const btn = event.target.closest('[data-art-tool]');
+      if (!btn) return;
+      artPainter?.setTool({ kind: btn.dataset.artTool, chip: btn.dataset.artChip });
+      syncArtToolUi();
+    });
+
+    $('art-gallery')?.addEventListener('click', async (event) => {
+      const push = event.target.closest('[data-art-push]');
+      if (push) {
+        await pushArtwork({ mode: 'specific', artworkId: push.dataset.artPush });
+        return;
+      }
+      const star = event.target.closest('[data-art-star]');
+      if (star) {
+        const id = star.dataset.artStar;
+        const found = artwork.find((row) => row.id === id);
+        try {
+          await api('/api/vestaboard-artwork', { id, favourite: !found?.favourite });
+          await loadArtwork();
+        } catch (error) {
+          toast(error.message || 'Could not update');
+        }
+        return;
+      }
+      const edit = event.target.closest('[data-art-edit]');
+      if (edit) {
+        openArtEditor(artwork.find((row) => row.id === edit.dataset.artEdit) || null);
+        return;
+      }
+      const remove = event.target.closest('[data-art-remove]');
+      if (remove) {
+        const found = artwork.find((row) => row.id === remove.dataset.artRemove);
+        const ok = await askConfirm({
+          title: `Remove ${found?.name || 'this drawing'}?`,
+          text: found?.custom
+            ? 'Your drawing is deleted.'
+            : 'The shipped template leaves your gallery.',
+          ok: 'Remove',
+        });
+        if (!ok) return;
+        try {
+          await api('/api/vestaboard-artwork', { id: remove.dataset.artRemove, remove: true });
+          await loadArtwork();
+        } catch (error) {
+          toast(error.message || 'Could not remove');
+        }
+      }
+    });
   }
 
   function openGameSession(session) {
@@ -1203,6 +1403,13 @@
     me = session.user;
     window.SIGNAL_AVATARS = session.templates || [];
     applyMe();
+    if (me.isAdmin || me.permissions?.vestaboardArtwork) {
+      wireArtwork();
+      // Templates never change, so one fetch covers every trip to the editor.
+      api('/api/vestaboard-artwork/templates')
+        .then((data) => { artTemplates = data.templates || []; })
+        .catch(() => {});
+    }
     {
       const fromHash = tabIdFromHash();
       const initial = isRestorableUserTab(fromHash) ? fromHash : 'main';

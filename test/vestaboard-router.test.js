@@ -518,4 +518,32 @@ test('routeEvent leaves frames without a hold when the caller did not ask for on
   });
   assert.ok(submitted.frames.length >= 1);
   assert.ok(submitted.frames.every((frame) => frame.holdSeconds == null));
+  assert.equal(submitted.options.closing, false);
+  assert.equal(submitted.options.clearQueueAfterHold, false);
+});
+
+test('a closing artwork tells the queue it is a tail page and may sweep behind it', () => {
+  let submitted = null;
+  routeEvent({
+    payload: {
+      type: 'vestaboard.artwork',
+      artwork: {
+        id: 'art-winter',
+        name: 'Winter',
+        cells: Array.from({ length: 6 }, () => new Array(22).fill(66)),
+      },
+    },
+    boards: [{ board: { id: 'sim', events: 'all' } }],
+    scheduler: true,
+    holdSeconds: 600,
+    closing: true,
+    clearQueueAfterHold: true,
+    submit: (_boardId, frames, options) => {
+      submitted = { frames, options };
+      return { ok: true, accepted: frames.length };
+    },
+  });
+  assert.equal(submitted.options.closing, true);
+  assert.equal(submitted.options.clearQueueAfterHold, true);
+  assert.equal(submitted.options.scheduler, true);
 });

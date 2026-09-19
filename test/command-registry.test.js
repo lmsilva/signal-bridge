@@ -723,6 +723,43 @@ test('family.quotes is Vestaboard-only and needs a ready quote', () => {
   assert.equal(ready.hasContent('family.quotes'), true);
 });
 
+test('artwork.show is Vestaboard-only and asks about the piece the rule wants', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'artwork.show');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'home');
+  assert.equal(command.route, '/api/push/vestaboard-artwork');
+  assert.equal(command.icon, 'artwork');
+  assert.equal(command.defaultDurationSeconds, 30);
+  assert.equal(supportsKind('artwork.show', 'vestaboard'), true);
+  assert.equal(supportsKind('artwork.show', 'full'), false);
+
+  const [mode, artworkId] = command.params;
+  assert.deepEqual(mode.values, ['random', 'favorite', 'specific']);
+  assert.equal(artworkId.type, 'options');
+  assert.equal(artworkId.optionsRoute, '/api/vestaboard-artwork/options');
+  assert.deepEqual(artworkId.dependsOn, { mode: 'specific' });
+
+  // The readiness question carries the params, so a rule pinned to one piece
+  // can be unready while the gallery as a whole is fine.
+  const asked = [];
+  const registry = createCommandRegistry({
+    getVestaboardArtworkStatus: (params) => {
+      asked.push(params);
+      return { available: params?.artworkId === 'art-winter' ? 1 : 0 };
+    },
+  });
+  assert.equal(registry.hasContent('artwork.show', { mode: 'specific', artworkId: 'art-winter' }), true);
+  assert.equal(registry.hasContent('artwork.show', { mode: 'specific', artworkId: 'art-gone' }), false);
+  assert.deepEqual(asked[0], { mode: 'specific', artworkId: 'art-winter' });
+
+  const empty = createCommandRegistry({ getVestaboardArtworkStatus: () => ({ available: 0 }) });
+  assert.equal(empty.hasContent('artwork.show'), false);
+});
+
 test('warm.fuzzies is Vestaboard-only and needs a ready fuzzy', () => {
   const command = COMMANDS.find((entry) => entry.id === 'warm.fuzzies');
   assert.ok(command);

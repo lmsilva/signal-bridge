@@ -89,6 +89,7 @@ const BOARD_COMMAND_IDS = new Set([
   'chuck.facts',
   'roast.me',
   'family.quotes',
+  'artwork.show',
   'warm.fuzzies',
   'bucket.fillers',
   'misheard.lyrics',
@@ -194,6 +195,7 @@ const PUSH_CATEGORY_BY_GROUP = Object.freeze({
   Steam: 'games',
   Tesla: 'travel',
   Trivia: 'games',
+  Vestaboard: 'home',
   YouTube: 'media',
   'Feature Presentation': 'media',
 });
@@ -902,6 +904,30 @@ const COMMANDS = [
     kinds: ['vestaboard'],
   },
   {
+    id: 'artwork.show',
+    title: 'Vestaboard Artwork',
+    subtitle: 'A painted board from your gallery',
+    group: 'Vestaboard',
+    route: '/api/push/vestaboard-artwork',
+    icon: 'artwork',
+    pushable: true,
+    schedulable: true,
+    supportsContentCheck: true,
+    variableDuration: false,
+    defaultDurationSeconds: 30,
+    kinds: ['vestaboard'],
+    params: [
+      { key: 'mode', label: 'Pick', type: 'enum', values: ['random', 'favorite', 'specific'] },
+      {
+        key: 'artworkId',
+        label: 'Artwork',
+        type: 'options',
+        optionsRoute: '/api/vestaboard-artwork/options',
+        dependsOn: { mode: 'specific' },
+      },
+    ],
+  },
+  {
     id: 'warm.fuzzies',
     title: 'Warm Fuzzies',
     subtitle: 'A compliment on the full board',
@@ -1447,6 +1473,7 @@ function createCommandRegistry(deps = {}) {
     getChuckNorrisStatus = null,
     getRoastMeStatus = null,
     getFamilyQuotesStatus = null,
+    getVestaboardArtworkStatus = null,
     getWarmFuzziesStatus = null,
     getDailyBucketFillersStatus = null,
     getMisheardLyricsStatus = null,
@@ -1581,6 +1608,11 @@ function createCommandRegistry(deps = {}) {
     'chuck.facts': () => Number(call(getChuckNorrisStatus)?.available || 0) > 0,
     'roast.me': () => Number(call(getRoastMeStatus)?.available || 0) > 0,
     'family.quotes': () => Number(call(getFamilyQuotesStatus)?.available || 0) > 0,
+    // Asking for one named piece is only ready if that piece is still there, so
+    // the mode and id go with the question.
+    'artwork.show': (params) => Number(
+      call(() => getVestaboardArtworkStatus?.(params))?.available || 0,
+    ) > 0,
     'warm.fuzzies': () => Number(call(getWarmFuzziesStatus)?.available || 0) > 0,
     'bucket.fillers': () => Number(call(getDailyBucketFillersStatus)?.available || 0) > 0,
     'misheard.lyrics': () => Number(call(getMisheardLyricsStatus)?.available || 0) > 0,

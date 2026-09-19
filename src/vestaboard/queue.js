@@ -36,6 +36,11 @@
 //     and Autodarts acquire it from the payload when the board's list
 //     marks them as holds. The lock is not inferred from a frame's
 //     `holdSeconds`. Now-playing does not hold unless configured.
+//   - a scheduler rule's closing artwork is the tail of an airing, not a new
+//     rotation page: it skips the rotation gap on the way in, and when its
+//     hold lapses it can sweep the scheduler pages that stacked up behind it
+//     (`clearQueueAfterHold`), so a long clean-up screen ends the pile-up
+//     rather than deferring it
 //
 // Time and the transport are injected so the whole thing can be tested
 // without waiting fifteen real seconds for anything.
@@ -164,6 +169,13 @@ function createQueue({
     holdUntil: null,
     /** `guest` parks scheduler pages only, for the length of `holdUntil`. */
     holdKind: null,
+    /**
+     * A scheduler rule's closing artwork asked for the board to be cleared
+     * of scheduler pages once its hold lapses. The engine keeps ticking while
+     * the clean-up screen is up, so without this the pile-up is only deferred:
+     * every rule that came due during the hold would flip in turn.
+     */
+    clearSchedulerAfterHold: false,
     /**
      * A live hold owns the board: `{ source, lane, rank, expiresAt }`.
      * Games take this when the board's Priorities list says Hold.
@@ -438,6 +450,9 @@ function createQueue({
     }
     state.holdUntil = null;
     state.holdKind = null;
+    // Ending the hold by hand is "get on with it", so the pages waiting
+    // behind a closing artwork are what the person wants to see next.
+    state.clearSchedulerAfterHold = false;
     announceQueue();
     return true;
   }
@@ -622,6 +637,25 @@ function createQueue({
   }
 
   /**
+   * Drop every waiting scheduler page. An alert and a live game's own cards
+   * are not scheduler pages, so they stay where they are.
+   */
+  function sweepSchedulerPending() {
+    let dropped = 0;
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      const item = items[i];
+      if (!item.scheduler || item.priority === 'alert') {
+        continue;
+      }
+      items.splice(i, 1);
+      dropped += 1;
+      emitCancelled(item);
+    }
+    if (dropped) announceQueue();
+    return dropped;
+  }
+
+  /**
    * Take frames for the board.
    *
    * Rotation snapshots queue in order. Jumpers go to the front without
@@ -670,8 +704,11 @@ function createQueue({
     }
 
     // A rotation flip too soon after the last one is dropped, not delayed:
-    // by the time the gap passes the content is stale anyway.
-    if (priority === 'snapshot' && options.scheduler && state.lastSchedulerFlipAt !== null) {
+    // by the time the gap passes the content is stale anyway. A closing
+    // artwork is the tail of an airing that already won its turn, not a new
+    // rotation page, so the gap must not eat the clean-up screen.
+    if (priority === 'snapshot' && options.scheduler && !options.closing
+      && state.lastSchedulerFlipAt !== null) {
       if (at - state.lastSchedulerFlipAt < rotationGapMs()) {
         log?.debug?.(`Vestaboard ${config.id} skip (gap) ${list[0].label || ''}`.trim());
         return { accepted: 0, dropped: list.length, reason: 'gap' };
@@ -730,6 +767,8 @@ function createQueue({
       boardIds,
       quietHoursExempt: isExempt(frame, options.quietHoursExempt),
       scheduler: Boolean(options.scheduler),
+      closing: Boolean(options.closing),
+      clearSchedulerAfterHold: Boolean(options.clearQueueAfterHold),
       ownerSource: ownerSource ? String(ownerSource) : null,
       commandId,
       eventTitle: options.eventTitle ? String(options.eventTitle) : null,
@@ -926,6 +965,7 @@ function createQueue({
       const holdMs = ownedByGame(item) ? 0 : holdMsOf(item.frame);
       state.holdUntil = holdMs ? at + holdMs : null;
       state.holdKind = holdMs ? 'guest' : null;
+      state.clearSchedulerAfterHold = Boolean(holdMs && item.clearSchedulerAfterHold);
       // The Settings dwell is how long a rotation page stays. Game cards
       // keep their own phase timing; do not stretch them to 60s, and do
       // not leave a pre-game dwell that would park the next page after.
@@ -984,6 +1024,20 @@ function createQueue({
    */
   async function tickOnce(opts = {}) {
     const at = now();
+
+    // The closing artwork has had its minutes. Drop the scheduler pages that
+    // stacked up behind it, so the board returns to rotation instead of
+    // replaying every rule that came due while the clean-up screen was up.
+    if (state.clearSchedulerAfterHold && (!state.holdUntil || at >= state.holdUntil)) {
+      state.clearSchedulerAfterHold = false;
+      const swept = sweepSchedulerPending();
+      if (swept) {
+        log?.debug?.(
+          `Vestaboard ${config.id} cleared ${swept} scheduled page(s) `
+          + 'held behind the closing artwork',
+        );
+      }
+    }
 
     if (state.restoreAfter && at >= state.restoreAfter && state.lastSnapshot
       && !sameLayout(state.lastSnapshot.rows, state.current)) {
@@ -1146,6 +1200,7 @@ function createQueue({
       lastPostAt: state.lastPostAt,
       holdUntil: state.holdUntil,
       holdKind: state.holdKind,
+      holdClearsQueue: state.clearSchedulerAfterHold,
       snapshotUntil: state.snapshotUntil,
       snapshotCooldownMs: snapshotCooldownMs(),
       phaseUntil: state.phaseUntil,
@@ -1230,6 +1285,9 @@ function createQueue({
 
       state.holdUntil = null;
       state.holdKind = null;
+      // Skip is "show me the next page", so keep the pages a closing artwork
+      // was holding rather than sweeping them on the way past.
+      state.clearSchedulerAfterHold = false;
       state.snapshotUntil = null;
       state.phaseUntil = null;
       state.restoreAfter = null;

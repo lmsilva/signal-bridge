@@ -81,6 +81,7 @@ const COMMAND_TO_TYPE = {
   'chuck.facts': 'chuck.facts',
   'roast.me': 'roast.me',
   'family.quotes': 'family.quotes',
+  'artwork.show': 'vestaboard.artwork',
   'misheard.lyrics': 'misheard.lyrics',
   'warm.fuzzies': 'warm.fuzzies',
   'bucket.fillers': 'bucket.fillers',
@@ -200,6 +201,8 @@ function routeEvent({
   breakHold = null,
   quietHoursExempt = null,
   holdSeconds = null,
+  closing = false,
+  clearQueueAfterHold = false,
   replaceSource: replaceSourceOpt = undefined,
   replaceCard: replaceCardOpt = undefined,
   gameSource: gameSourceOpt = undefined,
@@ -253,6 +256,10 @@ function routeEvent({
       priority,
       boardIds,
       scheduler,
+      // The closing artwork of a scheduled airing: exempt from the rotation
+      // gap, and optionally the thing that clears the queue behind it.
+      closing: Boolean(closing),
+      clearQueueAfterHold: Boolean(clearQueueAfterHold),
       quietHoursExempt: quietHoursExempt != null
         ? Boolean(quietHoursExempt)
         : undefined,

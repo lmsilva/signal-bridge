@@ -125,6 +125,46 @@ function normaliseHoldSeconds(value, fallback = DEFAULT_HOLD_SECONDS) {
   return clampInt(value, MIN_HOLD_SECONDS, MAX_HOLD_SECONDS, fallback);
 }
 
+/**
+ * Finish a Vestaboard airing by clearing the board with a painted piece from
+ * the Artwork gallery, then park the queue behind it for `holdMinutes`.
+ *
+ * Presence of `rule.closingArtwork` is the on/off switch, the same way
+ * `activeWindow` and `daysOfWeek` are. `clearQueue` is what stops a long
+ * clean-up screen from merely *deferring* the pile-up: the scheduler keeps
+ * ticking while the artwork holds the board, so without it every rule that
+ * came due during the hold flips in turn the moment it lapses.
+ */
+const CLOSING_ARTWORK_MODES = new Set(['random', 'favorite', 'specific']);
+const DEFAULT_CLOSING_HOLD_MINUTES = 10;
+const MAX_CLOSING_HOLD_MINUTES = MAX_HOLD_SECONDS / 60;
+
+function normaliseClosingArtwork(value) {
+  if (!value || typeof value !== 'object' || value.enabled === false) {
+    return undefined;
+  }
+  const mode = String(value.mode || '').trim().toLowerCase();
+  const out = {
+    mode: CLOSING_ARTWORK_MODES.has(mode) ? mode : 'random',
+    holdMinutes: clampInt(
+      value.holdMinutes, 1, MAX_CLOSING_HOLD_MINUTES, DEFAULT_CLOSING_HOLD_MINUTES,
+    ),
+    clearQueue: value.clearQueue !== false,
+  };
+  // Keep a pinned piece even while the mode is random, so flipping the picker
+  // back and forth does not lose the choice.
+  const artworkId = String(value.artworkId || '').trim().slice(0, 120);
+  if (artworkId) {
+    out.artworkId = artworkId;
+  }
+  // "That one" with nothing chosen would quietly air a random piece; say
+  // random rather than lie about it.
+  if (out.mode === 'specific' && !out.artworkId) {
+    out.mode = 'random';
+  }
+  return out;
+}
+
 const TARGET_CLASSES = new Set(['all', 'full', 'vestaboard']);
 
 /** Retired command ids that still appear in saved rules. */
@@ -297,6 +337,13 @@ function normaliseRule(raw = {}, { existingRules = [], command = null, now = Dat
     rule.quietHoursExempt = true;
   }
 
+  // Kept whatever the target says: a rule flipped to Software and back must
+  // not lose the piece it was set to finish with.
+  const closingArtwork = normaliseClosingArtwork(base.closingArtwork);
+  if (closingArtwork) {
+    rule.closingArtwork = closingArtwork;
+  }
+
   // Existing rules have no target; prefer the command's natural home so
   // Vestaboard-only skills do not quietly air into the Windows overlay void.
   rule.target = normaliseTarget(base.target, { command: resolvedCommand });
@@ -455,6 +502,10 @@ module.exports = {
   DEFAULT_HOLD_SECONDS,
   MIN_HOLD_SECONDS,
   MAX_HOLD_SECONDS,
+  CLOSING_ARTWORK_MODES,
+  DEFAULT_CLOSING_HOLD_MINUTES,
+  MAX_CLOSING_HOLD_MINUTES,
+  normaliseClosingArtwork,
   TARGET_CLASSES,
   resolveCommandId,
   normaliseRule,

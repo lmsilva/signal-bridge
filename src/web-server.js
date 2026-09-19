@@ -155,6 +155,7 @@ const { createLearnLanguages, languageOf } = require('./learn-language');
 const { createChuckNorris } = require('./chuck-norris');
 const { createRoastMe } = require('./roast-me');
 const { createFamilyQuotes } = require('./family-quotes');
+const { createVestaboardArtwork } = require('./vestaboard-artwork');
 const { createMisheardLyrics } = require('./misheard-lyrics');
 const { createWarmFuzzies } = require('./warm-fuzzies');
 const { createDailyBucketFillers } = require('./daily-bucket-fillers');
@@ -612,6 +613,7 @@ function createWebServer({
   const chuckNorris = createChuckNorris(config, log);
   const roastMe = createRoastMe(config, log);
   const familyQuotes = createFamilyQuotes(config, log);
+  const vestaboardArtwork = createVestaboardArtwork(config, log);
   const misheardLyrics = createMisheardLyrics(config, log);
   const warmFuzzies = createWarmFuzzies(config, log);
   const dailyBucketFillers = createDailyBucketFillers(config, log);
@@ -754,6 +756,7 @@ function createWebServer({
     getChuckNorrisStatus: () => chuckNorris.statusSnapshot(),
     getRoastMeStatus: () => roastMe.statusSnapshot(),
     getFamilyQuotesStatus: () => familyQuotes.statusSnapshot(),
+    getVestaboardArtworkStatus: (params) => vestaboardArtwork.readiness(params),
     getWarmFuzziesStatus: () => warmFuzzies.statusSnapshot(),
     getDailyBucketFillersStatus: () => dailyBucketFillers.statusSnapshot(),
     getMisheardLyricsStatus: () => misheardLyrics.statusSnapshot(),
@@ -4221,6 +4224,82 @@ function createWebServer({
     });
   }
 
+  function handleVestaboardArtworkGet(query, res) {
+    sendJson(res, 200, {
+      ok: true,
+      ...vestaboardArtwork.statusSnapshot({
+        query: query?.q || query?.query,
+        page: query?.page,
+        pageSize: query?.pageSize,
+        hidden: query?.hidden === '1' || query?.hidden === 'true',
+        favourites: query?.favourites === '1' || query?.favourites === 'true',
+      }),
+    });
+  }
+
+  /** Ids and names for the scheduler's "which artwork" picker. */
+  function handleVestaboardArtworkOptions(res) {
+    sendJson(res, 200, { ok: true, options: vestaboardArtwork.options() });
+  }
+
+  /** The shipped grids, so the editor can offer a starting point. */
+  function handleVestaboardArtworkTemplates(res) {
+    sendJson(res, 200, { ok: true, templates: vestaboardArtwork.templates() });
+  }
+
+  function handleVestaboardArtworkPost(body, res) {
+    const result = vestaboardArtwork.addArtwork(body?.name, body?.cells);
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleVestaboardArtworkPut(body, res) {
+    const result = vestaboardArtwork.updateArtwork(body?.id, {
+      name: body?.name,
+      cells: body?.cells,
+      hidden: body?.hidden,
+      favourite: body?.favourite,
+      remove: body?.remove,
+    });
+    sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  function handleVestaboardArtworkPush(body, res) {
+    const picked = vestaboardArtwork.next({
+      mode: body?.mode,
+      artworkId: body?.artworkId,
+    });
+    if (!picked.ok) {
+      sendJson(res, 409, { ok: false, error: picked.error });
+      return;
+    }
+    const { payload } = picked;
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Vestaboard artwork', {
+      targetId, id: payload.artwork.id, mode: picked.mode,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      mode: picked.mode,
+      // A favourites push with nothing starred sends anything rather than
+      // nothing, and says so.
+      fellBack: picked.fellBack,
+      artwork: { id: payload.artwork.id, name: payload.artwork.name },
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleMisheardLyricsGet(query, res) {
     sendJson(res, 200, { ok: true, ...misheardLyrics.statusSnapshot({
       query: query?.q || query?.query,
@@ -5695,6 +5774,8 @@ function createWebServer({
     manual = false,
     holdSeconds = null,
     quietHoursExempt = false,
+    closing = false,
+    clearQueueAfterHold = false,
   } = {}) {
     const command = commandRegistry.get(commandId);
     if (!command) {
@@ -5742,6 +5823,8 @@ function createWebServer({
       targetId: deliveryId,
       quietHoursExempt: Boolean(quietHoursExempt),
       ...(Number.isFinite(hold) && hold > 0 ? { holdSeconds: hold } : {}),
+      ...(closing ? { closing: true } : {}),
+      ...(clearQueueAfterHold ? { clearQueueAfterHold: true } : {}),
       ...(manual && currentActor() ? { actor: currentActor() } : {}),
     };
     try {
@@ -5837,6 +5920,8 @@ function createWebServer({
           handleRoastMePush(body, res); break;
         case 'family.quotes':
           handleFamilyQuotesPush(body, res); break;
+        case 'artwork.show':
+          handleVestaboardArtworkPush(body, res); break;
         case 'warm.fuzzies':
           handleWarmFuzziesPush(body, res); break;
         case 'bucket.fillers':
@@ -5922,6 +6007,20 @@ function createWebServer({
       manual: Boolean(options.manual),
       holdSeconds: options.holdSeconds,
       quietHoursExempt: Boolean(options.quietHoursExempt || rule.quietHoursExempt),
+    }),
+    // A rule can finish by clearing the flaps with a painted board. It goes to
+    // the same target the rule aired on, carries its own hold, and may sweep
+    // the scheduled pages that stacked up behind that hold.
+    airClosingArtwork: (rule, closing) => airCommand('artwork.show', {
+      mode: closing.mode,
+      ...(closing.artworkId ? { artworkId: closing.artworkId } : {}),
+    }, {
+      device: 'Scheduler',
+      targetId: rule.target,
+      holdSeconds: closing.holdSeconds,
+      closing: true,
+      clearQueueAfterHold: Boolean(closing.clearQueue),
+      quietHoursExempt: Boolean(rule.quietHoursExempt),
     }),
   });
 
@@ -6207,6 +6306,7 @@ function createWebServer({
     if (pathname.startsWith('/api/photos')) return true;
     if (pathname.startsWith('/api/date-book/')) return true;
     if (pathname.startsWith('/api/display-scheduler/')) return true;
+    if (pathname.startsWith('/api/vestaboard-artwork')) return true;
     if (pathname.startsWith('/api/flightplan/trips')) return true;
     if (pathname.startsWith('/api/flightplan/flights')) return true;
     if (pathname === '/api/flightplan/search') return true;
@@ -6226,6 +6326,9 @@ function createWebServer({
     }
     if (pathname.startsWith('/api/display-scheduler/')) {
       return requirePermission(req, res, 'scheduler');
+    }
+    if (pathname.startsWith('/api/vestaboard-artwork')) {
+      return requirePermission(req, res, 'vestaboardArtwork');
     }
     if (pathname.startsWith('/api/flightplan/')) {
       return requirePermission(req, res, 'flightPlan');
@@ -9847,6 +9950,23 @@ function createWebServer({
           handleFamilyQuotesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
           return;
         }
+        if (pathname.startsWith('/api/vestaboard-artwork')) {
+          if (!requirePermission(req, res, 'vestaboardArtwork')) return;
+          if (pathname === '/api/vestaboard-artwork/options') {
+            handleVestaboardArtworkOptions(res);
+            return;
+          }
+          if (pathname === '/api/vestaboard-artwork/templates') {
+            handleVestaboardArtworkTemplates(res);
+            return;
+          }
+          if (pathname === '/api/vestaboard-artwork') {
+            handleVestaboardArtworkGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
+            return;
+          }
+          sendJson(res, 404, { ok: false, error: 'Unknown endpoint' });
+          return;
+        }
         if (pathname === '/api/warm-fuzzies/fuzzies') {
           if (!requireAdminSession(req, res)) return;
           handleWarmFuzziesGet(Object.fromEntries(reqUrl.searchParams.entries()), res);
@@ -10852,6 +10972,16 @@ function createWebServer({
             return;
           case '/api/push/family-quotes':
             handleFamilyQuotesPush(body, res);
+            return;
+          case '/api/push/vestaboard-artwork':
+            handleVestaboardArtworkPush(body, res);
+            return;
+          case '/api/vestaboard-artwork':
+            if (body?.id) {
+              handleVestaboardArtworkPut(body, res);
+            } else {
+              handleVestaboardArtworkPost(body, res);
+            }
             return;
           case '/api/family-quotes/quotes':
             if (body?.id) {

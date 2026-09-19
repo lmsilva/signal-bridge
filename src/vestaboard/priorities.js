@@ -255,6 +255,7 @@ const COMMAND_SOURCE = Object.freeze({
   'chuck.facts': 'chuck.facts',
   'roast.me': 'roast.me',
   'family.quotes': 'family.quotes',
+  'artwork.show': 'vestaboard.artwork',
   'misheard.lyrics': 'misheard.lyrics',
   'warm.fuzzies': 'warm.fuzzies',
   'bucket.fillers': 'bucket.fillers',

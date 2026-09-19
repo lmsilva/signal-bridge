@@ -1148,6 +1148,25 @@ function familyQuotesFrames(payload = {}) {
 }
 
 /**
+ * Vestaboard Artwork: the household painted the board, so send it as painted.
+ *
+ * Nothing to lay out and nothing to centre — the grid already is the frame. The
+ * only job here is to refuse a grid that is not a board.
+ */
+function vestaboardArtworkFrames(payload = {}) {
+  const cells = payload.artwork?.cells || payload.cells;
+  if (!Array.isArray(cells)) {
+    return [];
+  }
+  const rows = cells.map((row) => (Array.isArray(row) ? [...row] : row));
+  return [snapshotFrame(
+    assertValidLayout(rows, 'vestaboard artwork'),
+    payload.artwork?.name || 'Artwork',
+    'vestaboard.artwork',
+  )];
+}
+
+/**
  * Misheard Lyrics (marketplace channel): lyric first, artist under it.
  *
  * Two columns of air on the left, vertically centred, no title row. The
@@ -1904,6 +1923,7 @@ const FORMATTERS = {
   'word.clock': wordClockFrames,
   'roast.me': roastMeFrames,
   'family.quotes': familyQuotesFrames,
+  'vestaboard.artwork': vestaboardArtworkFrames,
   'misheard.lyrics': misheardLyricsFrames,
   'warm.fuzzies': warmFuzziesFrames,
   'bucket.fillers': dailyBucketFillersFrames,
@@ -1952,6 +1972,7 @@ module.exports = {
   wordClockFrames,
   roastMeFrames,
   familyQuotesFrames,
+  vestaboardArtworkFrames,
   misheardLyricsFrames,
   warmFuzziesFrames,
   dailyBucketFillersFrames,
