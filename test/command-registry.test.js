@@ -279,6 +279,38 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('starlink.track', 'full'), false);
 });
 
+test('schedulable kinds match a software overlay and/or a Vestaboard formatter', () => {
+  // Software = the Windows client has a panel for that UDP type.
+  // Vestaboard = the router has a formatter. Dual-capable events (Tesla,
+  // Flight Plan, Overhead, …) must appear under both chips.
+  const overlaySource = fs.readFileSync(
+    path.join(__dirname, '../alexa broadcast client/src/overlay.py'),
+    'utf8',
+  );
+  const overlayTypes = new Set(
+    [...overlaySource.matchAll(/"([a-z0-9.-]+)":\s*\w+Panel/g)].map((m) => m[1]),
+  );
+  const softwareType = {
+    'signal.slideshow': 'photo.slideshow',
+    'steam.library-tour': 'game.library-tour',
+    'psn.library-tour': 'game.library-tour',
+  };
+  assert.ok(overlayTypes.has('flightplan.flight'), 'Flight Plan paints on the Windows overlay');
+
+  for (const command of COMMANDS.filter((entry) => entry.schedulable)) {
+    const type = softwareType[command.id] || COMMAND_TO_TYPE[command.id] || command.id;
+    const expected = [];
+    if (overlayTypes.has(type)) expected.push('full');
+    if (formatterFor(type) || formatterFor(command.id)) expected.push('vestaboard');
+    assert.ok(expected.length, `${command.id} must air on software, Vestaboard, or both`);
+    assert.deepEqual(
+      kindsOf(command).slice().sort(),
+      expected.slice().sort(),
+      `${command.id} kinds must follow overlay=${overlayTypes.has(type)} formatter=${Boolean(formatterFor(type) || formatterFor(command.id))}`,
+    );
+  }
+});
+
 test('kindsMatchDisplayFilter follows All / Software / Vestaboards', () => {
   assert.equal(kindsMatchDisplayFilter(['full'], 'all'), true);
   assert.equal(kindsMatchDisplayFilter(['vestaboard'], 'all'), true);
