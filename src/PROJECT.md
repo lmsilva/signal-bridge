@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-18 (Live / Last Played is one scheduled action)
+**Last updated:** 2026-09-18 (scheduler Add-event picker follows All / Software / Vestaboards)
 
 ---
 
@@ -941,6 +941,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-18: **Add-event picker follows All / Software / Vestaboards** — the scheduler typeahead listed every schedulable command, so a Vestaboards chip still offered slideshows and a Software chip still offered board-only facts. Search and the open list now use the same chip (`kindsMatchDisplayFilter`); a new rule created under Software or Vestaboards lands on that class so it stays in the filtered list. Household `scheduler-ui.js` and admin `app.js` both. Cache-bust `signal319`. Tests: `command-registry`, `web-server`.
 - 2026-09-18: **Live / Last Played is one scheduled action** — Steam, PSN, YouTube and Autodarts each had a live rule *and* a last-played rule, and the live one forced `now-playing` so a tick with nobody playing failed instead of showing last played. One command remains: **Steam / PSN / YouTube / Autodarts / Huupe Live / Last Played**. Live if something is on, otherwise last played. Library tours and dashboards stay separate. Saved last-played rules remap on load. Tests: `command-registry`, `display-scheduler`, `youtube-now-playing`, `web-server`, `autodarts-api`.
 - 2026-09-18: **Huupe tip-off reaches the board** — `huupeSessionFrames` returned nothing until two shots, so a named Countdown or Family Mode game showed on the wall while the flaps stayed on the previous page. A named session or Countdown mode now flips immediately; Countdown scores read `N LEFT`. Two anonymous stray shots still do not. Tests: `vestaboard-gaming`.
 - 2026-09-18: **A chosen display is the only display, part 2 (admin paths)** — three more places threw the picker away. The four **party games** hardcoded `targetId: 'vestaboard'`, so pushing Word Scramble at the simulator flipped every board; a session now stores the chosen board at `create()` and every later phase card follows it (`normaliseBoardTarget`: `*` / `all` / `full` / empty still mean every board). A game aimed at a **software** display is refused with a 409 rather than opening a session showing a join code nothing paints. **Show Timers / Show Alarms** never passed the target at all — they poll Amazon and send from the snapshot callback — so `targetId` now rides the same channel `actor` already used (`timer-sync` / `alarm-sync` → `listener.sendSnapshotPayload`), and **only** for the explicit `show-timers` / `show-alarms` trigger: a timer or alarm *firing* is unsolicited and stays house-wide. Audited every `/api/push/` handler: the rest already read the picker. Tests: `game-sessions`, `timer-sync`, `web-server`.
