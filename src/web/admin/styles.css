@@ -2296,9 +2296,16 @@ textarea.field-input.filter-search {
 .sched-toggle.is-active > span { color: var(--good, #6ee7a8); }
 
 .sched-nextup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em 0.5em;
   font-size: 1.05rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+.sched-nextup .sched-target-pill {
+  justify-self: auto;
 }
 .sched-nextup-card.is-paused .sched-nextup {
   color: var(--warn, #f5c453);

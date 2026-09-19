@@ -912,7 +912,25 @@ test('status reports the next rule due and the live gates', async () => {
   assert.equal(status.ruleCount, 2);
   assert.equal(status.airingsToday, 1);
   assert.ok(status.nextUp);
+  assert.ok(status.nextUp.target);
   assert.equal(status.displayBusy, false);
+});
+
+test('status nextUp names where the page will air', () => {
+  const software = build({
+    rules: [{ id: 'soft', commandId: 'signal.slideshow', intervalSeconds: 600, target: 'full' }],
+  });
+  assert.equal(software.scheduler.status().nextUp.target, 'full');
+
+  const boards = build({
+    rules: [{ id: 'board', commandId: 'alexa.weather', intervalSeconds: 600, target: 'vestaboard' }],
+  });
+  assert.equal(boards.scheduler.status().nextUp.target, 'vestaboard');
+
+  const house = build({
+    rules: [{ id: 'house', commandId: 'alexa.weather', intervalSeconds: 600, target: 'all' }],
+  });
+  assert.equal(house.scheduler.status().nextUp.target, 'all');
 });
 
 test('settings sanitisation refuses a tick slower than 60 seconds', () => {

@@ -422,6 +422,7 @@ test('status reports the live gates including whether the display is busy', asyn
     assert.equal(idle.body.displayBusy, false);
     assert.equal(idle.body.ruleCount, 1);
     assert.ok(idle.body.nextUp, 'the empty state needs a next-expected-event to explain itself');
+    assert.ok(idle.body.nextUp.target, 'Next up must say Software, Vestaboards, or All displays');
 
     busy.noteSent({ type: 'trivia.round', displaySeconds: 274 });
     const occupied = await api(`${ROUTE}/status`);

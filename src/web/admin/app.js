@@ -3945,23 +3945,41 @@
     }
   }
 
+  function paintSchedNextUpLine(status) {
+    const nextUp = $('sched-nextup');
+    if (!nextUp) return;
+    nextUp.removeAttribute('aria-label');
+    if (!status?.active) {
+      nextUp.textContent = 'Paused — nothing will air automatically';
+      return;
+    }
+    if (status.inQuietHours) {
+      nextUp.textContent = 'Quiet hours — nothing will air until they end';
+      return;
+    }
+    if (!status.nextUp) {
+      nextUp.textContent = 'No enabled rules';
+      return;
+    }
+    const rule = schedRules.find((row) => row.id === status.nextUp.ruleId) || status.nextUp;
+    const pill = schedTargetPill({ target: status.nextUp.target || rule.target });
+    const when = relativeTime(status.nextUp.dueAt);
+    nextUp.setAttribute(
+      'aria-label',
+      `Next up: ${status.nextUp.label} on ${pill.label}, ${when}`,
+    );
+    nextUp.innerHTML = `<span>Next up:</span>`
+      + `<span class="sched-nextup-label">${escapeHtml(status.nextUp.label)}</span>`
+      + `<span class="sched-target-pill ${pill.cls}">${escapeHtml(pill.label)}</span>`
+      + `<span class="sched-nextup-when">${escapeHtml(when)}</span>`;
+  }
+
   async function refreshSchedStatus() {
     try {
       const status = await apiFetch(`${SCHED_ROUTE}/status`);
-      const nextUp = $('sched-nextup');
       const hint = $('sched-nextup-hint');
       const card = $('sched-nextup-card');
-      if (nextUp) {
-        if (!status.active) {
-          nextUp.textContent = 'Paused — nothing will air automatically';
-        } else if (status.inQuietHours) {
-          nextUp.textContent = 'Quiet hours — nothing will air until they end';
-        } else if (status.nextUp) {
-          nextUp.textContent = `Next up: ${status.nextUp.label} ${relativeTime(status.nextUp.dueAt)}`;
-        } else {
-          nextUp.textContent = 'No enabled rules';
-        }
-      }
+      paintSchedNextUpLine(status);
       // The paused / quiet-hours lines are the status. Hide the always-on
       // "what the scheduler is" hint so it cannot be read as a second paused.
       if (hint) {
