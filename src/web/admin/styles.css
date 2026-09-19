@@ -853,6 +853,10 @@ body[data-tab="board"] .content { max-width: 1180px; }
 }
 
 .segmented-btn.active { background: var(--accent); color: var(--accent-ink); }
+.segmented-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 
 .slider-row {
   display: flex;
@@ -2696,13 +2700,24 @@ textarea.field-input.filter-search {
 .sched-meta-row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   margin-top: 10px;
   font-size: 13px;
   color: var(--muted);
 }
 .sched-meta-row #sched-rule-meta { margin: 0; }
+.sched-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.sched-list-actions .segmented-btn {
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
 .sched-sort-hint { flex: none; white-space: nowrap; }
 
 .sched-col-head,
@@ -3204,6 +3219,14 @@ textarea.field-input.filter-search {
   .sched-toolbar #btn-sched-add-open {
     width: 100%;
     min-height: 44px;
+  }
+  .sched-meta-row {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+  .sched-list-actions {
+    width: 100%;
+    justify-content: space-between;
   }
   .sched-add-row {
     flex-direction: column;

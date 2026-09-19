@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal320">
+  <link rel="stylesheet" href="styles.css?v=signal321">
 </head>
 <body>
   <div class="sticky-chrome">
@@ -427,7 +427,13 @@
             </div>
             <div class="sched-meta-row">
               <p class="hint" id="sched-rule-meta"></p>
-              <span class="sched-sort-hint">Sort: Group · Name</span>
+              <div class="sched-list-actions">
+                <div class="segmented" id="sched-group-fold" role="group" aria-label="Expand or collapse all groups">
+                  <button type="button" class="segmented-btn" data-sched-group-fold="expand">Expand</button>
+                  <button type="button" class="segmented-btn" data-sched-group-fold="collapse">Collapse</button>
+                </div>
+                <span class="sched-sort-hint">Sort: Group · Name</span>
+              </div>
             </div>
             <div class="sched-add-row" id="sched-add-row" hidden>
               <div class="sched-add-command-wrap">
@@ -5489,6 +5495,6 @@
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal299"></script>
   <script src="settings-filter.js?v=signal307"></script>
-  <script src="app.js?v=signal320"></script>
+  <script src="app.js?v=signal321"></script>
 </body>
 </html>

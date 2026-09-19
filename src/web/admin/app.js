@@ -3282,6 +3282,42 @@
     } catch { /* ignore */ }
   }
 
+  function visibleSchedGroupNames() {
+    const query = schedRuleSearchQuery();
+    const names = new Set();
+    for (const rule of schedRules) {
+      if (
+        schedRuleMatches(rule, query)
+        && schedRuleMatchesDisplay(rule, schedDisplayFilter)
+        && schedRuleMatchesKind(rule, schedKindFilter)
+      ) {
+        names.add(schedRuleGroupLabel(rule));
+      }
+    }
+    return [...names];
+  }
+
+  function syncSchedGroupFoldButtons() {
+    const names = visibleSchedGroupNames();
+    const collapsedCount = names.filter((name) => schedCollapsedGroups.has(name)).length;
+    const allCollapsed = names.length > 0 && collapsedCount === names.length;
+    const allExpanded = names.length > 0 && collapsedCount === 0;
+    document.querySelectorAll('#sched-group-fold .segmented-btn').forEach((btn) => {
+      const action = btn.dataset.schedGroupFold;
+      btn.classList.toggle('active', action === 'collapse' ? allCollapsed : allExpanded);
+      btn.disabled = names.length === 0;
+    });
+  }
+
+  function setAllSchedGroupsCollapsed(collapsed) {
+    const names = visibleSchedGroupNames();
+    if (!names.length) return;
+    if (collapsed) names.forEach((name) => schedCollapsedGroups.add(name));
+    else names.forEach((name) => schedCollapsedGroups.delete(name));
+    persistSchedCollapsedGroups();
+    renderSchedRules();
+  }
+
   function schedHoldMinutes(rule) {
     const seconds = Number(rule?.holdSeconds);
     if (Number.isFinite(seconds) && seconds > 0) {
@@ -3377,6 +3413,7 @@
     const rawSearch = searchInput?.value || '';
     const query = normalizeSchedQuery(rawSearch);
     syncSchedFilterButtons();
+    syncSchedGroupFoldButtons();
 
     if (!schedRules.length) {
       host.innerHTML = '';
@@ -4764,6 +4801,12 @@
         schedKindFilter = kindFilterBtn.dataset.schedKindFilter || 'any';
         try { localStorage.setItem(SCHED_KIND_FILTER_KEY, schedKindFilter); } catch { /* ignore */ }
         renderSchedRules();
+        return;
+      }
+
+      const foldBtn = target.closest('[data-sched-group-fold]');
+      if (foldBtn) {
+        setAllSchedGroupsCollapsed(foldBtn.dataset.schedGroupFold === 'collapse');
         return;
       }
 

@@ -99,6 +99,10 @@
   color: var(--accent-ink);
   font-weight: 700;
 }
+.su-sched-root .segmented-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .su-sched-root .slider-row { display: flex; align-items: center; gap: 10px; }
 .su-sched-root .slider-row input[type="range"] { flex: 1; }
 .su-sched-root .slider-value { font-weight: 700; min-width: 3ch; }
@@ -222,13 +226,24 @@
 .su-sched-root .sched-meta-row {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   margin-top: 10px;
   font-size: 13px;
   color: var(--muted);
 }
 .su-sched-root .sched-meta-row #sched-rule-meta { margin: 0; }
+.su-sched-root .sched-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.su-sched-root .sched-list-actions .segmented-btn {
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
 .su-sched-root .sched-sort-hint { flex: none; white-space: nowrap; }
 .su-sched-root .sched-search .field-input { width: 100%; }
 .su-sched-root .sched-add-row {
@@ -754,6 +769,10 @@
   .su-sched-root .sched-meta-row {
     flex-wrap: wrap;
     gap: 4px 12px;
+  }
+  .su-sched-root .sched-list-actions {
+    width: 100%;
+    justify-content: space-between;
   }
   .su-sched-root .sched-add-row {
     flex-direction: column;

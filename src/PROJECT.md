@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-18 (board clocks are all AM/PM)
+**Last updated:** 2026-09-18 (scheduler expand/collapse all groups)
 
 ---
 
@@ -941,6 +941,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-18: **Scheduler Expand / Collapse all groups** — category headers still fold one group; a new Expand | Collapse pair in the list meta row folds every *visible* group (search and All / Software / Vestaboards still apply) and remembers it in `signal.schedCollapsedGroups`. Mixed state lights neither chip. Household and admin. Cache-bust `signal321`. Tests: `web-server`.
 - 2026-09-18: **Every board clock reads AM/PM** — the Flight Plan card was the last 24-hour holdout: its `AS OF` footer printed `18:00` and its departure/arrival row used a one-letter meridiem (`1:45P`). Both now match `clock.js` (`1:45PM`, no leading zero, no space), so nothing on the board shows military time. `formatTimeShort` shares the shape, so the overlay's `DEPARTED 1:45PM` agrees with the flaps. Widest clock is 7 columns, which keeps two of them inside the badge frame's 16-column band. Removed the unused 24-hour `formatBoardTime`. Tests: `flightplan-core` (incl. a no-24-hour assertion on the rendered card), `vestaboard-feeds` goldens.
 - 2026-09-18: **Scheduler Next up names the target** — the status line was only the event and when. It now carries the same Software / Vestaboards / All displays (or named display) pill as the rule list, from `nextUp.target` on `/status`. Household and admin. Cache-bust `signal320`. Tests: `display-scheduler`, `web-server`.
 - 2026-09-18: **Scheduler kinds match the overlay and the board** — audited every schedulable command against the Windows overlay panels and Vestaboard formatters. Next Flight / Trip Board stay on **both** chips: they paint `flightplan.flight` on the poster and flip the flaps. A command that has no overlay is Vestaboard-only; a command with no formatter is software-only. Test: `command-registry`.
