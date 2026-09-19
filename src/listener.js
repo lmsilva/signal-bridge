@@ -371,6 +371,10 @@ function createListener({
       breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
       holdSeconds: options.holdSeconds,
+      // A scheduled airing's closing artwork: exempt from the rotation gap,
+      // and the thing that can sweep the queue once its hold lapses.
+      closing: options.closing,
+      clearQueueAfterHold: options.clearQueueAfterHold,
       actor: options.actor,
       ctx: options.ctx,
     });

@@ -212,6 +212,7 @@ const SETTINGS_CARD_KINDS = Object.freeze({
   'chuck-norris-settings-card': ['vestaboard'],
   'roast-me-settings-card': ['vestaboard'],
   'family-quotes-settings-card': ['vestaboard'],
+  'vestaboard-artwork-settings-card': ['vestaboard'],
   'warm-fuzzies-settings-card': ['vestaboard'],
   'daily-bucket-fillers-settings-card': ['vestaboard'],
   'misheard-lyrics-settings-card': ['vestaboard'],

@@ -462,6 +462,8 @@ function createVestaboardHub({
       breakHold: options.breakHold,
       quietHoursExempt: options.quietHoursExempt,
       holdSeconds: options.holdSeconds,
+      closing: options.closing,
+      clearQueueAfterHold: options.clearQueueAfterHold,
       replaceSource: options.replaceSource,
       replaceCard: options.replaceCard,
       gameSource: options.gameSource,

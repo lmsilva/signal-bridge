@@ -303,6 +303,102 @@ test('air-now for Vestaboard-only skills reaches the boards even when the rule s
   }
 });
 
+test('an artwork rule keeps the piece it was pinned to, and says so when it goes', async () => {
+  const { webServer, api } = await startServer();
+  try {
+    const created = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: {
+        commandId: 'artwork.show',
+        intervalSeconds: 7200,
+        probability: 0,
+        guard: 'requires-content',
+        params: { mode: 'specific', artworkId: 'art-winter' },
+      },
+    });
+    assert.equal(created.status, 201, created.body?.error || 'create artwork rule');
+    assert.equal(created.body.rule.target, 'vestaboard', 'artwork only exists on the flaps');
+    assert.deepEqual(created.body.rule.params, { mode: 'specific', artworkId: 'art-winter' });
+
+    const reread = await api(`${ROUTE}/rules`);
+    const stored = reread.body.rules.find((rule) => rule.id === created.body.rule.id);
+    assert.deepEqual(stored.params, { mode: 'specific', artworkId: 'art-winter' });
+
+    const aired = await api(`${ROUTE}/rules/${created.body.rule.id}/air`, { method: 'POST' });
+    assert.equal(aired.status, 202, aired.body?.error || 'artwork air');
+    assert.equal(aired.body.event.outcome, 'aired');
+
+    // Throw the pinned piece away and the rule reports why it cannot air,
+    // rather than quietly sending some other drawing.
+    const removed = await api('/api/vestaboard-artwork', {
+      method: 'POST',
+      body: { id: 'art-winter', remove: true },
+    });
+    assert.equal(removed.status, 200, removed.body?.error || 'remove artwork');
+
+    const gone = await api(`${ROUTE}/rules/${created.body.rule.id}/air`, { method: 'POST' });
+    assert.equal(gone.status, 409);
+    assert.match(gone.body.error, /no longer available/);
+
+    // A favourites rule with nothing starred still has the whole gallery.
+    const anyPiece = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: {
+        commandId: 'artwork.show',
+        intervalSeconds: 7200,
+        probability: 0,
+        params: { mode: 'favorite' },
+      },
+    });
+    const firedAny = await api(`${ROUTE}/rules/${anyPiece.body.rule.id}/air`, { method: 'POST' });
+    assert.equal(firedAny.status, 202, firedAny.body?.error || 'favourite air');
+    assert.equal(firedAny.body.event.outcome, 'aired');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('a rule can finish by clearing the board with an artwork, and that round-trips', async () => {
+  const { webServer, api } = await startServer();
+  try {
+    const created = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: {
+        commandId: 'stoic.quotes',
+        intervalSeconds: 3600,
+        probability: 0,
+        closingArtwork: {
+          mode: 'specific', artworkId: 'art-winter', holdMinutes: 12, clearQueue: true,
+        },
+      },
+    });
+    assert.equal(created.status, 201, created.body?.error || 'create rule');
+    assert.deepEqual(created.body.rule.closingArtwork, {
+      mode: 'specific', artworkId: 'art-winter', holdMinutes: 12, clearQueue: true,
+    });
+
+    const reread = await api(`${ROUTE}/rules`);
+    const stored = reread.body.rules.find((rule) => rule.id === created.body.rule.id);
+    assert.deepEqual(stored.closingArtwork, created.body.rule.closingArtwork);
+
+    // Airing runs the main page and then the clean-up board. A failure in the
+    // clean-up must not turn a good airing into an error.
+    const aired = await api(`${ROUTE}/rules/${created.body.rule.id}/air`, { method: 'POST' });
+    assert.equal(aired.status, 202, aired.body?.error || 'air with a closing artwork');
+    assert.equal(aired.body.event.outcome, 'aired');
+
+    // Unchecking the box clears the block rather than leaving a stale one.
+    const off = await api(`${ROUTE}/rules/${created.body.rule.id}`, {
+      method: 'PUT',
+      body: { closingArtwork: null },
+    });
+    assert.equal(off.status, 200, off.body?.error || 'clear closing artwork');
+    assert.equal(off.body.rule.closingArtwork, undefined);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('airing the slideshow pulls the shared photos itself', async () => {
   // Regression: the push handler only ever read `body.photos`, which the admin
   // UI supplies from the list already on screen. The scheduler has no such

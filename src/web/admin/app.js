@@ -955,6 +955,7 @@
     'chuck-norris-settings-card': ['vestaboard'],
     'roast-me-settings-card': ['vestaboard'],
     'family-quotes-settings-card': ['vestaboard'],
+    'vestaboard-artwork-settings-card': ['vestaboard'],
     'warm-fuzzies-settings-card': ['vestaboard'],
     'daily-bucket-fillers-settings-card': ['vestaboard'],
     'misheard-lyrics-settings-card': ['vestaboard'],
@@ -3192,6 +3193,8 @@
   const SCHED_KIND_FILTER_KEY = 'signal.schedKindFilter';
   const SCHED_COLLAPSED_GROUPS_KEY = 'signal.schedCollapsedGroups';
   const DEFAULT_HOLD_MINUTES = 15;
+  const DEFAULT_CLOSING_HOLD_MINUTES = 10;
+  const ARTWORK_OPTIONS_ROUTE = '/api/vestaboard-artwork/options';
   let schedFocusRuleId = null;
   let schedDisplayFilter = 'all';
   let schedKindFilter = 'any';
@@ -3378,7 +3381,10 @@
     const kind = rule.scheduleType === 'fixed' ? 'Fixed' : 'Cadence';
     const when = schedScheduleSummary(rule);
     const target = schedTargetPill(rule).label;
-    return `${kind} · ${when} · hold ${schedHoldLabel(rule)} · ${target}`;
+    const closing = rule.closingArtwork
+      ? ` · clears with artwork for ${rule.closingArtwork.holdMinutes}m`
+      : '';
+    return `${kind} · ${when} · hold ${schedHoldLabel(rule)} · ${target}${closing}`;
   }
 
   function focusSchedRule(ruleId) {
@@ -3523,6 +3529,45 @@
     return options;
   }
 
+  /**
+   * Choices for an `options` param, keyed by the route that serves them. A route
+   * is fetched once per page: the artwork gallery does not change while a sheet
+   * is open.
+   */
+  const schedParamOptions = new Map();
+
+  /** Fetch one options route into the cache. `false` means it was already there. */
+  async function loadSchedOptionsRoute(route) {
+    if (!route || schedParamOptions.has(route)) return false;
+    try {
+      const result = await apiFetch(route);
+      schedParamOptions.set(route, Array.isArray(result?.options) ? result.options : []);
+    } catch {
+      // An empty picker beats a sheet that will not open.
+      schedParamOptions.set(route, []);
+    }
+    return true;
+  }
+
+  async function ensureSchedParamOptions(rule) {
+    const command = schedCommandById(rule?.commandId);
+    const routes = [...new Set((command?.params || [])
+      .map((def) => def.optionsRoute)
+      .filter((route) => route && !schedParamOptions.has(route)))];
+    if (!routes.length) return false;
+    await Promise.all(routes.map(loadSchedOptionsRoute));
+    return true;
+  }
+
+  /** Show a param only when the param it depends on has the value it wants. */
+  function syncSchedParamFields(host) {
+    if (!host) return;
+    host.querySelectorAll('[data-sched-when]').forEach((el) => {
+      const driver = host.querySelector(`[data-sched-param="${el.dataset.schedWhen}"]`);
+      el.hidden = String(driver?.value ?? '') !== el.dataset.schedWhenIs;
+    });
+  }
+
   function schedRuleParamsHtml(rule, prefix = 'data-sched-param') {
     const command = schedCommandById(rule.commandId);
     const defs = Array.isArray(command?.params) ? command.params : [];
@@ -3531,21 +3576,156 @@
     const fields = defs.map((def) => {
       const key = def.key;
       const value = params[key] ?? '';
+      const depends = def.dependsOn && typeof def.dependsOn === 'object'
+        ? Object.entries(def.dependsOn)[0]
+        : null;
+      // The same attributes go on the label and the field so hiding one hides
+      // the pair, and the flat grid row keeps its shape.
+      const when = depends
+        ? ` data-sched-when="${escapeHtml(depends[0])}"`
+          + ` data-sched-when-is="${escapeHtml(String(depends[1]))}"`
+        : '';
+      const label = `<label class="field-label"${when}>${escapeHtml(def.label || key)}</label>`;
+      if (def.type === 'options') {
+        const choices = schedParamOptions.get(def.optionsRoute);
+        if (!choices) {
+          return `${label}<select class="field-input" disabled${when}>`
+            + '<option>Loading…</option></select>';
+        }
+        if (!choices.length) {
+          return `${label}<select class="field-input" ${prefix}="${escapeHtml(key)}"${when}>`
+            + '<option value="">nothing to pick yet</option></select>';
+        }
+        const options = choices.map((entry) => (
+          `<option value="${escapeHtml(entry.value)}"${entry.value === value ? ' selected' : ''}>`
+          + `${escapeHtml(entry.label || entry.value)}</option>`
+        )).join('');
+        return `${label}<select class="field-input" ${prefix}="${escapeHtml(key)}"${when}>`
+          + `<option value="">pick one</option>${options}</select>`;
+      }
       if (def.type === 'enum' && Array.isArray(def.values)) {
         const options = def.values.map((entry) => (
           `<option value="${escapeHtml(entry)}"${entry === value ? ' selected' : ''}>${escapeHtml(entry)}</option>`
         )).join('');
-        return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
-          + `<select class="field-input" ${prefix}="${escapeHtml(key)}">`
+        return `${label}`
+          + `<select class="field-input" ${prefix}="${escapeHtml(key)}"${when}>`
           + `<option value="">default</option>${options}</select>`;
       }
       const min = def.min != null ? ` min="${def.min}"` : '';
       const max = def.max != null ? ` max="${def.max}"` : '';
-      return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
-        + `<input class="field-input" type="number"${min}${max} ${prefix}="${escapeHtml(key)}"`
+      return `${label}`
+        + `<input class="field-input" type="number"${min}${max} ${prefix}="${escapeHtml(key)}"${when}`
         + ` value="${escapeHtml(value === '' || value == null ? '' : String(value))}" placeholder="default">`;
     }).join('');
     return `<div class="sched-field-row" style="margin-top:8px">${fields}</div>`;
+  }
+
+  /**
+   * "Finish with" — clear the board with a piece from the Artwork gallery once
+   * the event is done, park the queue behind it, and optionally drop the
+   * scheduled pages that stacked up while it was showing.
+   *
+   * Only offered when the rule's target can reach a Vestaboard; a Windows
+   * overlay has no flaps to clean up.
+   */
+  function schedTargetReachesBoard(target) {
+    const value = String(target || 'full');
+    if (value === 'all' || value === 'vestaboard') return true;
+    if (value === 'full') return false;
+    return knownDisplays.find((entry) => entry.id === value)?.kind === 'vestaboard';
+  }
+
+  function schedActiveTarget() {
+    const btn = document.querySelector('#sched-sheet-target .segmented-btn.active')?.dataset.schedTarget
+      || 'full';
+    return btn === 'specific' ? ($('sched-sheet-specific')?.value || 'full') : btn;
+  }
+
+  function fillSchedClosingArtwork(selected) {
+    const select = $('sched-sheet-closing-artwork');
+    if (!select) return;
+    const choices = schedParamOptions.get(ARTWORK_OPTIONS_ROUTE);
+    if (!choices) {
+      select.innerHTML = '<option value="">Loading…</option>';
+      return;
+    }
+    if (!choices.length) {
+      select.innerHTML = '<option value="">nothing to pick yet</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">pick one</option>'
+      + choices.map((entry) => (
+        `<option value="${escapeHtml(entry.value)}">${escapeHtml(entry.label || entry.value)}</option>`
+      )).join('');
+    if (selected) select.value = selected;
+  }
+
+  function syncSchedClosingFields() {
+    const boardBound = schedTargetReachesBoard(schedActiveTarget());
+    const label = $('sched-sheet-closing-label');
+    const wrap = $('sched-sheet-closing-wrap');
+    if (label) label.hidden = !boardBound;
+    if (wrap) wrap.hidden = !boardBound;
+    const detail = $('sched-sheet-closing-detail');
+    if (detail) detail.hidden = $('sched-sheet-closing')?.checked !== true;
+    const pick = $('sched-sheet-closing-pick-wrap');
+    if (pick) pick.hidden = $('sched-sheet-closing-mode')?.value !== 'specific';
+  }
+
+  function schedClosingSnapshot() {
+    // A target with no flaps keeps whatever was stored, so flipping a rule to
+    // Software and back does not lose the piece it was set to finish with.
+    if (!schedTargetReachesBoard(schedActiveTarget())) {
+      return schedEditorBaseline?.closingArtwork || null;
+    }
+    if ($('sched-sheet-closing')?.checked !== true) {
+      return null;
+    }
+    const artworkId = String($('sched-sheet-closing-artwork')?.value || '').trim();
+    return {
+      mode: $('sched-sheet-closing-mode')?.value || 'random',
+      artworkId: artworkId || null,
+      holdMinutes: Math.max(1, Math.min(240,
+        Number($('sched-sheet-closing-hold')?.value) || DEFAULT_CLOSING_HOLD_MINUTES)),
+      clearQueue: $('sched-sheet-closing-clear')?.checked === true,
+    };
+  }
+
+  function fillSchedClosingFields(rule) {
+    const closing = rule?.closingArtwork || null;
+    const on = $('sched-sheet-closing');
+    if (on) on.checked = Boolean(closing);
+    const mode = $('sched-sheet-closing-mode');
+    if (mode) mode.value = closing?.mode || 'random';
+    const hold = $('sched-sheet-closing-hold');
+    if (hold) hold.value = String(closing?.holdMinutes || DEFAULT_CLOSING_HOLD_MINUTES);
+    const clear = $('sched-sheet-closing-clear');
+    if (clear) clear.checked = closing ? closing.clearQueue !== false : true;
+    fillSchedClosingArtwork(closing?.artworkId || '');
+    syncSchedClosingFields();
+    loadSchedOptionsRoute(ARTWORK_OPTIONS_ROUTE).then((loaded) => {
+      // The sheet may have moved on to another rule while we were fetching.
+      if (!loaded || schedEditorRuleId !== rule?.id) return;
+      fillSchedClosingArtwork(closing?.artworkId || '');
+    });
+  }
+
+  /** Paint the rule's params, then fill any dynamic pickers once they arrive. */
+  function paintSchedRuleParams(rule) {
+    const host = $('sched-sheet-params');
+    if (!host) return;
+    if (!host.dataset.schedParamWired) {
+      host.dataset.schedParamWired = '1';
+      host.addEventListener('change', () => syncSchedParamFields(host));
+    }
+    host.innerHTML = schedRuleParamsHtml(rule);
+    syncSchedParamFields(host);
+    ensureSchedParamOptions(rule).then((loaded) => {
+      // The sheet may have moved on to another rule while we were fetching.
+      if (!loaded || schedEditorRuleId !== rule.id) return;
+      host.innerHTML = schedRuleParamsHtml(rule);
+      syncSchedParamFields(host);
+    });
   }
 
   function schedRuleRowHtml(rule) {
@@ -3590,7 +3770,9 @@
     const params = {};
     $('sched-sheet-params')?.querySelectorAll('[data-sched-param]').forEach((input) => {
       const key = input.dataset.schedParam;
-      if (!key) return;
+      // A param whose condition is not met is not part of the rule, so a value
+      // left behind by an earlier choice must not be saved.
+      if (!key || input.hidden) return;
       const raw = String(input.value ?? '').trim();
       if (raw === '') return;
       if (input.tagName === 'SELECT') {
@@ -3624,6 +3806,7 @@
       fixedTimes,
       holdSeconds: holdMinutes * 60,
       quietHoursExempt: $('sched-sheet-quiet-exempt')?.checked === true,
+      closingArtwork: schedClosingSnapshot(),
     };
   }
 
@@ -3762,8 +3945,7 @@
     const probValue = $('sched-sheet-probability-value');
     if (probValue) probValue.textContent = `${probability?.value || 90}%`;
 
-    const paramsHost = $('sched-sheet-params');
-    if (paramsHost) paramsHost.innerHTML = schedRuleParamsHtml(rule);
+    paintSchedRuleParams(rule);
 
     const hold = $('sched-sheet-hold');
     if (hold) hold.value = String(schedHoldMinutes(rule));
@@ -3779,6 +3961,8 @@
 
     const quiet = $('sched-sheet-quiet-exempt');
     if (quiet) quiet.checked = rule.quietHoursExempt === true;
+
+    fillSchedClosingFields(rule);
 
     const maxPerDay = $('sched-sheet-maxPerDay');
     if (maxPerDay) maxPerDay.value = rule.maxPerDay != null ? String(rule.maxPerDay) : '';
@@ -4605,6 +4789,7 @@
       schedSheet.addEventListener('change', () => {
         markSchedEditorDirty();
         updateSchedCadenceReadout();
+        syncSchedClosingFields();
         updateSchedEditorSaveState();
       });
       schedSheet.addEventListener('input', (event) => {
@@ -4686,6 +4871,7 @@
           setSegmentedActive('sched-sheet-target', 'schedTarget', targetSeg.dataset.schedTarget);
           const wrap = $('sched-sheet-specific-wrap');
           if (wrap) wrap.hidden = targetSeg.dataset.schedTarget !== 'specific';
+          syncSchedClosingFields();
           markSchedEditorDirty();
           return;
         }
@@ -10472,6 +10658,289 @@
   });
 
   loadFamilyQuotesStatus();
+
+  // --------------------------------------- Settings → Vestaboard Artwork
+
+  const VA_PAGE_SIZE = 12;
+  let vestaboardArtworkPage = 1;
+  let vestaboardArtworkTimer = 0;
+  let vestaboardArtworkRows = [];
+  let vestaboardArtworkTemplates = [];
+  let vestaboardArtworkPainter = null;
+  let vestaboardArtworkEditingId = null;
+
+  function vestaboardArtworkCountsLine(data = {}) {
+    const hidden = Number(data.hiddenCount || 0);
+    const custom = Number(data.customCount || 0);
+    const favourites = Number(data.favourites || 0);
+    return `${data.available || 0} ready`
+      + (favourites ? ` · ${favourites} favourite${favourites === 1 ? '' : 's'}` : '')
+      + (custom ? ` · ${custom} drawn here` : '')
+      + (hidden ? ` · ${hidden} hidden` : '');
+  }
+
+  function renderVestaboardArtworkCard(data = {}) {
+    const pill = $('vestaboard-artwork-status-pill');
+    const detail = $('vestaboard-artwork-status-detail');
+    const summary = $('vestaboard-artwork-manage-summary');
+    if (pill) {
+      pill.textContent = data.available != null ? `${data.available} ready` : '…';
+    }
+    if (detail) {
+      detail.textContent = data.available != null
+        ? `${vestaboardArtworkCountsLine(data)}. Manage the gallery in a sheet, or push a random one to test.`
+        : 'Painted boards rather than sentences. Manage the gallery in a sheet, or push a random one to test.';
+    }
+    if (summary) {
+      summary.textContent = data.available != null
+        ? vestaboardArtworkCountsLine(data)
+        : 'Loading…';
+    }
+  }
+
+  function syncVestaboardArtworkToolUi() {
+    const tool = vestaboardArtworkPainter?.getTool() || {};
+    document.querySelectorAll('#vestaboard-artwork-tools [data-art-tool]').forEach((btn) => {
+      const active = btn.dataset.artTool === tool.kind
+        && (tool.kind !== 'chip' || btn.dataset.artChip === tool.chip);
+      btn.classList.toggle('is-active', active);
+    });
+  }
+
+  /** Point the editor at one gallery entry, or at a blank board for a new one. */
+  function editVestaboardArtwork(row) {
+    vestaboardArtworkEditingId = row?.id || null;
+    const name = $('vestaboard-artwork-name');
+    if (name) name.value = row?.name || '';
+    const hint = $('vestaboard-artwork-edit-hint');
+    if (hint) {
+      hint.textContent = row
+        ? `Editing ${row.name}${row.custom ? '' : ' (shipped template)'}`
+        : 'New drawing';
+    }
+    const save = $('btn-vestaboard-artwork-save');
+    if (save) save.textContent = row ? 'Save changes' : 'Save drawing';
+    if (!vestaboardArtworkPainter) {
+      vestaboardArtworkPainter = window.createFlapPainter($('vestaboard-artwork-grid'), {
+        onToolChange: syncVestaboardArtworkToolUi,
+      });
+    }
+    vestaboardArtworkPainter?.setCells(row?.cells || null);
+    vestaboardArtworkPainter?.setTool({ kind: 'chip', chip: 'red' });
+    syncVestaboardArtworkToolUi();
+  }
+
+  function renderVestaboardArtworkSettings(data = {}) {
+    renderVestaboardArtworkCard(data);
+    vestaboardArtworkRows = data.artwork || [];
+    const list = $('vestaboard-artwork-list');
+    if (list) {
+      if (!vestaboardArtworkRows.length) {
+        list.innerHTML = '<p class="hint">No artwork matches that search.</p>';
+      } else {
+        list.innerHTML = vestaboardArtworkRows.map((row) => `
+          <article class="fp-card${row.hidden ? ' is-hidden' : ''}" data-va-id="${escapeHtml(row.id)}">
+            <div class="fp-card-head">
+              <span class="fp-card-name">${escapeHtml(row.name)}</span>
+              <span class="fp-card-tag">${row.custom ? 'Yours' : (row.edited ? 'Edited' : 'Shipped')}</span>
+            </div>
+            <div class="vb-bezel preview-bezel">
+              <div class="vb-grid" data-va-preview="${escapeHtml(row.id)}"></div>
+              <div class="vb-wordmark" aria-hidden="true">VESTABOARD</div>
+            </div>
+            <div class="fp-card-actions">
+              <button type="button" class="btn btn-outline btn-sm" data-va-edit>Edit</button>
+              <button type="button" class="btn btn-outline btn-sm fp-star${row.favourite ? ' is-on' : ''}" data-va-star aria-pressed="${row.favourite ? 'true' : 'false'}">${row.favourite ? '\u2605' : '\u2606'} Favourite</button>
+              <button type="button" class="btn btn-outline btn-sm" data-va-hide>${row.hidden ? 'Restore' : 'Hide'}</button>
+              <button type="button" class="btn btn-outline btn-sm" data-va-remove>Remove</button>
+            </div>
+          </article>
+        `).join('');
+        vestaboardArtworkRows.forEach((row) => {
+          const grid = list.querySelector(`[data-va-preview="${CSS.escape(row.id)}"]`);
+          if (grid) window.renderFlapGrid(grid, row.cells, { interactive: false });
+        });
+      }
+    }
+    const pageLabel = $('vestaboard-artwork-page-label');
+    if (pageLabel) {
+      pageLabel.textContent = data.pages ? `Page ${data.page} of ${data.pages}` : '';
+    }
+    vestaboardArtworkPage = data.page || 1;
+    const prev = $('btn-vestaboard-artwork-prev');
+    const next = $('btn-vestaboard-artwork-next');
+    if (prev) prev.disabled = vestaboardArtworkPage <= 1;
+    if (next) next.disabled = vestaboardArtworkPage >= (data.pages || 1);
+  }
+
+  async function loadVestaboardArtworkStatus() {
+    try {
+      renderVestaboardArtworkCard(await apiGet('/api/vestaboard-artwork?page=1&pageSize=4'));
+    } catch {
+      renderVestaboardArtworkCard({});
+    }
+  }
+
+  async function loadVestaboardArtwork(page = vestaboardArtworkPage) {
+    try {
+      const params = new URLSearchParams({
+        q: $('vestaboard-artwork-search')?.value || '',
+        page: String(page),
+        pageSize: String(VA_PAGE_SIZE),
+      });
+      if ($('vestaboard-artwork-show-hidden')?.checked) {
+        params.set('hidden', '1');
+      }
+      renderVestaboardArtworkSettings(await apiGet(`/api/vestaboard-artwork?${params}`));
+    } catch {
+      renderVestaboardArtworkSettings({});
+    }
+  }
+
+  async function openVestaboardArtworkManageSheet() {
+    const sheet = $('vestaboard-artwork-manage-sheet');
+    if (!sheet) {
+      return;
+    }
+    sheet.hidden = false;
+    if (!vestaboardArtworkTemplates.length) {
+      try {
+        const data = await apiGet('/api/vestaboard-artwork/templates');
+        vestaboardArtworkTemplates = data.templates || [];
+      } catch {
+        vestaboardArtworkTemplates = [];
+      }
+    }
+    const template = $('vestaboard-artwork-template');
+    if (template) {
+      template.innerHTML = '<option value="">blank board</option>'
+        + vestaboardArtworkTemplates.map((row) => (
+          `<option value="${escapeHtml(row.id)}">${escapeHtml(row.name)}</option>`
+        )).join('');
+      template.value = '';
+    }
+    editVestaboardArtwork(null);
+    loadVestaboardArtwork(1);
+  }
+
+  function closeVestaboardArtworkManageSheet() {
+    const sheet = $('vestaboard-artwork-manage-sheet');
+    if (sheet) {
+      sheet.hidden = true;
+    }
+    loadVestaboardArtworkStatus();
+  }
+
+  $('btn-vestaboard-artwork-manage')?.addEventListener('click', () => openVestaboardArtworkManageSheet());
+  $('btn-vestaboard-artwork-manage-close')?.addEventListener('click', () => closeVestaboardArtworkManageSheet());
+  registerSheetDismiss('vestaboard-artwork-manage-sheet', () => closeVestaboardArtworkManageSheet());
+
+  $('btn-vestaboard-artwork-push')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const result = await apiPost('/api/push/vestaboard-artwork', withTarget());
+      toast(`${result.artwork?.name || 'Artwork'} on the board`, 'good');
+    } catch (error) {
+      toast(error?.message || 'Could not push Vestaboard Artwork', 'bad');
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $('vestaboard-artwork-tools')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-art-tool]');
+    if (!btn) {
+      return;
+    }
+    vestaboardArtworkPainter?.setTool({ kind: btn.dataset.artTool, chip: btn.dataset.artChip });
+    syncVestaboardArtworkToolUi();
+  });
+
+  $('btn-vestaboard-artwork-undo')?.addEventListener('click', () => vestaboardArtworkPainter?.undo());
+  $('btn-vestaboard-artwork-clear')?.addEventListener('click', () => vestaboardArtworkPainter?.clear());
+
+  $('vestaboard-artwork-template')?.addEventListener('change', (event) => {
+    const found = vestaboardArtworkTemplates.find((row) => row.id === event.target.value);
+    if (found) {
+      vestaboardArtworkPainter?.setCells(found.cells, { resetUndo: false });
+    }
+  });
+
+  $('btn-vestaboard-artwork-save')?.addEventListener('click', async () => {
+    if (!vestaboardArtworkPainter) {
+      return;
+    }
+    if (vestaboardArtworkPainter.isBlank()) {
+      toast('Paint something before saving', 'bad');
+      return;
+    }
+    const body = {
+      name: $('vestaboard-artwork-name')?.value || '',
+      cells: vestaboardArtworkPainter.getCells(),
+    };
+    if (vestaboardArtworkEditingId) {
+      body.id = vestaboardArtworkEditingId;
+    }
+    try {
+      await apiPost('/api/vestaboard-artwork', body);
+      toast(vestaboardArtworkEditingId ? 'Artwork saved' : 'Artwork added', 'good');
+      editVestaboardArtwork(null);
+      await loadVestaboardArtwork(1);
+    } catch (error) {
+      toast(error.message || 'Could not save that artwork', 'bad');
+    }
+  });
+
+  $('vestaboard-artwork-search')?.addEventListener('input', () => {
+    window.clearTimeout(vestaboardArtworkTimer);
+    vestaboardArtworkTimer = window.setTimeout(() => {
+      loadVestaboardArtwork(1);
+    }, 250);
+  });
+
+  $('vestaboard-artwork-show-hidden')?.addEventListener('change', () => loadVestaboardArtwork(1));
+  $('btn-vestaboard-artwork-prev')?.addEventListener('click', () => loadVestaboardArtwork(vestaboardArtworkPage - 1));
+  $('btn-vestaboard-artwork-next')?.addEventListener('click', () => loadVestaboardArtwork(vestaboardArtworkPage + 1));
+
+  $('vestaboard-artwork-list')?.addEventListener('click', async (event) => {
+    const article = event.target.closest('[data-va-id]');
+    if (!article) {
+      return;
+    }
+    const id = article.getAttribute('data-va-id');
+    const row = vestaboardArtworkRows.find((entry) => entry.id === id);
+    try {
+      if (event.target.closest('[data-va-edit]')) {
+        editVestaboardArtwork(row);
+        article.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
+      }
+      if (event.target.closest('[data-va-star]')) {
+        await apiPost('/api/vestaboard-artwork', { id, favourite: !row?.favourite });
+      } else if (event.target.closest('[data-va-remove]')) {
+        if (!(await confirmCorpusRemove('artwork', row?.name))) {
+          return;
+        }
+        await apiPost('/api/vestaboard-artwork', { id, remove: true });
+        toast('Artwork removed', 'good');
+        if (vestaboardArtworkEditingId === id) {
+          editVestaboardArtwork(null);
+        }
+      } else if (event.target.closest('[data-va-hide]')) {
+        const restore = article.classList.contains('is-hidden');
+        await apiPost('/api/vestaboard-artwork', { id, hidden: !restore });
+        toast(restore ? 'Artwork restored' : 'Artwork hidden', 'good');
+      } else {
+        return;
+      }
+      await loadVestaboardArtwork(vestaboardArtworkPage);
+    } catch (error) {
+      toast(error.message || 'Could not update that artwork', 'bad');
+    }
+  });
+
+  loadVestaboardArtworkStatus();
 
   // -------------------------------------------- Settings → Warm Fuzzies
 

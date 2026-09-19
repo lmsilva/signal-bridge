@@ -124,8 +124,28 @@ test('isAdmin grants every feature permission', () => {
   assert.equal(created.user.permissions.flightPlan, true);
   assert.equal(created.user.permissions.redLetter, true);
   assert.equal(created.user.permissions.scheduler, true);
+  assert.equal(created.user.permissions.vestaboardArtwork, true);
   assert.equal(users.canAccess(users.getById(created.user.id), 'slideshow'), true);
   assert.equal(users.canAccess(users.getById(created.user.id), 'scheduler'), true);
+  assert.equal(users.canAccess(users.getById(created.user.id), 'vestaboardArtwork'), true);
+});
+
+test('vestaboard artwork permission defaults off and can be granted', () => {
+  const users = createHouseUsers(tempConfig(), silentLog);
+  users.ensureBootstrap();
+  const painter = users.create({
+    username: 'painter',
+    password: 'household1',
+    permissions: { vestaboardArtwork: true },
+  });
+  assert.equal(painter.ok, true);
+  assert.equal(painter.user.permissions.vestaboardArtwork, true);
+  assert.equal(painter.user.permissions.scheduler, false);
+  assert.equal(users.canAccess(users.getById(painter.user.id), 'vestaboardArtwork'), true);
+
+  const plain = users.create({ username: 'no-paint', password: 'household1' });
+  assert.equal(plain.user.permissions.vestaboardArtwork, false);
+  assert.equal(users.canAccess(users.getById(plain.user.id), 'vestaboardArtwork'), false);
 });
 
 test('scheduler permission defaults off and can be granted', () => {

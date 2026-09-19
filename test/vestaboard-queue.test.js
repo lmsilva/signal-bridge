@@ -1005,6 +1005,87 @@ test('posting a rotation page without holdSeconds drops a leftover guest hold', 
   assert.equal(h.queue.pending()[0].status, 'waiting');
 });
 
+// A scheduled rule can finish by clearing the flaps with a piece from the
+// Artwork gallery. That page is the tail of an airing, not a new rotation
+// page — and the engine keeps ticking while it holds the board, so the pages
+// that came due behind it have to go somewhere.
+test('a closing artwork is not a new rotation page, so the gap does not eat it', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, minRotationGapSeconds: 600 });
+  h.queue.submit([frame('ROAST ME', 1, { source: 'roast.me' })], { scheduler: true });
+  assert.equal(await h.queue.tick(), 'posted');
+
+  // An ordinary scheduled page seconds later is stale by the time the gap
+  // passes, so it is dropped.
+  h.advance(2 * SECOND);
+  assert.equal(
+    h.queue.submit([frame('WEATHER', 2)], { scheduler: true }).reason,
+    'gap',
+  );
+  // The clean-up board that belongs to the airing just posted is not.
+  const closing = h.queue.submit(
+    [{ ...frame('ARTWORK', 3, { source: 'vestaboard.artwork' }), holdSeconds: 600 }],
+    { scheduler: true, closing: true, clearQueueAfterHold: true },
+  );
+  assert.equal(closing.accepted, 1);
+});
+
+test('when the closing hold lapses it drops the scheduled pages stacked behind it', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 15, minRotationGapSeconds: 0 });
+  const cancelled = [];
+  h.queue.onChange((event, detail) => {
+    if (event === 'cancelled') cancelled.push(detail.frame?.label);
+  });
+  h.queue.submit(
+    [{ ...frame('ARTWORK', 1, { source: 'vestaboard.artwork' }), holdSeconds: 600 }],
+    { scheduler: true, closing: true, clearQueueAfterHold: true },
+  );
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.queue.state().holdClearsQueue, true);
+
+  // Ten minutes of ticks while the clean-up screen is up: every rule that
+  // comes due lands in the queue and waits.
+  h.queue.submit([frame('CLOCK', 2, { source: 'calendar.clock' })], { scheduler: true });
+  h.queue.submit([frame('VERSE', 3, { source: 'bible.verse' })], { scheduler: true });
+  h.queue.submit([frame('PUSHED', 4, { source: 'chuck.facts' })]);
+  assert.deepEqual(h.queue.pending().map((row) => row.status), ['held', 'held', 'waiting']);
+
+  h.advance(601 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted', 'the page someone pushed by hand still airs');
+  assert.equal(h.transport.posts[1].layout[0][0], 4);
+  assert.deepEqual(cancelled, ['VERSE', 'CLOCK']);
+  assert.equal(h.queue.state().holdClearsQueue, false);
+  assert.equal(h.queue.pending().length, 0);
+});
+
+test('an ordinary hold keeps the pages waiting behind it', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 15, minRotationGapSeconds: 0 });
+  h.queue.submit([{ ...frame('GUEST', 1), holdSeconds: 300 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.queue.state().holdClearsQueue, false);
+  h.queue.submit([frame('CLOCK', 2, { source: 'calendar.clock' })], { scheduler: true });
+  h.advance(301 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+});
+
+test('ending a closing hold by hand keeps the pages it was holding', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 15, minRotationGapSeconds: 0 });
+  h.queue.submit(
+    [{ ...frame('ARTWORK', 1, { source: 'vestaboard.artwork' }), holdSeconds: 600 }],
+    { scheduler: true, closing: true, clearQueueAfterHold: true },
+  );
+  assert.equal(await h.queue.tick(), 'posted');
+  h.queue.submit([frame('CLOCK', 2, { source: 'calendar.clock' })], { scheduler: true });
+
+  // Release holds / Skip are someone saying "get on with it" — they want the
+  // next page, not an empty queue.
+  assert.equal(h.queue.releaseGuestHold(), true);
+  assert.equal(h.queue.state().holdClearsQueue, false);
+  h.advance(16 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+});
+
 test('a Word Scramble lock parks every queued page until the game clears', async () => {
   const h = makeQueue({ rateWindowSeconds: 1 });
   h.queue.acquireGameLock('word.scramble');

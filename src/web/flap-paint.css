@@ -1,0 +1,152 @@
+/**
+ * Vestaboard Artwork — gallery and paint editor.
+ *
+ * Shared by the household site and the admin settings card, so it leans on the
+ * bezel tiles from `vestaboard-bezel.css` and its own neutral tokens rather than
+ * either portal's theme variables.
+ */
+
+.fp-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.fp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.32);
+}
+
+.fp-card.is-hidden { opacity: 0.55; }
+
+.fp-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fp-card-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fp-card-tag {
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.fp-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* A star that reads as on or off without colour alone. */
+.fp-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fp-star.is-on { color: #fbbf24; }
+
+.fp-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.fp-tool {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 2px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.fp-tool.is-active {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3);
+}
+
+.fp-tool-wide {
+  width: auto;
+  min-height: 30px;
+  padding: 0 10px;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+
+.fp-tool-sep {
+  width: 1px;
+  height: 22px;
+  margin: 0 4px;
+  background: rgba(148, 163, 184, 0.35);
+}
+
+.fp-tool-chip-red { background: #e03c31; }
+.fp-tool-chip-orange { background: #f58220; }
+.fp-tool-chip-yellow { background: #ffd200; }
+.fp-tool-chip-green { background: #22a24b; }
+.fp-tool-chip-blue { background: #0f62c8; }
+.fp-tool-chip-violet { background: #7b3f98; }
+.fp-tool-chip-white { background: #f2f2f2; }
+.fp-tool-chip-black { background: #101013; }
+.fp-tool-chip-filled { background: #6e6e6e; }
+
+/* The editor grid takes drags, so no text selection and no touch panning. */
+.fp-editor-grid {
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.fp-editor-grid:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
+}
+
+.fp-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.fp-editor-row > * { min-width: 0; }
+
+.fp-editor-name { flex: 1 1 200px; }
+
+.fp-push-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.fp-empty {
+  padding: 24px 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  border-radius: 12px;
+  text-align: center;
+  opacity: 0.75;
+}

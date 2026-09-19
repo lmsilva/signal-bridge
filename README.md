@@ -201,7 +201,7 @@ Signal has real accounts, not one shared password. `ADMIN_USERNAME` / `ADMIN_PAS
 |-------|--------|
 | **Sign-in** | Username + password on the landing page or `/admin/login.html`. Sessions are `signal_session` cookies (`ADMIN_SESSION_HOURS`, default 12) with progressive per-IP lockout on bad tries |
 | **User management** | Admin → **Settings → Accounts** (and the header dialog): user cards, an editor sheet, and a set-password sheet used for both create and reset. Password fields are masked with a Show toggle |
-| **Permissions** | Admins get everything. Other users can be granted `flightPlan`, `slideshow` and `redLetter` — each one adds a tab to `/user/` |
+| **Permissions** | Admins get everything. Other users can be granted `flightPlan`, `slideshow`, `redLetter`, `scheduler` and `vestaboardArtwork` — each one adds a tab to `/user/` |
 | **Avatars** | Pick one of 16 built-in animal faces, or upload a photo and crop it. Uploads are stored per user in `data/user-avatars/` and served at `/user-avatars/`; the built-ins are SVGs under `/user/avatars/` |
 | **Password mail** | Generated passwords and reset links are sent with the Gmail API (`gmail.send` scope only). Link the mailbox in Settings → Accounts → Email |
 | **Audit** | `data/user-audit.jsonl` records login, password change, account create/update and Gmail link — never secrets. The Audit table in the admin reads it |

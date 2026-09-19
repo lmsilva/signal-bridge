@@ -3165,6 +3165,27 @@ textarea.field-input.filter-search {
 .sched-sheet-specific {
   margin-top: 8px;
 }
+/* Finish-with-artwork: label / control pairs under the enabling checkbox. */
+.sched-closing-detail {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.sched-closing-detail > .trivia-check,
+.sched-closing-detail > .hint { grid-column: 1 / -1; }
+.sched-closing-pick {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 14px;
+}
 .sched-sheet-advanced {
   margin-top: 18px;
 }

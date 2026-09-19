@@ -71,7 +71,7 @@ function fakeRegistry(overrides = {}) {
  */
 function build({
   rules = [], settings = {}, registry = fakeRegistry(), busy = () => false, airImpl,
-  isBoardTarget = () => false,
+  isBoardTarget = () => false, airClosingArtwork = null,
 } = {}) {
   const root = tempRoot();
   const clock = { t: Date.parse('2026-03-10T15:00:00Z') };
@@ -96,6 +96,7 @@ function build({
         quietHoursExempt: options.quietHoursExempt,
       });
     }),
+    airClosingArtwork,
   });
   scheduler.updateSettings({
     active: true, tickSeconds: 30, globalMinGapSeconds: 0,
@@ -1079,6 +1080,134 @@ test('normaliseRule defaults fixed hold to 15 minutes and keeps cadence hold opt
   });
   assert.equal(cadence.scheduleType, 'cadence');
   assert.equal(cadence.holdSeconds, undefined);
+});
+
+// ------------------------------------------------- finishing with artwork
+
+test('normaliseRule keeps the closing artwork block honest', () => {
+  const full = normaliseRule({
+    commandId: 'alexa.weather',
+    closingArtwork: { mode: 'specific', artworkId: 'art-winter', holdMinutes: 25, clearQueue: false },
+  });
+  assert.deepEqual(full.closingArtwork, {
+    mode: 'specific', artworkId: 'art-winter', holdMinutes: 25, clearQueue: false,
+  });
+
+  // Defaults: random, ten minutes, and clear the queue afterwards.
+  const bare = normaliseRule({ commandId: 'alexa.weather', closingArtwork: {} });
+  assert.deepEqual(bare.closingArtwork, { mode: 'random', holdMinutes: 10, clearQueue: true });
+
+  // "That one" with nothing chosen would quietly air a random piece.
+  assert.equal(
+    normaliseRule({ commandId: 'alexa.weather', closingArtwork: { mode: 'specific' } })
+      .closingArtwork.mode,
+    'random',
+  );
+  // Nonsense clamps rather than throwing.
+  assert.equal(
+    normaliseRule({
+      commandId: 'alexa.weather',
+      closingArtwork: { mode: 'sideways', holdMinutes: 9000 },
+    }).closingArtwork.holdMinutes,
+    240,
+  );
+  // Off is the absence of the block.
+  assert.equal(normaliseRule({ commandId: 'alexa.weather' }).closingArtwork, undefined);
+  assert.equal(
+    normaliseRule({ commandId: 'alexa.weather', closingArtwork: null }).closingArtwork,
+    undefined,
+  );
+
+  // A rule flipped to Software keeps the piece it was set to finish with, so
+  // flipping back does not lose the choice.
+  const software = normaliseRule({
+    commandId: 'alexa.weather',
+    target: 'full',
+    closingArtwork: { mode: 'favorite', holdMinutes: 5 },
+  });
+  assert.equal(software.target, 'full');
+  assert.equal(software.closingArtwork.mode, 'favorite');
+});
+
+test('a board airing finishes with the artwork the rule names, and says so', async () => {
+  const calls = [];
+  const { scheduler } = build({
+    rules: [{
+      id: 'verse',
+      commandId: 'alexa.weather',
+      target: 'vestaboard',
+      intervalSeconds: 3600,
+      probability: 100,
+      closingArtwork: {
+        mode: 'specific', artworkId: 'art-winter', holdMinutes: 12, clearQueue: true,
+      },
+    }],
+    airImpl: () => ({ boardOutcomes: [{ boardId: 'sim', accepted: 1, skipped: false }] }),
+    airClosingArtwork: (rule, closing) => {
+      calls.push({ ruleId: rule.id, target: rule.target, ...closing });
+      return { artwork: { id: 'art-winter', name: 'Winter' } };
+    },
+  });
+  await scheduler.tick();
+
+  assert.deepEqual(calls, [{
+    ruleId: 'verse',
+    target: 'vestaboard',
+    mode: 'specific',
+    artworkId: 'art-winter',
+    holdSeconds: 12 * 60,
+    clearQueue: true,
+  }]);
+  const event = scheduler.activity.query({ limit: 10 }).find((row) => row.outcome === 'aired');
+  assert.match(event.detail, /Cleared with Winter, held 12 min/);
+  assert.match(event.detail, /dropped the scheduled pages behind it/);
+});
+
+test('nothing to clean up: a software rule, and a page the board never took', async () => {
+  const calls = [];
+  const closing = { mode: 'random', holdMinutes: 5, clearQueue: true };
+
+  const software = build({
+    rules: [{
+      id: 'overlay', commandId: 'alexa.weather', target: 'full',
+      intervalSeconds: 3600, probability: 100, closingArtwork: closing,
+    }],
+    airImpl: () => ({}),
+    airClosingArtwork: (rule) => { calls.push(rule.id); },
+  });
+  await software.scheduler.tick();
+
+  // The board queue dropped the page for the rotation gap, so there is nothing
+  // on the flaps to clear.
+  const dropped = build({
+    rules: [{
+      id: 'gapped', commandId: 'alexa.weather', target: 'vestaboard',
+      intervalSeconds: 3600, probability: 100, closingArtwork: closing,
+    }],
+    airImpl: () => ({ boardOutcomes: [{ boardId: 'sim', accepted: 0, skipped: true, reason: 'gap' }] }),
+    airClosingArtwork: (rule) => { calls.push(rule.id); },
+  });
+  await dropped.scheduler.tick();
+
+  assert.deepEqual(calls, []);
+});
+
+test('a closing artwork that cannot air leaves the airing itself alone', async () => {
+  const { scheduler } = build({
+    rules: [{
+      id: 'verse', commandId: 'alexa.weather', target: 'vestaboard',
+      intervalSeconds: 3600, probability: 100,
+      closingArtwork: { mode: 'specific', artworkId: 'art-gone', holdMinutes: 5, clearQueue: true },
+    }],
+    airImpl: () => ({ boardOutcomes: [{ boardId: 'sim', accepted: 1, skipped: false }] }),
+    airClosingArtwork: () => { throw new Error('That artwork is no longer available'); },
+  });
+  await scheduler.tick();
+
+  const event = scheduler.activity.query({ limit: 10 }).find((row) => row.outcome === 'aired');
+  assert.ok(event, 'the airing still counts — only the clean-up board failed');
+  assert.match(event.detail, /no longer available/);
+  assert.equal(scheduler.rules.get('verse').airingsToday, 1);
 });
 
 test('a cadence airing does not stamp the command duration as a Vestaboard hold', async () => {

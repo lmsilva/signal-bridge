@@ -22,6 +22,8 @@
     [21600, '6 hr'], [43200, '12 hr'],
   ];
   const DEFAULT_HOLD_MINUTES = 15;
+  const DEFAULT_CLOSING_HOLD_MINUTES = 10;
+  const ARTWORK_OPTIONS_ROUTE = '/api/vestaboard-artwork/options';
   const SCHED_RULE_SEARCH_KEY = 'signal.schedRuleSearch';
   const SCHED_DISPLAY_FILTER_KEY = 'signal.schedDisplayFilter';
   const SCHED_KIND_FILTER_KEY = 'signal.schedKindFilter';
@@ -293,7 +295,10 @@
       const kind = rule.scheduleType === 'fixed' ? 'Fixed' : 'Cadence';
       const when = schedScheduleSummary(rule);
       const target = schedTargetPill(rule).label;
-      return `${kind} | ${when} | hold ${schedHoldLabel(rule)} | ${target}`;
+      const closing = rule.closingArtwork
+        ? ` | clears with artwork for ${rule.closingArtwork.holdMinutes}m`
+        : '';
+      return `${kind} | ${when} | hold ${schedHoldLabel(rule)} | ${target}${closing}`;
     }
 
     function focusSchedRule(ruleId) {
@@ -346,6 +351,46 @@
       return options;
     }
 
+    /**
+     * Choices for an `options` param, keyed by the route that serves them. A
+     * route is fetched once per page: the artwork gallery does not change while
+     * a sheet is open.
+     */
+    const schedParamOptions = new Map();
+
+    /** Fetch one options route into the cache. `false` means it was already there. */
+    async function loadSchedOptionsRoute(route) {
+      if (!route || schedParamOptions.has(route)) return false;
+      try {
+        const result = await apiFetch(route);
+        schedParamOptions.set(route, Array.isArray(result?.options) ? result.options : []);
+      } catch {
+        // Someone with Scheduler but not the feature's own permission cannot
+        // read the list. An empty picker beats a sheet that will not open.
+        schedParamOptions.set(route, []);
+      }
+      return true;
+    }
+
+    async function ensureSchedParamOptions(rule) {
+      const command = schedCommandById(rule?.commandId);
+      const routes = [...new Set((command?.params || [])
+        .map((def) => def.optionsRoute)
+        .filter((route) => route && !schedParamOptions.has(route)))];
+      if (!routes.length) return false;
+      await Promise.all(routes.map(loadSchedOptionsRoute));
+      return true;
+    }
+
+    /** Show a param only when the param it depends on has the value it wants. */
+    function syncSchedParamFields(host) {
+      if (!host) return;
+      host.querySelectorAll('[data-sched-when]').forEach((el) => {
+        const driver = host.querySelector(`[data-sched-param="${el.dataset.schedWhen}"]`);
+        el.hidden = String(driver?.value ?? '') !== el.dataset.schedWhenIs;
+      });
+    }
+
     function schedRuleParamsHtml(rule, prefix = 'data-sched-param') {
       const command = schedCommandById(rule.commandId);
       const defs = Array.isArray(command?.params) ? command.params : [];
@@ -354,21 +399,156 @@
       const fields = defs.map((def) => {
         const key = def.key;
         const value = params[key] ?? '';
+        const depends = def.dependsOn && typeof def.dependsOn === 'object'
+          ? Object.entries(def.dependsOn)[0]
+          : null;
+        // The same attributes go on the label and the field so hiding one hides
+        // the pair, and the flat grid row keeps its shape.
+        const when = depends
+          ? ` data-sched-when="${escapeHtml(depends[0])}"`
+            + ` data-sched-when-is="${escapeHtml(String(depends[1]))}"`
+          : '';
+        const label = `<label class="field-label"${when}>${escapeHtml(def.label || key)}</label>`;
+        if (def.type === 'options') {
+          const choices = schedParamOptions.get(def.optionsRoute);
+          if (!choices) {
+            return `${label}<select class="field-input" disabled${when}>`
+              + '<option>Loading…</option></select>';
+          }
+          if (!choices.length) {
+            return `${label}<select class="field-input" ${prefix}="${escapeHtml(key)}"${when}>`
+              + '<option value="">nothing to pick yet</option></select>';
+          }
+          const options = choices.map((entry) => (
+            `<option value="${escapeHtml(entry.value)}"${entry.value === value ? ' selected' : ''}>`
+            + `${escapeHtml(entry.label || entry.value)}</option>`
+          )).join('');
+          return `${label}<select class="field-input" ${prefix}="${escapeHtml(key)}"${when}>`
+            + `<option value="">pick one</option>${options}</select>`;
+        }
         if (def.type === 'enum' && Array.isArray(def.values)) {
           const options = def.values.map((entry) => (
             `<option value="${escapeHtml(entry)}"${entry === value ? ' selected' : ''}>${escapeHtml(entry)}</option>`
           )).join('');
-          return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
-            + `<select class="field-input" ${prefix}="${escapeHtml(key)}">`
+          return `${label}`
+            + `<select class="field-input" ${prefix}="${escapeHtml(key)}"${when}>`
             + `<option value="">default</option>${options}</select>`;
         }
         const min = def.min != null ? ` min="${def.min}"` : '';
         const max = def.max != null ? ` max="${def.max}"` : '';
-        return `<label class="field-label">${escapeHtml(def.label || key)}</label>`
-          + `<input class="field-input" type="number"${min}${max} ${prefix}="${escapeHtml(key)}"`
+        return `${label}`
+          + `<input class="field-input" type="number"${min}${max} ${prefix}="${escapeHtml(key)}"${when}`
           + ` value="${escapeHtml(value === '' || value == null ? '' : String(value))}" placeholder="default">`;
       }).join('');
       return `<div class="sched-field-row" style="margin-top:8px">${fields}</div>`;
+    }
+
+    /**
+     * "Finish with" — clear the board with a piece from the Artwork gallery
+     * once the event is done, park the queue behind it, and optionally drop the
+     * scheduled pages that stacked up while it was showing.
+     *
+     * Only offered when the rule's target can reach a Vestaboard; a Windows
+     * overlay has no flaps to clean up.
+     */
+    function schedTargetReachesBoard(target) {
+      const value = String(target || 'full');
+      if (value === 'all' || value === 'vestaboard') return true;
+      if (value === 'full') return false;
+      return knownDisplays().find((entry) => entry.id === value)?.kind === 'vestaboard';
+    }
+
+    function schedActiveTarget() {
+      const btn = document.querySelector('#sched-sheet-target .segmented-btn.active')?.dataset.schedTarget
+        || 'full';
+      return btn === 'specific' ? ($('sched-sheet-specific')?.value || 'full') : btn;
+    }
+
+    function fillSchedClosingArtwork(selected) {
+      const select = $('sched-sheet-closing-artwork');
+      if (!select) return;
+      const choices = schedParamOptions.get(ARTWORK_OPTIONS_ROUTE);
+      if (!choices) {
+        select.innerHTML = '<option value="">Loading…</option>';
+        return;
+      }
+      if (!choices.length) {
+        select.innerHTML = '<option value="">nothing to pick yet</option>';
+        return;
+      }
+      select.innerHTML = '<option value="">pick one</option>'
+        + choices.map((entry) => (
+          `<option value="${escapeHtml(entry.value)}">${escapeHtml(entry.label || entry.value)}</option>`
+        )).join('');
+      if (selected) select.value = selected;
+    }
+
+    function syncSchedClosingFields() {
+      const boardBound = schedTargetReachesBoard(schedActiveTarget());
+      const label = $('sched-sheet-closing-label');
+      const wrap = $('sched-sheet-closing-wrap');
+      if (label) label.hidden = !boardBound;
+      if (wrap) wrap.hidden = !boardBound;
+      const detail = $('sched-sheet-closing-detail');
+      if (detail) detail.hidden = $('sched-sheet-closing')?.checked !== true;
+      const pick = $('sched-sheet-closing-pick-wrap');
+      if (pick) pick.hidden = $('sched-sheet-closing-mode')?.value !== 'specific';
+    }
+
+    function schedClosingSnapshot() {
+      // A target with no flaps keeps whatever was stored, so flipping a rule to
+      // Software and back does not lose the piece it was set to finish with.
+      if (!schedTargetReachesBoard(schedActiveTarget())) {
+        return schedEditorBaseline?.closingArtwork || null;
+      }
+      if ($('sched-sheet-closing')?.checked !== true) {
+        return null;
+      }
+      const artworkId = String($('sched-sheet-closing-artwork')?.value || '').trim();
+      return {
+        mode: $('sched-sheet-closing-mode')?.value || 'random',
+        artworkId: artworkId || null,
+        holdMinutes: Math.max(1, Math.min(240,
+          Number($('sched-sheet-closing-hold')?.value) || DEFAULT_CLOSING_HOLD_MINUTES)),
+        clearQueue: $('sched-sheet-closing-clear')?.checked === true,
+      };
+    }
+
+    function fillSchedClosingFields(rule) {
+      const closing = rule?.closingArtwork || null;
+      const on = $('sched-sheet-closing');
+      if (on) on.checked = Boolean(closing);
+      const mode = $('sched-sheet-closing-mode');
+      if (mode) mode.value = closing?.mode || 'random';
+      const hold = $('sched-sheet-closing-hold');
+      if (hold) hold.value = String(closing?.holdMinutes || DEFAULT_CLOSING_HOLD_MINUTES);
+      const clear = $('sched-sheet-closing-clear');
+      if (clear) clear.checked = closing ? closing.clearQueue !== false : true;
+      fillSchedClosingArtwork(closing?.artworkId || '');
+      syncSchedClosingFields();
+      loadSchedOptionsRoute(ARTWORK_OPTIONS_ROUTE).then((loaded) => {
+        // The sheet may have moved on to another rule while we were fetching.
+        if (!loaded || schedEditorRuleId !== rule?.id) return;
+        fillSchedClosingArtwork(closing?.artworkId || '');
+      });
+    }
+
+    /** Paint the rule's params, then fill any dynamic pickers once they arrive. */
+    function paintSchedRuleParams(rule) {
+      const host = $('sched-sheet-params');
+      if (!host) return;
+      if (!host.dataset.schedParamWired) {
+        host.dataset.schedParamWired = '1';
+        host.addEventListener('change', () => syncSchedParamFields(host));
+      }
+      host.innerHTML = schedRuleParamsHtml(rule);
+      syncSchedParamFields(host);
+      ensureSchedParamOptions(rule).then((loaded) => {
+        // The sheet may have moved on to another rule while we were fetching.
+        if (!loaded || schedEditorRuleId !== rule.id) return;
+        host.innerHTML = schedRuleParamsHtml(rule);
+        syncSchedParamFields(host);
+      });
     }
 
     function schedRuleRowHtml(rule) {
@@ -487,7 +667,9 @@
       const params = {};
       $('sched-sheet-params')?.querySelectorAll('[data-sched-param]').forEach((input) => {
         const key = input.dataset.schedParam;
-        if (!key) return;
+        // A param whose condition is not met is not part of the rule, so a value
+        // left behind by an earlier choice must not be saved.
+        if (!key || input.hidden) return;
         const raw = String(input.value ?? '').trim();
         if (raw === '') return;
         if (input.tagName === 'SELECT') {
@@ -521,6 +703,7 @@
         fixedTimes,
         holdSeconds: holdMinutes * 60,
         quietHoursExempt: $('sched-sheet-quiet-exempt')?.checked === true,
+        closingArtwork: schedClosingSnapshot(),
       };
     }
 
@@ -652,8 +835,7 @@
       const probValue = $('sched-sheet-probability-value');
       if (probValue) probValue.textContent = `${probability?.value || 90}%`;
 
-      const paramsHost = $('sched-sheet-params');
-      if (paramsHost) paramsHost.innerHTML = schedRuleParamsHtml(rule);
+      paintSchedRuleParams(rule);
 
       const hold = $('sched-sheet-hold');
       if (hold) hold.value = String(schedHoldMinutes(rule));
@@ -669,6 +851,8 @@
 
       const quiet = $('sched-sheet-quiet-exempt');
       if (quiet) quiet.checked = rule.quietHoursExempt === true;
+
+      fillSchedClosingFields(rule);
 
       const maxPerDay = $('sched-sheet-maxPerDay');
       if (maxPerDay) maxPerDay.value = rule.maxPerDay != null ? String(rule.maxPerDay) : '';
@@ -1031,6 +1215,7 @@
       sheet?.addEventListener('change', () => {
         markSchedEditorDirty();
         updateSchedCadenceReadout();
+        syncSchedClosingFields();
         updateSchedEditorSaveState();
       });
       sheet?.addEventListener('input', (event) => {
@@ -1108,6 +1293,7 @@
           setSegmentedActive('sched-sheet-target', 'schedTarget', targetSeg.dataset.schedTarget);
           const wrap = $('sched-sheet-specific-wrap');
           if (wrap) wrap.hidden = targetSeg.dataset.schedTarget !== 'specific';
+          syncSchedClosingFields();
           markSchedEditorDirty();
           return;
         }

@@ -3649,9 +3649,30 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="guest-book-invite-footer"/);
   assert.match(html, /value="always"/);
   assert.match(html, /value="whenRoom"/);
-  assert.match(html, /styles\.css\?v=signal321/);
+  assert.match(html, /id="vestaboard-artwork-settings-card"/);
+  assert.match(html, /id="vestaboard-artwork-manage-sheet"/);
+  assert.match(html, /id="btn-vestaboard-artwork-manage"/);
+  assert.match(html, /id="btn-vestaboard-artwork-push"/);
+  assert.match(html, /id="vestaboard-artwork-grid"/);
+  assert.match(html, /id="vestaboard-artwork-template"/);
+  assert.match(html, /flap-paint\.js\?v=signal323/);
+  assert.match(html, /flap-paint\.css\?v=signal323/);
+  assert.match(js, /\/api\/vestaboard-artwork/);
+  assert.match(js, /\/api\/push\/vestaboard-artwork/);
+  assert.match(js, /createFlapPainter/);
+  // A Vestaboard rule can finish by clearing the flaps with a painted board.
+  assert.match(html, /id="sched-sheet-closing"/);
+  assert.match(html, /id="sched-sheet-closing-mode"/);
+  assert.match(html, /id="sched-sheet-closing-artwork"/);
+  assert.match(html, /id="sched-sheet-closing-hold"/);
+  assert.match(html, /id="sched-sheet-closing-clear"/);
+  assert.match(js, /function schedClosingSnapshot/);
+  assert.match(js, /function schedTargetReachesBoard/);
+  assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
+  assert.match(css, /\.sched-closing-detail \{/);
+  assert.match(html, /styles\.css\?v=signal323/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal321/);
+  assert.match(html, /app\.js\?v=signal323/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -5968,16 +5989,31 @@ test('household login, /user/ gate, and permission 403s', async () => {
         'data-tab="flight"',
         'data-tab="dates"',
         'data-tab="scheduler"',
+        'data-tab="artwork"',
         'data-tab="board"',
       ].map((needle) => userApp.text.indexOf(needle));
       assert.ok(
         tabs.every((pos, i) => pos >= 0 && (i === 0 || pos > tabs[i - 1])),
-        'user tab order must be Message → Skills → Game Sessions → Slideshow → Flight Plan → Date Book → Scheduler → Vestaboard Simulator',
+        'user tab order must be Message → Skills → Game Sessions → Slideshow → Flight Plan → Date Book → Scheduler → Vestaboard Artwork → Vestaboard Simulator',
       );
     }
+    // The two Vestaboard tabs sit together, and the painter loads with them.
+    assert.match(userApp.text, /id="tab-artwork"/);
+    assert.match(userApp.text, /tab-label-full">Vestaboard Artwork/);
+    assert.match(userApp.text, /tab-label-short">Artwork/);
+    assert.match(userApp.text, /id="art-sheet"/);
+    assert.match(userApp.text, /id="art-gallery"/);
+    assert.match(userApp.text, /flap-paint\.js\?v=signal323/);
+    assert.match(userApp.text, /flap-paint\.css\?v=signal323/);
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal321/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal321/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal323/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal323/);
+    // The rule editor offers a closing artwork on anything that reaches a board.
+    assert.match(userApp.text, /id="sched-sheet-closing"/);
+    assert.match(userApp.text, /id="sched-sheet-closing-mode"/);
+    assert.match(userApp.text, /id="sched-sheet-closing-artwork"/);
+    assert.match(userApp.text, /id="sched-sheet-closing-hold"/);
+    assert.match(userApp.text, /id="sched-sheet-closing-clear"/);
     assert.match(userApp.text, /week-grid\.js\?v=signal310/);
     assert.match(userApp.text, /data-tab="slideshow"/);
     assert.match(userApp.text, /su-page-head-actions/);
@@ -6055,8 +6091,36 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function paintSchedNextUpLine/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function setAllSchedGroupsCollapsed/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function visibleSchedGroupNames/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal318/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal321/);
+    // The scheduler's "which artwork" dropdown is filled from a route, so the
+    // param renderer has to understand a param whose choices it cannot inline.
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function ensureSchedParamOptions/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /function syncSchedParamFields/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /def\.optionsRoute/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /def\.dependsOn/);
+    // Finishing a board airing with a painted clean-up screen.
+    const schedUi = fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8');
+    assert.match(schedUi, /function schedTargetReachesBoard/);
+    assert.match(schedUi, /function schedClosingSnapshot/);
+    assert.match(schedUi, /function syncSchedClosingFields/);
+    assert.match(schedUi, /closingArtwork: schedClosingSnapshot\(\)/);
+    assert.match(schedUi, /ARTWORK_OPTIONS_ROUTE/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8'), /\.sched-closing-detail \{/);
+
+    const painterJs = fs.readFileSync(path.join(realWebRoot, 'flap-paint.js'), 'utf8');
+    assert.match(painterJs, /root\.createFlapPainter = createFlapPainter/);
+    for (const method of ['getCells', 'setCells', 'setTool', 'writeText', 'undo', 'clear', 'revert', 'destroy']) {
+      assert.match(painterJs, new RegExp(`${method}[(:]`), `painter is missing ${method}`);
+    }
+    // A drag keeps painting once the browser stops firing enter/leave.
+    assert.match(painterJs, /setPointerCapture/);
+    assert.match(painterJs, /elementFromPoint/);
+
+    const painted = await request(`${base}/flap-paint.js`, { cookie: userCookie });
+    assert.equal(painted.status, 200);
+    assert.match(painted.headers['content-type'], /javascript/);
+
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal323/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal323/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /id="sched-group-fold"/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /data-sched-group-fold="expand"/);
     assert.match(userJs, /SignalSchedulerUi/);
@@ -6187,9 +6251,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal310/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal323/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal317/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal318/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal323/);
     assert.match(
       fs.readFileSync(path.join(realWebRoot, 'vestaboard-sim-ui.js'), 'utf8'),
       /Blank flaps \(spaces\) snap now/,
@@ -6274,6 +6338,17 @@ test('household login, /user/ gate, and permission 403s', async () => {
     const schedDenied = await request(`${base}/api/display-scheduler/rules`, { cookie: userCookie });
     assert.equal(schedDenied.status, 403);
 
+    const artDenied = await request(`${base}/api/vestaboard-artwork?pageSize=50`, { cookie: userCookie });
+    assert.equal(artDenied.status, 403);
+    const artOptionsDenied = await request(`${base}/api/vestaboard-artwork/options`, { cookie: userCookie });
+    assert.equal(artOptionsDenied.status, 403);
+    const artSaveDenied = await request(`${base}/api/vestaboard-artwork`, {
+      method: 'POST',
+      cookie: userCookie,
+      body: { id: 'art-winter', favourite: true },
+    });
+    assert.equal(artSaveDenied.status, 403);
+
     const status = await request(`${base}/api/status`, { cookie: userCookie });
     assert.equal(status.status, 403);
 
@@ -6283,13 +6358,31 @@ test('household login, /user/ gate, and permission 403s', async () => {
     await request(`${base}/api/house-users/${created.body.user.id}`, {
       method: 'PUT',
       cookie: adminCookie,
-      body: { permissions: { slideshow: true, scheduler: true } },
+      body: { permissions: { slideshow: true, scheduler: true, vestaboardArtwork: true } },
     });
     const photosOk = await request(`${base}/api/photos`, { cookie: userCookie });
     assert.equal(photosOk.status, 200);
 
     const schedOk = await request(`${base}/api/display-scheduler/rules`, { cookie: userCookie });
     assert.equal(schedOk.status, 200, schedOk.text);
+
+    const artOk = await request(`${base}/api/vestaboard-artwork?pageSize=50`, { cookie: userCookie });
+    assert.equal(artOk.status, 200, artOk.text);
+    assert.equal(artOk.body.artwork.length, 11, 'the eleven shipped templates are listed');
+    assert.equal(artOk.body.available, 11);
+    const artTemplates = await request(`${base}/api/vestaboard-artwork/templates`, { cookie: userCookie });
+    assert.equal(artTemplates.status, 200);
+    assert.equal(artTemplates.body.templates.length, 11);
+    const artStarred = await request(`${base}/api/vestaboard-artwork`, {
+      method: 'POST',
+      cookie: userCookie,
+      body: { id: 'art-winter', favourite: true },
+    });
+    assert.equal(artStarred.status, 200, artStarred.text);
+    assert.equal(artStarred.body.favourites, 1);
+    const artOptions = await request(`${base}/api/vestaboard-artwork/options`, { cookie: userCookie });
+    assert.equal(artOptions.status, 200);
+    assert.ok(artOptions.body.options.some((row) => row.value === 'art-winter' && /\*$/.test(row.label)));
 
     const listed = await request(`${base}/api/house-users`, { cookie: adminCookie });
     const envAdmin = (listed.body.users || []).find((row) => row.bootstrap);

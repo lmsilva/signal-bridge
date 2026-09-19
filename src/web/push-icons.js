@@ -56,6 +56,7 @@
     roast: '<path d="M12 3c2.8 3 4.2 5.3 4.2 7a4.2 4.2 0 0 1-8.4 0c0-1.7 1.4-4 4.2-7z"/><path d="M6.5 14.5c-.9 1.2-1.4 2.4-1.4 3.4C5.1 20.2 8 22 12 22s6.9-1.8 6.9-4.1c0-1-.5-2.2-1.4-3.4"/>',
     'family-quotes': '<path d="M12 20.5S4 15.8 4 10.2A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 8 2.2c0 5.6-8 10.3-8 10.3z"/>',
     'warm-fuzzies': '<path d="M12 20.5S4 15.8 4 10.2A4.2 4.2 0 0 1 12 8a4.2 4.2 0 0 1 8 2.2c0 5.6-8 10.3-8 10.3z"/><path d="M8.5 10.5c1.2-1.5 3-2.2 3.5-.5.5-1.7 2.3-1 3.5.5"/>',
+    artwork: '<rect x="3" y="6" width="18" height="12" rx="1.5"/><path d="M9 6v12M15 6v12M3 10h18M3 14h18"/><path d="M6 6h3v4H6zM15 14h3v4h-3z" fill="currentColor" stroke="none"/>',
     'daily-bucket-fillers': '<path d="M7 8h10l-1.2 11H8.2L7 8z"/><path d="M6 8h12"/><path d="M9 8V6.5A3 3 0 0 1 15 6.5V8"/><path d="M10 12h4"/>',
     'misheard-lyrics': '<path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2.2"/><circle cx="17" cy="16" r="2.2"/><path d="M9 10l10-2"/>',
     'periodic-table': '<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="13" width="7" height="7" rx="1"/><rect x="14" y="13" width="7" height="7" rx="1"/>',

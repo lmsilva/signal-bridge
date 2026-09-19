@@ -106,21 +106,25 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+/** Every feature permission a household user can be granted. */
+const PERMISSION_KEYS = Object.freeze([
+  'flightPlan',
+  'slideshow',
+  'redLetter',
+  'scheduler',
+  'vestaboardArtwork',
+]);
+
 function emptyPermissions() {
-  return { flightPlan: false, slideshow: false, redLetter: false, scheduler: false };
+  return Object.fromEntries(PERMISSION_KEYS.map((key) => [key, false]));
 }
 
 function sanitisePermissions(raw = {}, { isAdmin = false } = {}) {
-  // Admins/owners get every feature permission (same as flightPlan / slideshow / redLetter).
+  // Admins/owners get every feature permission.
   if (isAdmin) {
-    return { flightPlan: true, slideshow: true, redLetter: true, scheduler: true };
+    return Object.fromEntries(PERMISSION_KEYS.map((key) => [key, true]));
   }
-  return {
-    flightPlan: raw.flightPlan === true,
-    slideshow: raw.slideshow === true,
-    redLetter: raw.redLetter === true,
-    scheduler: raw.scheduler === true,
-  };
+  return Object.fromEntries(PERMISSION_KEYS.map((key) => [key, raw[key] === true]));
 }
 
 function sanitiseAvatar(raw = {}) {
@@ -409,12 +413,8 @@ function createHouseUsers(config = {}, log = console) {
       if (payload.isAdmin === false) {
         return { ok: false, error: 'The environment admin always stays an admin' };
       }
-      if (payload.permissions && (
-        payload.permissions.flightPlan === false
-        || payload.permissions.slideshow === false
-        || payload.permissions.redLetter === false
-        || payload.permissions.scheduler === false
-      )) {
+      if (payload.permissions
+        && PERMISSION_KEYS.some((key) => payload.permissions[key] === false)) {
         return { ok: false, error: 'The environment admin permissions cannot be changed' };
       }
       if (payload.firstName != null) user.firstName = String(payload.firstName || '').trim().slice(0, 40);
@@ -579,6 +579,7 @@ module.exports = {
   generatePassword,
   publicUser,
   actorFromUser,
+  PERMISSION_KEYS,
   sanitisePermissions,
   sanitiseAvatar,
   sanitiseDashboard,
