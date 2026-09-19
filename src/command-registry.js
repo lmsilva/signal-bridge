@@ -1282,7 +1282,7 @@ const COMMANDS = [
   {
     id: 'flightplan.next',
     title: 'Next Flight',
-    subtitle: 'Next upcoming trip flight card',
+    subtitle: 'Next upcoming trip on the overlay and the board',
     group: 'Sky',
     route: '/api/push/flightplan-next',
     icon: 'flight-next',
@@ -1291,11 +1291,12 @@ const COMMANDS = [
     supportsContentCheck: true,
     variableDuration: false,
     defaultDurationSeconds: 120,
+    kinds: ['full', 'vestaboard'],
   },
   {
     id: 'flightplan.board',
     title: 'Trip Board',
-    subtitle: 'Departure board for a trip (Vestaboard-friendly)',
+    subtitle: 'Whole-trip itinerary on the overlay and the board',
     group: 'Sky',
     route: '/api/push/flightplan-board',
     icon: 'flight-board',
@@ -1304,6 +1305,7 @@ const COMMANDS = [
     supportsContentCheck: true,
     variableDuration: false,
     defaultDurationSeconds: 120,
+    kinds: ['full', 'vestaboard'],
   },
   {
     id: 'youtube.now-playing',
