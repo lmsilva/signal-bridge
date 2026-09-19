@@ -725,9 +725,9 @@ function createYoutubeNowPlaying({
   /**
    * @param {Object} [options]
    * @param {'auto'|'now-playing'|'last-played'} [options.requestedMode] `auto`
-   *   (the admin test button) falls back to the last video watched. The
-   *   scheduler asks for one mode so a `youtube.now-playing` rule cannot
-   *   quietly air a last-played card instead.
+   *   (Push, Air now, and the scheduler) shows live if a video is on,
+   *   otherwise the last video watched. `now-playing` / `last-played` stay
+   *   available for the Settings test buttons.
    */
   async function pushManualPreview({
     device = 'Signal',

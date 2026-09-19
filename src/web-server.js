@@ -5762,15 +5762,15 @@ function createWebServer({
         case 'signal.slideshow': handlePhotoSlideshowPush(body, res); break;
         case 'signal.guest-snaps': await handleGuestPhotoboothPush(body, res); break;
         case 'steam.now-playing':
-          await handleSteamNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+          await handleSteamNowPlayingPush({ ...body, mode: 'auto' }, res); break;
         case 'steam.last-played':
-          await handleSteamNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+          await handleSteamNowPlayingPush({ ...body, mode: 'auto' }, res); break;
         case 'steam.library-tour':
           await handleSteamLibraryTourPush(body, res); break;
         case 'psn.now-playing':
-          await handlePsnNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+          await handlePsnNowPlayingPush({ ...body, mode: 'auto' }, res); break;
         case 'psn.last-played':
-          await handlePsnNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+          await handlePsnNowPlayingPush({ ...body, mode: 'auto' }, res); break;
         case 'psn.library-tour':
           await handlePsnLibraryTourPush(body, res); break;
         case 'credits.show':
@@ -5788,9 +5788,9 @@ function createWebServer({
         case 'huupe.dashboard':
           handleHuupeDashboardPush(body, res); break;
         case 'youtube.now-playing':
-          await handleYoutubeNowPlayingPush({ ...body, mode: 'now-playing' }, res); break;
+          await handleYoutubeNowPlayingPush({ ...body, mode: 'auto' }, res); break;
         case 'youtube.last-played':
-          await handleYoutubeNowPlayingPush({ ...body, mode: 'last-played' }, res); break;
+          await handleYoutubeNowPlayingPush({ ...body, mode: 'auto' }, res); break;
         case 'plex.now-playing':
           await handlePlexNowPlayingPush({ ...body, mode: body?.mode || 'auto' }, res); break;
         case 'plex.top10':

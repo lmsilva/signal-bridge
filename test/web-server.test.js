@@ -163,6 +163,8 @@ async function startTestServer(options = {}) {
     gameSessions: options.gameSessions || null,
     trivia: options.trivia || null,
     youtubeNowPlaying: options.youtubeNowPlaying || null,
+    steamNowPlaying: options.steamNowPlaying || null,
+    psnNowPlaying: options.psnNowPlaying || null,
     rollCredits: options.rollCredits || null,
     shortlinksFetch: options.shortlinksFetch || null,
     shortlinksHealthIntervalMs: options.shortlinksHealthIntervalMs,
@@ -4362,10 +4364,40 @@ test('Steam, PSN, YouTube and Feature Presentation share one auto-mode push tile
   }
   for (const id of ['steam.last-played', 'psn.last-played', 'youtube.last-played']) {
     const command = COMMANDS.find((entry) => entry.id === id);
-    assert.equal(command.pushable, false, `${id} stays scheduler-only`);
+    assert.equal(command.pushable, false, `${id} is Settings-only`);
+    assert.equal(command.schedulable, false, `${id} must not appear as its own rule`);
     assert.equal(command.body.mode, 'last-played');
   }
   assert.equal(COMMANDS.some((entry) => entry.id === 'plex.last-played'), false);
+});
+
+test('a scheduled Steam or PSN tick auto-picks live, else last played', async () => {
+  const steamModes = [];
+  const psnModes = [];
+  const { webServer } = await startTestServer({
+    steamNowPlaying: {
+      pushManualPreview: async ({ requestedMode }) => {
+        steamModes.push(requestedMode);
+        return { ok: true, mode: requestedMode, appId: 400, name: 'Portal' };
+      },
+    },
+    psnNowPlaying: {
+      pushManualPreview: async ({ requestedMode }) => {
+        psnModes.push(requestedMode);
+        return { ok: true, mode: requestedMode, titleId: 'CUSA00001', name: 'Astro' };
+      },
+    },
+  });
+  try {
+    await webServer.airCommand('steam.now-playing', {});
+    await webServer.airCommand('steam.last-played', {});
+    await webServer.airCommand('psn.now-playing', {});
+    await webServer.airCommand('psn.last-played', {});
+    assert.deepEqual(steamModes, ['auto', 'auto']);
+    assert.deepEqual(psnModes, ['auto', 'auto']);
+  } finally {
+    webServer.stop();
+  }
 });
 
 test('the YouTube TV code input regroups digits while typing', () => {

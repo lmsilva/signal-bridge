@@ -130,11 +130,23 @@ const TARGET_CLASSES = new Set(['all', 'full', 'vestaboard']);
 /** Retired command ids that still appear in saved rules. */
 const LEGACY_COMMAND_IDS = Object.freeze({
   'plex.last-played': 'plex.now-playing',
+  'steam.last-played': 'steam.now-playing',
+  'psn.last-played': 'psn.now-playing',
+  'youtube.last-played': 'youtube.now-playing',
+  'autodarts.last-match': 'autodarts.now',
+  'huupe.last-game': 'huupe.now',
 });
 
 const LEGACY_COMMAND_LABELS = Object.freeze({
   'plex.last-played': 'Feature Presentation — last played',
+  'steam.last-played': 'Steam — last played',
+  'psn.last-played': 'PSN — last played',
+  'youtube.last-played': 'YouTube — last played',
+  'autodarts.last-match': 'Autodarts — last match',
+  'huupe.last-game': 'Huupe — last game',
 });
+
+const LAST_PLAYED_MODES = new Set(['last-played', 'last-match', 'last-game']);
 
 function resolveCommandId(commandId) {
   const id = String(commandId || '');
@@ -204,12 +216,14 @@ function normaliseRule(raw = {}, { existingRules = [], command = null, now = Dat
     base.intervalSeconds, MIN_INTERVAL_SECONDS, MAX_INTERVAL_SECONDS, 45 * 60,
   );
   const params = base.params && typeof base.params === 'object' ? { ...base.params } : {};
-  if (rawCommandId === 'plex.last-played' && params.mode === 'last-played') {
+  // A last-played twin is now the same auto action. Drop the forced mode so
+  // a tick can still show live when someone is playing.
+  if (LEGACY_COMMAND_IDS[rawCommandId] && LAST_PLAYED_MODES.has(params.mode)) {
     delete params.mode;
   }
   let label = String(base.label || resolvedCommand?.title || commandId || 'Rule').slice(0, 80);
   if (rawCommandId !== commandId && label === LEGACY_COMMAND_LABELS[rawCommandId]) {
-    label = resolvedCommand?.title || 'Feature Presentation';
+    label = resolvedCommand?.title || commandId;
   }
   const rule = {
     id: String(base.id || crypto.randomUUID()),

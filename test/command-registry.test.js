@@ -337,7 +337,7 @@ test('commands without a content check always report content', () => {
   assert.equal(registry.hasContent('steam.last-played'), true);
 });
 
-test('steam.now-playing has content only while a session is live', () => {
+test('steam.now-playing has content for a live session or last played', () => {
   let status = null;
   const registry = createCommandRegistry({ getSteamStatus: () => status });
   assert.equal(registry.hasContent('steam.now-playing'), false);
@@ -345,17 +345,24 @@ test('steam.now-playing has content only while a session is live', () => {
   status = { session: { appId: 400, suppressed: false } };
   assert.equal(registry.hasContent('steam.now-playing'), true);
 
-  // A suppressed session means the display is deliberately showing something
-  // else, so the card would be wrong to air.
+  // A suppressed session is not live, but last played can still air.
+  status = { session: { appId: 400, suppressed: true }, lastAccountAppId: 400 };
+  assert.equal(registry.hasContent('steam.now-playing'), true);
+
   status = { session: { appId: 400, suppressed: true } };
   assert.equal(registry.hasContent('steam.now-playing'), false);
+
+  status = { configured: true };
+  assert.equal(registry.hasContent('steam.now-playing'), true);
 });
 
-test('psn.now-playing has content only while a session is live', () => {
+test('psn.now-playing has content for a live session or a linked account', () => {
   let status = null;
   const registry = createCommandRegistry({ getPsnStatus: () => status });
   assert.equal(registry.hasContent('psn.now-playing'), false);
   status = { session: { titleId: 'PPSA01668', suppressed: false } };
+  assert.equal(registry.hasContent('psn.now-playing'), true);
+  status = { configured: true };
   assert.equal(registry.hasContent('psn.now-playing'), true);
 });
 
@@ -1062,6 +1069,33 @@ test('Feature Presentation is a single auto command, not a last-played twin', ()
   assert.ok(plex.schedulable);
   assert.equal(plex.body?.mode, undefined);
   assert.equal(plex.subtitle, 'Now playing, or last played');
+});
+
+test('live and last-played are one schedulable action per connector', () => {
+  const pairs = [
+    ['steam.now-playing', 'steam.last-played', 'Steam Live / Last Played'],
+    ['psn.now-playing', 'psn.last-played', 'PSN Live / Last Played'],
+    ['youtube.now-playing', 'youtube.last-played', 'YouTube Live / Last Played'],
+    ['autodarts.now', 'autodarts.last-match', 'Autodarts Live / Last Played'],
+    ['huupe.now', 'huupe.last-game', 'Huupe Live / Last Played'],
+  ];
+  for (const [autoId, lastId, title] of pairs) {
+    const auto = COMMANDS.find((command) => command.id === autoId);
+    const last = COMMANDS.find((command) => command.id === lastId);
+    assert.equal(auto.title, title);
+    assert.equal(auto.pushable, true);
+    assert.equal(auto.schedulable, true);
+    assert.equal(auto.body?.mode, undefined, `${autoId} must auto-pick`);
+    assert.equal(last.pushable, false);
+    assert.equal(last.schedulable, false, `${lastId} must not be its own rule`);
+  }
+  // Library tours and dashboards stay their own actions.
+  for (const id of [
+    'steam.library-tour', 'psn.library-tour',
+    'autodarts.dashboard', 'huupe.dashboard',
+  ]) {
+    assert.equal(COMMANDS.find((command) => command.id === id).schedulable, true);
+  }
 });
 
 test('an unwired feature reports no content rather than throwing', () => {

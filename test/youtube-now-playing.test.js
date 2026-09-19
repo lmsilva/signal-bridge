@@ -1163,20 +1163,26 @@ test('both YouTube commands are registered and content-checked correctly', () =>
   assert.equal(nowPlaying.supportsContentCheck, true);
   assert.equal(nowPlaying.variableDuration, false);
   assert.equal(nowPlaying.route, '/api/push/youtube-now-playing');
-  // Push tile posts no mode (auto); the scheduler forces one by command id.
+  // Push and Schedule both auto-pick: live if a video is on, else last played.
   assert.equal(nowPlaying.body?.mode, undefined);
   assert.equal(nowPlaying.pushable, true);
+  assert.equal(nowPlaying.title, 'YouTube Live / Last Played');
   assert.equal(lastPlayed.body.mode, 'last-played');
   assert.equal(lastPlayed.pushable, false);
+  assert.equal(lastPlayed.schedulable, false);
   assert.equal(lastPlayed.supportsContentCheck, true);
 });
 
 test('the content check follows whether a video is actually playing', () => {
   const playing = createCommandRegistry({ getYoutubeStatus: () => ({ playing: true }) });
   const idle = createCommandRegistry({ getYoutubeStatus: () => ({ playing: false }) });
+  const history = createCommandRegistry({
+    getYoutubeStatus: () => ({ playing: false, hasHistory: true }),
+  });
 
   assert.equal(playing.hasContent('youtube.now-playing'), true);
   assert.equal(idle.hasContent('youtube.now-playing'), false);
+  assert.equal(history.hasContent('youtube.now-playing'), true);
 });
 
 test('the status snapshot reports enough to render the settings card', async () => {
