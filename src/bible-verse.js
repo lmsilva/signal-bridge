@@ -82,7 +82,7 @@ function matchingVerses(settings = {}) {
     && verse.text
     && verse.reference
     && verse.rows > 0
-    && verse.rows <= BODY_SLOTS * MAX_PAGES
+    && verse.rows <= BODY_SLOTS
     && fitsBoard(verse.reference, verse.text)
   ));
 }
@@ -154,7 +154,7 @@ function createBibleVerse(config, log) {
         && verse.text
         && verse.reference
         && verse.rows > 0
-        && verse.rows <= BODY_SLOTS * MAX_PAGES
+        && verse.rows <= BODY_SLOTS
         && fitsBoard(verse.reference, verse.text)
       )).length,
       total: loadShipped().length + settings.custom.length,
@@ -187,6 +187,9 @@ function createBibleVerse(config, log) {
       }
       if (!where) {
         return { ok: false, error: 'Add a scripture reference' };
+      }
+      if (!fitsBoard(where, next)) {
+        return { ok: false, error: 'That verse is too long for one Vestaboard screen' };
       }
       const settings = settingsApi.get();
       const custom = [...settings.custom, { id: newCustomId(), text: next, reference: where }];
@@ -223,6 +226,9 @@ function createBibleVerse(config, log) {
           if (!nextRef) {
             return { ok: false, error: 'Add a scripture reference' };
           }
+          if (!fitsBoard(nextRef, nextText)) {
+            return { ok: false, error: 'That verse is too long for one Vestaboard screen' };
+          }
           custom[customIndex] = {
             ...custom[customIndex],
             text: nextText,
@@ -253,6 +259,9 @@ function createBibleVerse(config, log) {
         }
         if (!nextRef) {
           return { ok: false, error: 'Add a scripture reference' };
+        }
+        if (!fitsBoard(nextRef, nextText)) {
+          return { ok: false, error: 'That verse is too long for one Vestaboard screen' };
         }
         if (original
           && cleanText(original.text) === nextText

@@ -13612,12 +13612,10 @@
     if (hint) {
       if (!text) {
         hint.textContent = '';
-      } else if (!ref || ref.length > 20 || pages > 3) {
-        hint.textContent = 'Too long for the board';
-      } else if (pages <= 1) {
-        hint.textContent = `Fits in ${chunk.length} row${chunk.length === 1 ? '' : 's'}`;
+      } else if (!ref || ref.length > 20 || pages > 1) {
+        hint.textContent = 'Too long for one screen';
       } else {
-        hint.textContent = `Fits in ${pages} frames`;
+        hint.textContent = `Fits in ${chunk.length} row${chunk.length === 1 ? '' : 's'}`;
       }
     }
   }
