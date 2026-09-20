@@ -42,7 +42,6 @@ const SHIPPED_NAMES = [
   'Winter',
   'Cute Bird',
   'Christmas House',
-  'Cute Beaver',
   'Dinosaur',
   'Flowers',
   'One in a Minion',

@@ -74,7 +74,6 @@ const DESIGNS = [
   { id: 'art-winter', name: 'Winter', hash: '4874f850' },
   { id: 'art-cute-bird', name: 'Cute Bird', hash: '43097cd8' },
   { id: 'art-christmas-house', name: 'Christmas House', hash: 'a0dfdecb' },
-  { id: 'art-cute-beaver', name: 'Cute Beaver', hash: 'ab7232a8' },
   { id: 'art-dinosaur', name: 'Dinosaur', hash: 'e6766668' },
   { id: 'art-flowers', name: 'Flowers', hash: '22a4e655' },
   { id: 'art-one-in-a-minion', name: 'One in a Minion', hash: 'ac0cfb81' },
