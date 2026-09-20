@@ -102,6 +102,71 @@ test('a 5-minute scheduled rule flips at most once per rotation gap', async () =
   }
 });
 
+function teslaDashboardPayload(percent) {
+  return {
+    version: 2,
+    type: 'tesla-dashboard.query',
+    timestamp: '2026-09-20T04:00:00.000Z',
+    dashboard: {
+      status: 'ok',
+      fetchedAt: '2026-09-20T04:00:00.000Z',
+      vehicle: { model: 'Model Y', name: 'Kylie' },
+      battery: {
+        percent, rangeMiles: 201, charging: false, chargingLabel: 'Not plugged in', chargerPowerKw: null,
+      },
+      map: { drivingChip: '0 mph · Park' },
+      climate: { insideTempF: 88, outsideTempF: 91 },
+      security: { locked: true, sentryOn: true },
+    },
+  };
+}
+
+test('a scheduled Tesla dashboard\'s live reading follows its preview through the gap, and its clean-up queues', async () => {
+  // The house as configured: a 10-minute rotation gap, a rule that holds the
+  // board for a minute and finishes with an artwork. The dashboard handler
+  // sends a cached preview at once and the live reading once the car wakes;
+  // the second card used to be refused as another flip inside the gap.
+  const h = await makeHub({ minRotationGapSeconds: 600 });
+  try {
+    const send = (payload, extra = {}) => h.hub.pushEvent(payload, {
+      targetId: 'vestaboard', scheduler: true, explicit: false, holdSeconds: 60, ...extra,
+    });
+    const queue = h.hub.queueFor('sim');
+    const drain = async () => {
+      for (let i = 0; i < 20 && (queue.pending()?.length || 0); i += 1) await queue.tick();
+    };
+
+    const preview = send(teslaDashboardPayload(73));
+    assert.equal(preview.boards[0].reason, 'queued');
+    await drain();
+
+    const live = send(teslaDashboardPayload(72));
+    assert.equal(live.boards[0].reason, 'queued', 'the live reading is the page refreshing itself');
+    assert.equal(live.boards[0].accepted, 1);
+    await drain();
+    let posts = h.simulator.calls().filter((entry) => String(entry.method).includes('POST message'));
+    assert.equal(posts.length, 2, 'both cards reached the flaps');
+
+    // Any other scheduled page is still inside the gap.
+    const other = send(weatherPayload());
+    assert.equal(other.boards[0].reason, 'gap');
+
+    // The rule's closing artwork queues behind the page it clears.
+    const cells = Array.from({ length: 6 }, () => new Array(22).fill(63));
+    const closing = send({
+      type: 'vestaboard.artwork',
+      artwork: { id: 'art-mountains', name: 'Mountains', cells },
+    }, {
+      holdSeconds: 600, closing: true, closingAfterSeconds: 60, clearQueueAfterHold: true,
+    });
+    assert.equal(closing.boards[0].reason, 'queued');
+    assert.equal(queue.pending()[0].status, 'held', 'due when the dashboard has had its minute');
+    assert.equal(queue.pending()[0].label, 'Mountains');
+  } finally {
+    await h.stop();
+  }
+});
+
 test('an alert still posts during the rotation gap', async () => {
   const h = await makeHub({ minRotationGapSeconds: 600 });
   try {

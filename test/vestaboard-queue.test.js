@@ -1029,6 +1029,103 @@ test('a closing artwork is not a new rotation page, so the gap does not eat it',
   assert.equal(closing.accepted, 1);
 });
 
+// The bug these cover: a scheduled Tesla dashboard sends its cached preview at
+// once and the live reading once the car has woken. The preview flipped and
+// stamped the rotation gap, so the live reading — the same card, twenty
+// seconds later — was dropped as "too soon", the scheduler was told no board
+// took it, and the clean-up artwork the rule asked for never queued.
+test('the live reading after a scheduled page\'s cached preview is that page refreshing itself', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60, minRotationGapSeconds: 600 });
+  const preview = h.queue.submit(
+    [{ ...frame('TESLA REFRESHING', 1, { source: 'tesla.dashboard' }), holdSeconds: 60 }],
+    { scheduler: true },
+  );
+  assert.equal(preview.accepted, 1);
+  assert.equal(await h.queue.tick(), 'posted');
+  const flippedAt = h.at();
+
+  h.advance(20 * SECOND);
+  const live = h.queue.submit(
+    [{ ...frame('TESLA LIVE', 2, { source: 'tesla.dashboard' }), holdSeconds: 60 }],
+    { scheduler: true },
+  );
+  assert.equal(live.accepted, 1, 'the rotation gap does not eat the page updating itself');
+  assert.equal(h.queue.pending()[0].status, 'waiting', 'nor does the page\'s own hold park it');
+  assert.equal(await h.queue.tick(), 'posted', 'nor does its dwell delay it');
+  assert.equal(h.transport.posts[1].layout[0][0], 2);
+  // The page's clocks still date from the preview: no second minute.
+  assert.equal(h.queue.state().holdUntil, flippedAt + 60 * SECOND);
+  assert.equal(h.queue.state().snapshotUntil, flippedAt + 60 * SECOND);
+
+  // Anything else scheduled is still a new flip inside the gap.
+  h.advance(2 * SECOND);
+  assert.equal(h.queue.submit([frame('WEATHER', 3)], { scheduler: true }).reason, 'gap');
+});
+
+test('the clean-up screen is due when the page\'s hold ends, not afterSeconds past a slow handler', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60, minRotationGapSeconds: 600 });
+  h.queue.submit(
+    [{ ...frame('TESLA REFRESHING', 1, { source: 'tesla.dashboard' }), holdSeconds: 60 }],
+    { scheduler: true },
+  );
+  assert.equal(await h.queue.tick(), 'posted');
+  const flippedAt = h.at();
+
+  // The car takes twenty seconds to wake; the scheduler only hears back —
+  // and only queues the closing artwork — once the live reading is in.
+  h.advance(20 * SECOND);
+  h.queue.submit(
+    [{ ...frame('TESLA LIVE', 2, { source: 'tesla.dashboard' }), holdSeconds: 60 }],
+    { scheduler: true },
+  );
+  assert.equal(await h.queue.tick(), 'posted');
+  const closing = h.queue.submit(
+    [{ ...frame('MOUNTAINS', 3, { source: 'vestaboard.artwork' }), holdSeconds: 600 }],
+    { scheduler: true, closing: true, closingAfterSeconds: 60, clearQueueAfterHold: true },
+  );
+  assert.equal(closing.accepted, 1);
+
+  h.advance(39 * SECOND);
+  assert.equal(await h.queue.tick(), null, 'the dashboard still has its minute');
+  h.advance(2 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[2].layout[0][0], 3, 'the artwork clears it a minute after it flipped');
+  assert.equal(h.queue.state().holdUntil, h.at() + 600 * SECOND, 'and holds the board for its ten minutes');
+  assert.equal(h.queue.state().holdClearsQueue, true);
+  assert.ok(h.at() - flippedAt >= 61 * SECOND);
+
+  // The next Tesla airing during the artwork hold is a new flip, not a
+  // refresh of the clean-up screen — dropped for the gap like any other.
+  h.advance(5 * 60 * SECOND);
+  const again = h.queue.submit(
+    [{ ...frame('TESLA', 4, { source: 'tesla.dashboard' }), holdSeconds: 60 }],
+    { scheduler: true },
+  );
+  assert.equal(again.reason, 'gap');
+});
+
+test('airing the same skill twice inside the dwell is still two flips, so the gap applies', async () => {
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 60, minRotationGapSeconds: 600 });
+  h.queue.submit([frame('ROAST ME', 1, { source: 'roast.me' })], { scheduler: true });
+  assert.equal(await h.queue.tick(), 'posted');
+  h.advance(20 * SECOND);
+  assert.equal(
+    h.queue.submit([frame('ROAST ME', 2, { source: 'roast.me' })], { scheduler: true }).reason,
+    'gap',
+    'a card without a coalesce key has no preview to refresh',
+  );
+
+  // And a two-step card whose time is up is a new airing too.
+  const t = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 15, minRotationGapSeconds: 600 });
+  t.queue.submit([frame('TESLA', 1, { source: 'tesla.dashboard' })], { scheduler: true });
+  assert.equal(await t.queue.tick(), 'posted');
+  t.advance(120 * SECOND);
+  assert.equal(
+    t.queue.submit([frame('TESLA', 2, { source: 'tesla.dashboard' })], { scheduler: true }).reason,
+    'gap',
+  );
+});
+
 test('a closing artwork waits out the page it is clearing, even one still on its way', async () => {
   // Regression: a scheduled Tesla dashboard answers the scheduler before its
   // card exists (the car has to wake), so the clean-up board was queued while

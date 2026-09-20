@@ -243,6 +243,17 @@ function classifyStructural(payload = {}, type, frameSource) {
       coalesceKey: 'tesla-dashboard.query',
     };
   }
+  // Indoor air quality is the same two-step card: the cached reading goes
+  // out while the Alexa enrich runs, then the live one replaces it.
+  if (t === 'air-quality.query' || t === 'alexa.air-quality') {
+    return {
+      kind: 'snapshot',
+      source: 'air-quality.query',
+      sessionLive: undefined,
+      close: false,
+      coalesceKey: 'air-quality.query',
+    };
+  }
 
   return {
     kind: 'snapshot',
