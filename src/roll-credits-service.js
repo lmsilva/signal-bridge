@@ -8,6 +8,42 @@ const { createRollCreditsMedia } = require('./roll-credits-media');
 const { createRollCreditsJobs } = require('./roll-credits-jobs');
 const { createRollCreditsScraper, createMediaId } = require('./roll-credits-scraper');
 
+// The game sheet PUTs the whole media array from the copy it loaded, so a save
+// that lands while a download is still running used to roll that row back to
+// `pending` with no path: the file was on disk, but the admin said "not
+// downloaded yet" for good, and nothing could adopt it. Reordering and hiding
+// are the only media changes the sheet owns — trim, resolution, retry, upload
+// and delete each have their own route — so a save may only carry those two.
+const MEDIA_EDITOR_FIELDS = ['order', 'hidden'];
+
+/**
+ * Rebases an incoming media array on what is stored: editor-owned fields come
+ * from the request, everything else stays as the download pipeline left it.
+ * A save can neither add rows nor drop one it never saw.
+ */
+function rebaseMedia(stored, incoming) {
+  const byId = new Map(stored.map((row) => [String(row.id), row]));
+  const rows = [];
+  const seen = new Set();
+  for (const row of incoming) {
+    const id = row?.id == null ? '' : String(row.id);
+    const current = byId.get(id);
+    if (!current || seen.has(id)) continue;
+    seen.add(id);
+    const next = { ...current };
+    for (const key of MEDIA_EDITOR_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(row, key)) next[key] = row[key];
+    }
+    rows.push(next);
+  }
+  // A clip added while the sheet was open keeps its place instead of being
+  // deleted by a view that predates it.
+  for (const row of stored) {
+    if (!seen.has(String(row.id))) rows.push({ ...row });
+  }
+  return rows;
+}
+
 function createRollCreditsService({ config = {}, log = console, dependencies = {} } = {}) {
   const store = dependencies.store || createRollCreditsStore(config, log);
   const settings = dependencies.settings || createRollCreditsSettings(config, log);
@@ -307,8 +343,14 @@ function createRollCreditsService({ config = {}, log = console, dependencies = {
     return result;
   }
 
-  function updateGame(id, patch) {
-    return store.updateGame(id, patch);
+  function updateGame(id, patch = {}) {
+    if (!Array.isArray(patch.media)) return store.updateGame(id, patch);
+    const game = store.getGame(id);
+    if (!game) return store.updateGame(id, patch);
+    return store.updateGame(id, {
+      ...patch,
+      media: rebaseMedia(game.media || [], patch.media),
+    });
   }
 
   function reorderGames(ids) {

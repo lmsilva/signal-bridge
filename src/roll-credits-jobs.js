@@ -49,11 +49,19 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
     return store.updateGame(gameId, { media: rows });
   }
 
+  /**
+   * Where a media row's file belongs. A video is named after the row rather
+   * than the height it was fetched at, because a game can hold more than one
+   * clip and two at the same height landed on a single filename and overwrote
+   * each other — along with the poster and wall preview, which are named after
+   * the video file. A re-download at another height keeps the name, which is
+   * no less honest than the old `video-720.mp4` that held 480p after a redo.
+   */
   function inferredPath(item) {
     if (item.path) return item.path;
     const suffix = item.kind === 'video' ? '.mp4' : '.jpg';
     const stem = item.kind === 'cover' ? 'cover' : (
-      item.kind === 'screenshot' ? `shot-${item.id}` : `video-${item.resolution || 720}`
+      item.kind === 'screenshot' ? `shot-${item.id}` : `video-${item.id}`
     );
     return `${item.gameId}/${stem}${suffix}`;
   }
@@ -124,13 +132,26 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
         // leftover file at the previous resolution — not fatal
       }
     }
+    // Record the file the moment it lands, before the preview below. Writing
+    // both in one patch meant anything that interrupted ffmpeg — a hang, a
+    // container restart, an OOM kill — left a fully downloaded clip on disk
+    // with its row still `pending` and no path, which the admin shows as "not
+    // downloaded yet" forever and no retry could adopt.
+    patchMedia(job.gameId, job.mediaId, patch);
     // The wall cannot decode video, so a downloaded clip is only useful once it
     // has a poster still and a looping preview. Failing that is not fatal — the
-    // clip stays playable in the admin and the card falls back to cover art.
+    // clip stays playable in the admin and the card falls back to cover art —
+    // so the reason is written to the row rather than failing the whole job,
+    // which would mark a clip that is sitting on disk as not downloaded.
     if (item.kind === 'video' && typeof media.renderVideoPreview === 'function') {
-      Object.assign(patch, await applyPreview(item, patch.path));
+      try {
+        patchMedia(job.gameId, job.mediaId, await applyPreview(item, patch.path));
+      } catch (error) {
+        patchMedia(job.gameId, job.mediaId, {
+          statusDetail: `Saved, but the wall preview could not be built: ${error?.message || error}`,
+        });
+      }
     }
-    patchMedia(job.gameId, job.mediaId, patch);
   }
 
   async function drain() {
@@ -252,19 +273,24 @@ function createRollCreditsJobs({ store, media, settings, log = console } = {}) {
     for (const game of store.getAllGames()) {
       for (const item of game.media || []) {
         if (item.status !== 'pending') continue;
+        // A row with no path may still have its file: the download can finish
+        // and the process die before the row is written. Look where the file
+        // would have gone, so a restart adopts it instead of fetching it twice.
+        const landed = item.path || inferredPath({ ...item, gameId: game.id });
         let missing = true;
-        if (item.path) {
-          try {
-            missing = !fs.existsSync(media.absolutePath(item.path));
-          } catch {
-            missing = true;
-          }
+        try {
+          missing = !fs.existsSync(media.absolutePath(landed));
+        } catch {
+          missing = true;
         }
         if (missing) {
           enqueueDownload({ gameId: game.id, mediaId: item.id, kind: item.kind });
           queued += 1;
         } else {
-          patchMedia(game.id, item.id, { status: 'ready', statusDetail: null });
+          patchMedia(game.id, item.id, { status: 'ready', statusDetail: null, path: landed });
+          // Adopted, so the wall artefacts are whatever the interrupted run
+          // managed to write. Rebuild them rather than trust a partial encode.
+          if (item.kind === 'video') enqueuePreviewRebuild(game.id, item.id);
         }
       }
     }

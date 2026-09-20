@@ -108,7 +108,81 @@ test('a video download rebuilds the wall preview with the saved trim', async () 
   assert.equal(renders[0][1].trimStart, 8);
   assert.equal(renders[0][1].trimEnd, 18);
   assert.equal(store.getGame(game.id).media[0].resolution, 1080);
-  assert.match(store.getGame(game.id).media[0].path, /video-1080/);
+  assert.match(store.getGame(game.id).media[0].path, /video-clip\.mp4$/);
+});
+
+test('two clips on one game get a file each instead of overwriting one name', async () => {
+  const written = [];
+  const { store, jobs } = setup(async (_url, _res, outPath) => {
+    written.push(outPath);
+    return { path: outPath, thumbPath: null };
+  });
+  const game = store.createGame({
+    title: 'Two clips',
+    system: 'pc',
+    media: [
+      { id: 'scraped', kind: 'video', source: 'youtube', status: 'pending', youtubeUrl: 'https://youtu.be/a', resolution: 480 },
+      { id: 'handpicked', kind: 'video', source: 'youtube', status: 'pending', youtubeUrl: 'https://youtu.be/b', resolution: 480 },
+    ],
+  });
+  jobs.enqueueDownload({ gameId: game.id, mediaId: 'scraped', kind: 'video' });
+  jobs.enqueueDownload({ gameId: game.id, mediaId: 'handpicked', kind: 'video' });
+  await jobs.whenIdle();
+  assert.equal(new Set(written).size, 2);
+  const paths = store.getGame(game.id).media.map((row) => row.path);
+  assert.equal(new Set(paths).size, 2);
+  assert.ok(store.getGame(game.id).media.every((row) => row.status === 'ready'));
+});
+
+test('a downloaded clip is recorded even when the wall preview never finishes', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'roll-credits-jobs-'));
+  const store = createRollCreditsStore({ rollCreditsPath: path.join(directory, 'store.json') });
+  const media = {
+    absolutePath: (relative) => path.join(directory, relative),
+    downloadYoutube: async (_url, _res, outPath) => ({ path: outPath, thumbPath: null }),
+    renderVideoPreview: async () => { throw new Error('ffmpeg went away'); },
+  };
+  const settings = { get: () => ({ limits: {}, youtube: { defaultResolution: 480 } }) };
+  const jobs = createRollCreditsJobs({ store, media, settings });
+  const game = store.createGame({
+    title: 'Interrupted',
+    system: 'pc',
+    media: [{ id: 'clip', kind: 'video', source: 'youtube', status: 'pending', youtubeUrl: 'https://youtu.be/x' }],
+  });
+  jobs.enqueueDownload({ gameId: game.id, mediaId: 'clip', kind: 'video' });
+  await jobs.whenIdle();
+  const row = store.getGame(game.id).media[0];
+  assert.equal(row.status, 'ready');
+  assert.match(row.path, /video-clip\.mp4$/);
+  assert.match(row.statusDetail, /wall preview could not be built.*ffmpeg went away/);
+});
+
+test('restartPending adopts a file that landed before the row was written', async () => {
+  const downloads = [];
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'roll-credits-adopt-'));
+  const store = createRollCreditsStore({ rollCreditsPath: path.join(directory, 'store.json') });
+  const media = {
+    absolutePath: (relative) => path.join(directory, relative),
+    downloadYoutube: async (...args) => { downloads.push(args); return { path: args[2], thumbPath: null }; },
+    renderVideoPreview: async () => ({ posterPath: 'poster.jpg', previewPath: 'clip.webp', durationSeconds: 12 }),
+  };
+  const settings = { get: () => ({ limits: {}, youtube: { defaultResolution: 480 } }) };
+  const jobs = createRollCreditsJobs({ store, media, settings });
+  const game = store.createGame({
+    title: 'Orphan',
+    system: 'pc',
+    media: [{ id: 'clip', kind: 'video', source: 'youtube', status: 'pending', path: null, youtubeUrl: 'https://youtu.be/y' }],
+  });
+  fs.mkdirSync(path.join(directory, game.id), { recursive: true });
+  fs.writeFileSync(path.join(directory, game.id, 'video-clip.mp4'), 'already here');
+
+  assert.equal(jobs.restartPending(), 0);
+  await jobs.whenIdle();
+  assert.equal(downloads.length, 0);
+  const row = store.getGame(game.id).media[0];
+  assert.equal(row.status, 'ready');
+  assert.equal(row.path, `${game.id}/video-clip.mp4`);
+  assert.equal(row.previewPath, 'clip.webp');
 });
 
 test('rebuildWallPreviews re-encodes ready videos without downloading', async () => {
