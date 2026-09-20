@@ -830,6 +830,33 @@ test('events either side of local midnight are each counted once', () => {
   assert.equal(log.stats(window)[0].aired, 3);
 });
 
+test('an amend that lands after local midnight still finds the airing it belongs to', () => {
+  // A rule airs at 23:58; its clean-up artwork (or an interruption) is stamped
+  // on the row a few minutes later, by which time the day buffer holds the new
+  // day. The amend used to look only there, find nothing and return null —
+  // the row kept no trace of what happened to it.
+  const dir = path.join(tempRoot(), 'activity');
+  const log = createActivityLog(dir, {
+    timeZone: 'UTC',
+    now: () => Date.parse('2026-03-11T00:02:00Z'),
+  });
+
+  const late = log.record({ ruleId: 'tesla', outcome: 'aired', at: '2026-03-10T23:58:00Z' });
+  log.record({ ruleId: 'other', outcome: 'lost-dice', at: '2026-03-11T00:01:00Z' });
+
+  const amended = log.amend(late.id, { detail: 'Cleared with Mountains, held 10 min' });
+  assert.equal(amended?.detail, 'Cleared with Mountains, held 10 min');
+
+  const yesterday = fs.readFileSync(path.join(dir, '2026-03-10.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(yesterday.length, 1);
+  assert.equal(yesterday[0].detail, 'Cleared with Mountains, held 10 min');
+  const window = { from: '2026-03-10T00:00:00Z', to: '2026-03-11T04:00:00Z' };
+  assert.equal(log.query(window).find((row) => row.id === late.id)?.detail, 'Cleared with Mountains, held 10 min');
+  // Today's row is untouched, and an unknown id is still a no-op.
+  assert.equal(log.query(window).find((row) => row.ruleId === 'other').detail, undefined);
+  assert.equal(log.amend('nope', { detail: 'x' }), null);
+});
+
 test('stats aggregate hit rate, gaps and the dominant reason for skipping', () => {
   const dir = path.join(tempRoot(), 'activity');
   const log = createActivityLog(dir, { timeZone: 'UTC' });

@@ -117,6 +117,12 @@ function createActivityLog(
   // on every poll, and re-parsing a 3,000-line file each time is wasteful.
   let cacheKey = null;
   let cache = [];
+  // Which day each recent event was written to, so an amend that lands after
+  // local midnight — an airing that started at 23:58, a closing artwork
+  // stamped once its page has gone out — still finds yesterday's row instead
+  // of silently doing nothing.
+  const dayOfEvent = new Map();
+  const REMEMBERED_EVENTS = 2000;
 
   function fileFor(dateKey) {
     return path.join(directory, `${dateKey}.jsonl`);
@@ -172,6 +178,10 @@ function createActivityLog(
       cacheKey = dateKey;
     }
     cache.push(full);
+    dayOfEvent.set(full.id, dateKey);
+    if (dayOfEvent.size > REMEMBERED_EVENTS) {
+      dayOfEvent.delete(dayOfEvent.keys().next().value);
+    }
     try {
       fs.mkdirSync(directory, { recursive: true });
       fs.appendFileSync(fileFor(dateKey), `${JSON.stringify(full)}\n`, 'utf8');
@@ -181,28 +191,47 @@ function createActivityLog(
     return full;
   }
 
-  /** Amend an already-written event — used when a variable-duration airing ends. */
-  function amend(eventId, patch) {
-    if (!eventId || !cacheKey) {
-      return null;
-    }
-    const index = cache.findIndex((event) => event.id === eventId);
-    if (index < 0) {
-      return null;
-    }
-    cache[index] = { ...cache[index], ...patch };
+  function writeDay(dateKey, events) {
     try {
       // JSONL has no in-place update; rewriting the day file is cheap at this
       // size and keeps the file an honest reflection of the cache.
       fs.writeFileSync(
-        fileFor(cacheKey),
-        cache.map((event) => JSON.stringify(event)).join('\n') + '\n',
+        fileFor(dateKey),
+        events.map((event) => JSON.stringify(event)).join('\n') + '\n',
         'utf8',
       );
     } catch (error) {
       log?.warn?.('Could not amend scheduler activity', error?.message || error);
     }
-    return cache[index];
+  }
+
+  /**
+   * Amend an already-written event — used when a variable-duration airing
+   * ends, and when an airing's clean-up artwork is queued behind it.
+   */
+  function amend(eventId, patch) {
+    if (!eventId || !cacheKey) {
+      return null;
+    }
+    const index = cache.findIndex((event) => event.id === eventId);
+    if (index >= 0) {
+      cache[index] = { ...cache[index], ...patch };
+      writeDay(cacheKey, cache);
+      return cache[index];
+    }
+    // Not today's row: the day rolled over between the airing and this amend.
+    const dateKey = dayOfEvent.get(eventId);
+    if (!dateKey || dateKey === cacheKey) {
+      return null;
+    }
+    const events = readDay(dateKey);
+    const at = events.findIndex((event) => event.id === eventId);
+    if (at < 0) {
+      return null;
+    }
+    events[at] = { ...events[at], ...patch };
+    writeDay(dateKey, events);
+    return events[at];
   }
 
   function dateKeysBetween(fromMs, toMs) {
