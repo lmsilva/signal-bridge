@@ -50,9 +50,11 @@ const SHIPPED_NAMES = [
   'Balloons',
   'Colored Hearts',
   'Cute Duck',
-  'Seagull',
+  'Cute Chicks',
   'Grover',
   'Pumpkin',
+  'Jolly Santa',
+  'Minions',
 ];
 
 /** Compare a painted grid against a drawing of the whole board. */
@@ -175,6 +177,18 @@ test('the shipped grids flip flap for flap', () => {
     'wwwwwwwwrrrrrwwwwwwwww',
     'wwwwwwwwwwrwwwwwwwwwww',
   ], 'Mom Heart');
+
+  // Full-bleed with single white flaps scattered through the green as snow: the
+  // lone flaps are the ones a decode is most likely to lose.
+  const santa = framesFor(shippedById('art-jolly-santa'));
+  assertBoard(santa[0].rows, [
+    'gwgggrrrrrrrrgggwggwgg',
+    'ggggrggrrrrrrrggggwwwg',
+    'gggwggwobooobowggggwgg',
+    'wggggwwoowwwoowwgwgggg',
+    'ggggggwwwwkwwwwggggggw',
+    'ggrrrrwwwwwwwwwrrrrggg',
+  ], 'Jolly Santa');
 
   // A carved face is black flaps inside the orange, so the blank-versus-black
   // call the decoder has to make is pinned here too.

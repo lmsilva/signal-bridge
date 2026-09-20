@@ -82,9 +82,11 @@ const DESIGNS = [
   { id: 'art-balloons', name: 'Balloons', hash: '23826cd0' },
   { id: 'art-colored-hearts', name: 'Colored Hearts', hash: 'e1357908' },
   { id: 'art-cute-duck', name: 'Cute Duck', hash: '46bcf284' },
-  { id: 'art-seagull', name: 'Seagull', hash: 'fab56ce5' },
+  { id: 'art-cute-chicks', name: 'Cute Chicks', hash: 'fab56ce5' },
   { id: 'art-grover', name: 'Grover', hash: '410be908' },
   { id: 'art-pumpkin', name: 'Pumpkin', hash: '3054c8c8' },
+  { id: 'art-jolly-santa', name: 'Jolly Santa', hash: '83a967b4' },
+  { id: 'art-minions', name: 'Minions', hash: 'e4c7174d' },
 ];
 
 // Text the decoder cannot read back. `col` is where the word starts.
