@@ -72,7 +72,7 @@ const DESIGNS = [
   { id: 'art-psychedelic-heart', name: 'Psychedelic Heart', hash: '1490689c' },
   { id: 'art-school-bus', name: 'School Bus', hash: '00522dfd' },
   { id: 'art-winter', name: 'Winter', hash: '4874f850' },
-  { id: 'art-cute-bird', name: 'Cute Bird', hash: '43097cd8' },
+  { id: 'art-cute-bird', name: 'Cute Beaver', hash: '43097cd8' },
   { id: 'art-christmas-house', name: 'Christmas House', hash: 'a0dfdecb' },
   { id: 'art-dinosaur', name: 'Dinosaur', hash: 'e6766668' },
   { id: 'art-flowers', name: 'Flowers', hash: '22a4e655' },

@@ -40,7 +40,7 @@ const SHIPPED_NAMES = [
   'Psychedelic Heart',
   'School Bus',
   'Winter',
-  'Cute Bird',
+  'Cute Beaver',
   'Christmas House',
   'Dinosaur',
   'Flowers',
@@ -144,15 +144,15 @@ test('the shipped grids flip flap for flap', () => {
     '               r',
   ], 'Japanese Heart');
 
-  const bird = framesFor(shippedById('art-cute-bird'));
-  assertBoard(bird[0].rows, [
+  const beaver = framesFor(shippedById('art-cute-bird'));
+  assertBoard(beaver[0].rows, [
     'bbbbooobbbbbbbbooobbbb',
     'bbbboroooooooooorobbbb',
     'bbbbboowkooookwoobbbbb',
     'bbbbboooooooooooobbbbb',
     'bbbbooooookkoooooobbbb',
     'bbbboooooowwoooooobbbb',
-  ], 'Cute Bird');
+  ], 'Cute Beaver');
 
   // Words beside a picture rather than over it: the minion's face fills the
   // right half and the line breaks are the design's, not a wrapper's.
