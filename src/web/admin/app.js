@@ -10867,7 +10867,13 @@
   $('btn-vestaboard-artwork-clear')?.addEventListener('click', () => vestaboardArtworkPainter?.clear());
 
   $('vestaboard-artwork-template')?.addEventListener('change', (event) => {
-    const found = vestaboardArtworkTemplates.find((row) => row.id === event.target.value);
+    const id = event.target.value;
+    if (!id) {
+      // "blank board" is a real choice, not the absence of one — wipe the flaps.
+      vestaboardArtworkPainter?.setCells(null, { resetUndo: false });
+      return;
+    }
+    const found = vestaboardArtworkTemplates.find((row) => row.id === id);
     if (found) {
       vestaboardArtworkPainter?.setCells(found.cells, { resetUndo: false });
     }

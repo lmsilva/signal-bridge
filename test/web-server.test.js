@@ -3738,11 +3738,14 @@ test('the wide Settings cards span the grid and column up inside', () => {
     assert.ok(artworkTab > 0 && boardTab > artworkTab, 'Artwork sits just before the simulator');
   }
   assert.match(css, /body\[data-tab="artwork"\] \.content/);
-  assert.match(html, /flap-paint\.js\?v=signal326/);
-  assert.match(html, /flap-paint\.css\?v=signal326/);
+  assert.match(html, /flap-paint\.js\?v=signal327/);
+  assert.match(html, /flap-paint\.css\?v=signal327/);
   assert.match(js, /\/api\/vestaboard-artwork/);
   assert.match(js, /\/api\/push\/vestaboard-artwork/);
   assert.match(js, /createFlapPainter/);
+  // "Start from: blank board" is a real choice — it wipes the flaps, not a no-op.
+  assert.match(js, /setCells\(null, \{ resetUndo: false \}\)/);
+  assert.doesNotMatch(js, /art-cute-beaver/);
   // A Vestaboard rule can finish by clearing the flaps with a painted board.
   assert.match(html, /id="sched-sheet-closing"/);
   assert.match(html, /id="sched-sheet-closing-mode"/);
@@ -3753,9 +3756,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal326/);
+  assert.match(html, /styles\.css\?v=signal327/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal326/);
+  assert.match(html, /app\.js\?v=signal327/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -6088,8 +6091,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /tab-label-short">Artwork/);
     assert.match(userApp.text, /id="art-sheet"/);
     assert.match(userApp.text, /id="art-gallery"/);
-    assert.match(userApp.text, /flap-paint\.js\?v=signal326/);
-    assert.match(userApp.text, /flap-paint\.css\?v=signal326/);
+    assert.match(userApp.text, /flap-paint\.js\?v=signal327/);
+    assert.match(userApp.text, /flap-paint\.css\?v=signal327/);
     // The Artwork tab wears the household portal's own kit — the page head with
     // a Display picker, su-* inputs and buttons — not the scheduler's, whose
     // .field-input / .btn only exist inside .su-sched-root.
@@ -6112,8 +6115,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
       assert.match(artSheet, /class="su-input" type="text" id="art-name"/);
     }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal326/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal326/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal327/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal327/);
     // The rule editor offers a closing artwork on anything that reaches a board.
     assert.match(userApp.text, /id="sched-sheet-closing"/);
     assert.match(userApp.text, /id="sched-sheet-closing-mode"/);
@@ -6194,6 +6197,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /function fillArtTargets/);
     assert.match(userJs, /row\.kind === 'vestaboard'/);
     assert.match(userJs, /targetId: artTargetId\(\)/);
+    assert.match(userJs, /setCells\(null, \{ resetUndo: false \}\)/);
+    assert.doesNotMatch(userJs, /art-cute-beaver/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'styles.css'), 'utf8'), /\.list-loading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8'), /\.list-loading/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler-ui.js'), 'utf8'), /paintSchedRulesLoading/);
@@ -6243,8 +6248,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.equal(painted.status, 200);
     assert.match(painted.headers['content-type'], /javascript/);
 
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal326/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal326/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal327/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal327/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /id="sched-group-fold"/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /data-sched-group-fold="expand"/);
     assert.match(userJs, /SignalSchedulerUi/);
@@ -6375,9 +6380,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal326/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal327/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal317/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal326/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal327/);
     assert.match(
       fs.readFileSync(path.join(realWebRoot, 'vestaboard-sim-ui.js'), 'utf8'),
       /Blank flaps \(spaces\) snap now/,

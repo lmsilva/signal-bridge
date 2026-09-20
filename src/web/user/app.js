@@ -932,7 +932,13 @@
     });
 
     $('art-template')?.addEventListener('change', (event) => {
-      const found = artTemplates.find((row) => row.id === event.target.value);
+      const id = event.target.value;
+      if (!id) {
+        // "blank board" is a real choice, not the absence of one — wipe the flaps.
+        artPainter?.setCells(null, { resetUndo: false });
+        return;
+      }
+      const found = artTemplates.find((row) => row.id === id);
       if (found) artPainter?.setCells(found.cells, { resetUndo: false });
     });
 
