@@ -16,6 +16,13 @@ const PREVIEW_SKIP_SECONDS = 3;
 // become a wall flipbook.
 const PREVIEW_MAX_SECONDS = 600;
 const PREVIEW_MAX_RAW_BYTES = 96 * 1024 * 1024;
+// The media queue runs one job at a time, so a child that never exits does not
+// just lose its own clip — it wedges every download behind it, and those rows
+// sit at `pending` with nothing to explain why. Generous enough for a 1080p
+// feature-length fetch or a 600s trim encode, short enough to recover the same
+// day. Override per deployment with YT_DLP_TIMEOUT_MS / FFMPEG_TIMEOUT_MS.
+const YT_DLP_TIMEOUT_MS = 30 * 60 * 1000;
+const FFMPEG_TIMEOUT_MS = 15 * 60 * 1000;
 const MIME_EXT = {
   'image/jpeg': '.jpg',
   'image/jpg': '.jpg',
@@ -47,6 +54,29 @@ function summariseYtDlpFailure(stderr, code) {
     return `yt-dlp failed (YouTube rejected the request — usually an outdated yt-dlp; rebuild with ./recreate.sh --build): ${detail}`;
   }
   return `yt-dlp failed: ${detail}`;
+}
+
+/**
+ * Kills a spawned child if it outlives `timeoutMs` and reports it as a failure.
+ * Returns a disarm function for the normal exit paths.
+ *
+ * `settle` is the caller's one-shot reject, so a timeout reads exactly like any
+ * other failure: the job fails, the row says why, and the queue moves on.
+ */
+function armTimeout(child, { label, timeoutMs, onTimeout }) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return () => {};
+  const timer = setTimeout(() => {
+    // Settle first: killing the child fires `close`, which would otherwise win
+    // the race and report a bare "exit ?" instead of the reason.
+    onTimeout(new Error(`${label} gave up after ${Math.round(timeoutMs / 1000)}s with no result`));
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      // already gone
+    }
+  }, timeoutMs);
+  timer.unref?.();
+  return () => clearTimeout(timer);
 }
 
 let defaultSharp = null;
@@ -473,6 +503,14 @@ function createRollCreditsMedia(config = {}, log = console, {
     return config[key] || process.env[key] || name;
   }
 
+  function timeoutMs(key, fallback) {
+    const raw = Number(config[key] ?? process.env[key]);
+    return Number.isFinite(raw) && raw >= 0 ? raw : fallback;
+  }
+
+  const ffmpegTimeoutMs = () => timeoutMs('FFMPEG_TIMEOUT_MS', FFMPEG_TIMEOUT_MS);
+  const ytDlpTimeoutMs = () => timeoutMs('YT_DLP_TIMEOUT_MS', YT_DLP_TIMEOUT_MS);
+
   /**
    * Runs an ffmpeg/ffprobe command that writes a file (stdout ignored).
    * Used for long wall previews so we never buffer every RGBA frame in RAM.
@@ -488,20 +526,30 @@ function createRollCreditsMedia(config = {}, log = console, {
         reject(new Error(`${name} could not start: ${error.message}`));
         return;
       }
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        disarm();
+        reject(error);
+      };
+      const disarm = armTimeout(child, {
+        label: name,
+        timeoutMs: ffmpegTimeoutMs(),
+        onTimeout: fail,
+      });
       let stderr = '';
       child.stderr?.on?.('data', (chunk) => {
         if (stderr.length < 4000) stderr += chunk;
       });
       child.once('error', (error) => {
-        if (settled) return;
-        settled = true;
-        reject(new Error(error?.code === 'ENOENT'
+        fail(new Error(error?.code === 'ENOENT'
           ? `${name} is missing — rebuild the image with ./recreate.sh --build`
           : `${name} failed: ${error.message}`));
       });
       child.once('close', (code) => {
         if (settled) return;
         settled = true;
+        disarm();
         if (code !== 0) {
           const detail = String(stderr).trim().split(/\r?\n/).filter(Boolean).pop() || `exit ${code}`;
           reject(new Error(`${name} failed: ${detail.slice(0, 240)}`));
@@ -528,16 +576,25 @@ function createRollCreditsMedia(config = {}, log = console, {
         reject(new Error(`${name} could not start: ${error.message}`));
         return;
       }
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        disarm();
+        try { child.kill('SIGKILL'); } catch { /* already gone */ }
+        reject(error);
+      };
+      const disarm = armTimeout(child, {
+        label: name,
+        timeoutMs: ffmpegTimeoutMs(),
+        onTimeout: fail,
+      });
       const chunks = [];
       let stdoutBytes = 0;
       let stderr = '';
       child.stdout?.on?.('data', (chunk) => {
         stdoutBytes += chunk.length;
         if (stdoutBytes > maxStdoutBytes) {
-          if (settled) return;
-          settled = true;
-          try { child.kill('SIGKILL'); } catch { /* already gone */ }
-          reject(new Error(`${name} produced more data than the preview budget allows`));
+          fail(new Error(`${name} produced more data than the preview budget allows`));
           return;
         }
         chunks.push(chunk);
@@ -546,15 +603,14 @@ function createRollCreditsMedia(config = {}, log = console, {
         if (stderr.length < 4000) stderr += chunk;
       });
       child.once('error', (error) => {
-        if (settled) return;
-        settled = true;
-        reject(new Error(error?.code === 'ENOENT'
+        fail(new Error(error?.code === 'ENOENT'
           ? `${name} is missing — rebuild the image with ./recreate.sh --build`
           : `${name} failed: ${error.message}`));
       });
       child.once('close', (code) => {
         if (settled) return;
         settled = true;
+        disarm();
         if (code !== 0) {
           const detail = String(stderr).trim().split(/\r?\n/).filter(Boolean).pop() || `exit ${code}`;
           reject(new Error(`${name} failed: ${detail.slice(0, 240)}`));
@@ -749,19 +805,29 @@ function createRollCreditsMedia(config = {}, log = console, {
         '--output', target,
         String(url),
       ], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        disarm();
+        reject(error);
+      };
+      const disarm = armTimeout(child, {
+        label: 'yt-dlp',
+        timeoutMs: ytDlpTimeoutMs(),
+        onTimeout: fail,
+      });
       let stderr = '';
       child.stderr?.on?.('data', (chunk) => { stderr += chunk; });
       child.once('error', (error) => {
-        if (settled) return;
-        settled = true;
         const missing = error?.code === 'ENOENT';
-        reject(new Error(missing
+        fail(new Error(missing
           ? 'yt-dlp is missing — rebuild the image with ./recreate.sh --build'
           : `yt-dlp failed: ${error.message}`));
       });
       child.once('close', (code) => {
         if (settled) return;
         settled = true;
+        disarm();
         if (code !== 0) {
           reject(new Error(summariseYtDlpFailure(stderr, code)));
           return;

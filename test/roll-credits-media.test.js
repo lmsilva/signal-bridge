@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { EventEmitter } = require('events');
 const {
   createRollCreditsMedia,
   resolveMediaPriority,
@@ -118,6 +119,29 @@ test('raw ffmpeg output splits into whole frames', () => {
   assert.equal(frames.length, 3);
   assert.equal(frames[0].length, frame);
   assert.deepEqual(splitRawFrames(null, 2, 2), []);
+});
+
+test('a child that never exits is killed so the media queue is not wedged', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'roll-credits-timeout-'));
+  const killed = [];
+  // A yt-dlp that downloads nothing and never exits: the one job would block
+  // every download behind it, with those rows left saying only "pending".
+  const spawnImpl = () => {
+    const child = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.kill = (signal) => { killed.push(signal); child.emit('close', null); return true; };
+    return child;
+  };
+  const media = createRollCreditsMedia(
+    { ROOT: root, YT_DLP_TIMEOUT_MS: 20 },
+    console,
+    { sharpImpl: null, spawnImpl },
+  );
+  await assert.rejects(
+    media.downloadYoutube('https://youtu.be/hangs', 480, 'rc_test/video-clip.mp4'),
+    /yt-dlp gave up after .*s with no result/,
+  );
+  assert.deepEqual(killed, ['SIGKILL']);
 });
 
 test('uploaded image cap and orphan pruning are enforced', async () => {
