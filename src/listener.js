@@ -785,6 +785,10 @@ function createListener({
               : {}),
           }
           : {}),
+        // The rule's "may fire during quiet hours". A board asleep for the
+        // night skips any page that does not say so — the simulator, with no
+        // quiet hours, showed the card the real board never did.
+        ...(event.quietHoursExempt === true ? { quietHoursExempt: true } : {}),
         ...(event.actor ? { actor: event.actor } : {}),
       });
       voiceFanout = mergeBoardFanout(voiceFanout, result?.vestaboard);

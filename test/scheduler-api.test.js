@@ -451,6 +451,64 @@ test('a Push during a slow airing is not stamped as a scheduler page', async () 
   }
 });
 
+test("a rule's quiet-hours exemption rides the voice-pipeline event, for a tick and for Air now", async () => {
+  // A Tesla dashboard builds its card after the dispatch's send options are
+  // gone, so "may fire during a board's quiet hours" has to travel on the
+  // synthetic event like the hold does. Without it the simulator (no quiet
+  // hours) showed the card every five minutes while the real board, asleep for
+  // the night, skipped it — and then took the clean-up artwork, which goes out
+  // directly and did carry the exemption.
+  const events = [];
+  const { webServer, api } = await startServer({
+    recordVoiceEvent: async (event) => {
+      events.push(event);
+      return { boards: [{ boardId: 'home', accepted: 1, reason: 'queued' }] };
+    },
+  });
+  try {
+    const created = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: {
+        commandId: 'tesla.dashboard',
+        target: 'vestaboard',
+        intervalSeconds: 300,
+        holdSeconds: 60,
+        probability: 90,
+        quietHoursExempt: true,
+      },
+    });
+    assert.equal(created.status, 201, created.body?.error);
+    const rule = webServer.scheduler.rules.get(created.body.rule.id);
+
+    // The scheduler's own airing — the path a tick takes.
+    const ticked = await webServer.scheduler.airRule(rule, { manual: false });
+    assert.equal(ticked.outcome, 'aired');
+    assert.equal(events.length, 1);
+    assert.equal(events[0].triggeredBy, 'scheduler');
+    assert.equal(events[0].holdSeconds, 60, 'the hold still travels');
+    assert.equal(events[0].quietHoursExempt, true, 'and so does the exemption');
+
+    // Air now is a human press, but it is still this rule airing.
+    const aired = await api(`${ROUTE}/rules/${rule.id}/air`, { method: 'POST' });
+    assert.equal(aired.status, 202, aired.body?.error);
+    assert.equal(events.length, 2);
+    assert.equal(events[1].triggeredBy, 'manual');
+    assert.equal(events[1].quietHoursExempt, true);
+    assert.equal(events[1].holdSeconds, undefined, 'Air now takes house dwell, as before');
+
+    // A rule that did not opt in says nothing — the board's quiet hours stand.
+    const plain = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: { commandId: 'tesla.dashboard', target: 'vestaboard', intervalSeconds: 300, probability: 90 },
+    });
+    await webServer.scheduler.airRule(webServer.scheduler.rules.get(plain.body.rule.id), { manual: false });
+    assert.equal(events.length, 3);
+    assert.equal(events[2].quietHoursExempt, undefined);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('airing the slideshow pulls the shared photos itself', async () => {
   // Regression: the push handler only ever read `body.photos`, which the admin
   // UI supplies from the list already on screen. The scheduler has no such

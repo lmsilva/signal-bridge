@@ -5823,8 +5823,12 @@ function createWebServer({
       triggeredBy: manual ? 'manual' : 'scheduler',
       // Handlers that hand off to the voice pipeline send the card themselves,
       // after this dispatch's send options are gone. They read the page time
-      // off the body instead (see `schedulerPageTime`).
+      // — and the rule's quiet-hours exemption — off the body instead (see
+      // `schedulerPageTime`). Without the latter a Tesla dashboard set to
+      // "may fire during quiet hours" reached the simulator and skipped the
+      // real board, while its clean-up artwork (sent directly) did not.
       ...(heldPage ? { holdSeconds: hold } : {}),
+      ...(quietHoursExempt ? { quietHoursExempt: true } : {}),
     };
 
     const air = {
@@ -6928,13 +6932,26 @@ function createWebServer({
    * page time cannot ride the scheduler's send options the way a direct board
    * push does. It travels on the synthetic event instead — without it the
    * board falls back to house dwell and the slider does nothing.
+   *
+   * The rule's quiet-hours exemption travels the same way, for a tick and for
+   * Air now alike: a board in its quiet hours skips a page that does not
+   * carry it, and the rule editor promised this one may fire anyway.
    */
   function schedulerPageTime(body) {
-    if (body?.triggeredBy !== 'scheduler') {
+    const scheduled = body?.triggeredBy === 'scheduler';
+    const airNow = body?.triggeredBy === 'manual';
+    if (!scheduled && !airNow) {
       return {};
     }
+    const out = {};
     const seconds = Number(body?.holdSeconds);
-    return Number.isFinite(seconds) && seconds > 0 ? { holdSeconds: seconds } : {};
+    if (scheduled && Number.isFinite(seconds) && seconds > 0) {
+      out.holdSeconds = seconds;
+    }
+    if (body?.quietHoursExempt === true) {
+      out.quietHoursExempt = true;
+    }
+    return out;
   }
 
   async function handleTeslaPush(kind, body, res) {
