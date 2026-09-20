@@ -43,6 +43,16 @@ const SHIPPED_NAMES = [
   'Cute Bird',
   'Christmas House',
   'Cute Beaver',
+  'Dinosaur',
+  'Flowers',
+  'One in a Minion',
+  'Mom Heart',
+  'Balloons',
+  'Colored Hearts',
+  'Cute Duck',
+  'Seagull',
+  'Grover',
+  'Pumpkin',
 ];
 
 /** Compare a painted grid against a drawing of the whole board. */
@@ -121,7 +131,8 @@ test('the shipped grids flip flap for flap', () => {
     'wwwwwwwwwwwwwwwwwwwwww',
   ], 'American Flag');
 
-  // The only template with lettering: the heart is decoded, the words are typed.
+  // Lettered templates: the picture is decoded from the screenshot, the words
+  // are typed, and the two have to land on the same grid without colliding.
   const heart = framesFor(shippedById('art-japanese-heart'));
   assertBoard(heart[0].rows, [
     '           rrr   rrr',
@@ -141,6 +152,41 @@ test('the shipped grids flip flap for flap', () => {
     'bbbbooooookkoooooobbbb',
     'bbbboooooowwoooooobbbb',
   ], 'Cute Bird');
+
+  // Words beside a picture rather than over it: the minion's face fills the
+  // right half and the line breaks are the design's, not a wrapper's.
+  const minion = framesFor(shippedById('art-one-in-a-minion'));
+  assertBoard(minion[0].rows, [
+    '             yyyyyyy',
+    "  YOU'RE    yywyyywyy",
+    '  ONE IN    ywkwywkwy',
+    '  A MINION  ywwwywwwy',
+    '            byyyyyyyb',
+    '            ybbbbbbby',
+  ], 'One in a Minion');
+
+  // Three letters sitting inside the heart they are addressed to.
+  const mom = framesFor(shippedById('art-mom-heart'));
+  assertBoard(mom[0].rows, [
+    'wwwwwwrrrwwwrrrwwwwwww',
+    'wwwwwrrrrrwrrrrrwwwwww',
+    'wwwwwrrrrMOMrrrrwwwwww',
+    'wwwwwwrrrrrrrrrwwwwwww',
+    'wwwwwwwwrrrrrwwwwwwwww',
+    'wwwwwwwwwwrwwwwwwwwwww',
+  ], 'Mom Heart');
+
+  // A carved face is black flaps inside the orange, so the blank-versus-black
+  // call the decoder has to make is pinned here too.
+  const pumpkin = framesFor(shippedById('art-pumpkin'));
+  assertBoard(pumpkin[0].rows, [
+    '       ooogorrggggg',
+    '     oookoookorr  g',
+    '    oookwooowkorr gg',
+    '    ooooookooooor',
+    '    ookkoooookkor',
+    '     oookokokoor',
+  ], 'Pumpkin');
 });
 
 test('artwork is wired into the router, the formatter table and the priority catalog', () => {
@@ -358,7 +404,9 @@ test('a push returns a frameable payload and remembers what it sent', () => {
   assert.equal(status.customCount, 0);
 
   const listed = api.statusSnapshot({ query: 'heart' });
-  assert.equal(listed.total, 3);
+  const hearts = SHIPPED_NAMES.filter((name) => /heart/i.test(name));
+  assert.ok(hearts.length >= 3, 'the corpus should have hearts to find');
+  assert.equal(listed.total, hearts.length);
   assert.equal(listed.page, 1);
 
   assert.ok(api.nextPayload({ mode: 'random', random: () => 0 }).artwork.id);

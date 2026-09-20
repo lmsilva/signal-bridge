@@ -75,6 +75,16 @@ const DESIGNS = [
   { id: 'art-cute-bird', name: 'Cute Bird', hash: '43097cd8' },
   { id: 'art-christmas-house', name: 'Christmas House', hash: 'a0dfdecb' },
   { id: 'art-cute-beaver', name: 'Cute Beaver', hash: 'ab7232a8' },
+  { id: 'art-dinosaur', name: 'Dinosaur', hash: 'e6766668' },
+  { id: 'art-flowers', name: 'Flowers', hash: '22a4e655' },
+  { id: 'art-one-in-a-minion', name: 'One in a Minion', hash: 'ac0cfb81' },
+  { id: 'art-mom-heart', name: 'Mom Heart', hash: 'd93b3069' },
+  { id: 'art-balloons', name: 'Balloons', hash: '23826cd0' },
+  { id: 'art-colored-hearts', name: 'Colored Hearts', hash: 'e1357908' },
+  { id: 'art-cute-duck', name: 'Cute Duck', hash: '46bcf284' },
+  { id: 'art-seagull', name: 'Seagull', hash: 'fab56ce5' },
+  { id: 'art-grover', name: 'Grover', hash: '410be908' },
+  { id: 'art-pumpkin', name: 'Pumpkin', hash: '3054c8c8' },
 ];
 
 // Text the decoder cannot read back. `col` is where the word starts.
@@ -83,6 +93,14 @@ const TEXT_ROWS = {
     { row: 1, col: 1, text: 'MOTTO' },
     { row: 2, col: 1, text: 'AISHITERU' },
     { row: 3, col: 1, text: 'YO!' },
+  ],
+  'art-one-in-a-minion': [
+    { row: 1, col: 2, text: "YOU'RE" },
+    { row: 2, col: 2, text: 'ONE IN' },
+    { row: 3, col: 2, text: 'A MINION' },
+  ],
+  'art-mom-heart': [
+    { row: 2, col: 9, text: 'MOM' },
   ],
 };
 

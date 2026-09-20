@@ -6490,13 +6490,15 @@ test('household login, /user/ gate, and permission 403s', async () => {
     const schedOk = await request(`${base}/api/display-scheduler/rules`, { cookie: userCookie });
     assert.equal(schedOk.status, 200, schedOk.text);
 
+    const { loadShipped } = require('../src/vestaboard-artwork');
+    const shippedCount = loadShipped().length;
     const artOk = await request(`${base}/api/vestaboard-artwork?pageSize=50`, { cookie: userCookie });
     assert.equal(artOk.status, 200, artOk.text);
-    assert.equal(artOk.body.artwork.length, 11, 'the eleven shipped templates are listed');
-    assert.equal(artOk.body.available, 11);
+    assert.equal(artOk.body.artwork.length, shippedCount, 'the shipped templates are listed');
+    assert.equal(artOk.body.available, shippedCount);
     const artTemplates = await request(`${base}/api/vestaboard-artwork/templates`, { cookie: userCookie });
     assert.equal(artTemplates.status, 200);
-    assert.equal(artTemplates.body.templates.length, 11);
+    assert.equal(artTemplates.body.templates.length, shippedCount);
     const artStarred = await request(`${base}/api/vestaboard-artwork`, {
       method: 'POST',
       cookie: userCookie,
