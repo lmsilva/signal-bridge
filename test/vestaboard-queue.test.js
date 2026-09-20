@@ -1029,6 +1029,32 @@ test('a closing artwork is not a new rotation page, so the gap does not eat it',
   assert.equal(closing.accepted, 1);
 });
 
+test('a closing artwork waits out the page it is clearing, even one still on its way', async () => {
+  // Regression: a scheduled Tesla dashboard answers the scheduler before its
+  // card exists (the car has to wake), so the clean-up board was queued while
+  // the queue was still empty. It posted first and the dashboard landed on top
+  // of it. The closing page now carries the airing's time on screen and steps
+  // aside for anything that turns up before then.
+  const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 15, minRotationGapSeconds: 0 });
+  h.queue.submit(
+    [{ ...frame('ARTWORK', 1, { source: 'vestaboard.artwork' }), holdSeconds: 600 }],
+    { scheduler: true, closing: true, closingAfterSeconds: 60, clearQueueAfterHold: true },
+  );
+  assert.equal(await h.queue.tick(), null, 'the clean-up board is not due yet');
+  assert.equal(h.queue.pending()[0].status, 'held');
+
+  // The dashboard arrives seconds later and goes straight to the flaps.
+  h.advance(5 * SECOND);
+  h.queue.submit([{ ...frame('TESLA', 2, { source: 'tesla.dashboard' }), holdSeconds: 60 }]);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[0].layout[0][0], 2);
+
+  h.advance(61 * SECOND);
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts[1].layout[0][0], 1, 'then the artwork clears it');
+  assert.equal(h.queue.state().holdClearsQueue, true);
+});
+
 test('when the closing hold lapses it drops the scheduled pages stacked behind it', async () => {
   const h = makeQueue({ rateWindowSeconds: 1, dwellSeconds: 15, minRotationGapSeconds: 0 });
   const cancelled = [];

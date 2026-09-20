@@ -731,13 +731,11 @@
 }
 .sched-closing-detail > .trivia-check,
 .sched-closing-detail > .hint { grid-column: 1 / -1; }
-.sched-closing-pick {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: center;
-  gap: 10px 14px;
-}
+/* The pinned piece joins the parent grid rather than nesting its own, so
+   "Piece", "Artwork" and "Hold it for" share one label column and their
+   controls all start on the same line. */
+.sched-closing-pick { display: contents; }
+.sched-closing-pick[hidden] { display: none; }
 .sched-sheet-advanced { margin-top: 18px; }
 .sched-sheet-advanced > summary {
   cursor: pointer;

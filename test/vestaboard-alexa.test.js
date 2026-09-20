@@ -34,7 +34,6 @@ function assertLayout(actual, drawing, label) {
   }
 }
 
-const DEG = '\u00b0';
 
 // Sunday 23 Aug 2026, 9:05pm local — the instant the spec's clock drawing shows.
 const SUNDAY_NIGHT = new Date(2026, 7, 23, 21, 5);
@@ -625,10 +624,10 @@ test('weather leaves a blank row under the title and above the footer', () => {
   assertLayout(frames[0].rows, [
     'bb     WEATHER      bb',
     '',
-    ` NOW 93${DEG} SUNNY`,
-    ` HIGH 96${DEG} LOW 66${DEG}`,
+    ' NOW 93F SUNNY',
+    ' HIGH 96F LOW 66F',
     '',
-    `bb TUE 93${DEG} RAIN 6%  bb`,
+    'bb TUE 93F RAIN 6%  bb',
   ], 'weather');
 });
 
@@ -669,9 +668,9 @@ test('indoor temperature gives every named sensor its own row', () => {
 
   assertLayout(frames[0].rows, [
     'bb   INDOOR TEMP    bb',
-    ` TOP FLOOR        75${DEG}`,
-    ` MAIN FLOOR       76${DEG}`,
-    ` MACHINE ROOM     71${DEG}`,
+    ' TOP FLOOR        75F',
+    ' MAIN FLOOR       76F',
+    ' MACHINE ROOM     71F',
     '',
     'bb   HUMIDITY 34%   bb',
   ], 'indoor temperature');
@@ -687,7 +686,7 @@ test('a single spoken reading still fills the frame', () => {
   });
 
   const drawn = formatLayout(frames[0].rows).split('\n');
-  assert.match(drawn[2], new RegExp(`^ MAIN FLOOR\\s+76${DEG}$`));
+  assert.match(drawn[2], /^ MAIN FLOOR\s+76F$/);
   assert.match(drawn[5], /HUMIDITY 34%/);
 });
 
@@ -721,9 +720,9 @@ test('air quality pairs each score with a band chip and a temperature', () => {
 
   assertLayout(frames[0].rows, [
     'gg   AIR QUALITY    gg',
-    ` MAIN FLOOR   99g 76${DEG}`,
-    ` MACHINE ROOM 99g 71${DEG}`,
-    ` DOME        66y 114${DEG}`,
+    ' MAIN FLOOR   99g 76F',
+    ' MACHINE ROOM 99g 71F',
+    ' DOME        66y 114F',
     '',
     'gg DOME RUNNING HOT gg',
   ], 'air quality');

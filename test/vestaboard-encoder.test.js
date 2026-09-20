@@ -82,8 +82,15 @@ test('digits map to the codes the board actually uses', () => {
   assert.deepEqual(encodeText('A Z'), [1, 0, 26]);
 });
 
-test('the degree sign encodes rather than being dropped', () => {
+test('flap 62 is a heart, and the degree sign still lands on it', () => {
+  // Flagship boards ship a heart where older ones had a degree symbol, so both
+  // encode to 62 — but 62 reads back as the heart, because that is what is
+  // painted on the flap. Nothing the bridge composes spells a temperature with
+  // it (see `tempF`); this is for text someone typed.
   assert.deepEqual(encodeText('93\u00b0'), [35, 29, 62]);
+  assert.deepEqual(encodeText('\u2665'), [62]);
+  assert.deepEqual(encodeText('\u2764'), [62]);
+  assert.equal(decodeCodes([62]), '\u2665');
 });
 
 test('decoding turns codes back into readable text', () => {

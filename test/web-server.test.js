@@ -479,6 +479,74 @@ test('tesla push endpoints feed synthetic events into the voice pipeline', async
   }
 });
 
+test('a scheduled tesla push waits for the card and reports the boards it reached', async () => {
+  // Regression: this answered 202 the moment the event was queued, so the
+  // scheduler heard nothing about the flaps. A rule set to finish with a
+  // Vestaboard Artwork read that as "never reached a board" and aired for ever
+  // without cleaning up. Waking the car is slow, so only the scheduler waits.
+  const recorded = [];
+  const { webServer, base } = await startTestServer({
+    recordVoiceEvent: async (event) => {
+      recorded.push(event);
+      return { boards: [{ boardId: 'sim', accepted: 1, skipped: false, reason: 'queued' }] };
+    },
+  });
+  try {
+    const manual = await postJson(base, '/api/push/tesla-dashboard');
+    assert.equal(manual.status, 202);
+    assert.equal(manual.body.vestaboard, undefined, 'a human press is not kept waiting');
+
+    const scheduled = await postJson(base, '/api/push/tesla-dashboard', {
+      triggeredBy: 'scheduler',
+      holdSeconds: 60,
+    });
+    assert.equal(scheduled.status, 202);
+    assert.deepEqual(scheduled.body.vestaboard.boards, [
+      { boardId: 'sim', accepted: 1, skipped: false, reason: 'queued' },
+    ]);
+    // The rule's "hold on screen" rides the event: the card is built out in the
+    // voice pipeline, past the point where send options could carry it.
+    assert.equal(recorded[1].holdSeconds, 60);
+    assert.equal(recorded[0].holdSeconds, undefined, 'only a scheduled page has one');
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('a scheduled tesla push waits for the card and reports the boards it reached', async () => {
+  // Regression: this answered 202 the moment the event was queued, so the
+  // scheduler heard nothing about the flaps. A rule set to finish with a
+  // Vestaboard Artwork read that as "never reached a board" and aired for ever
+  // without cleaning up. Waking the car is slow, so only the scheduler waits.
+  const recorded = [];
+  const { webServer, base } = await startTestServer({
+    recordVoiceEvent: async (event) => {
+      recorded.push(event);
+      return { boards: [{ boardId: 'sim', accepted: 1, skipped: false, reason: 'queued' }] };
+    },
+  });
+  try {
+    const manual = await postJson(base, '/api/push/tesla-dashboard');
+    assert.equal(manual.status, 202);
+    assert.equal(manual.body.vestaboard, undefined, 'a human press is not kept waiting');
+
+    const scheduled = await postJson(base, '/api/push/tesla-dashboard', {
+      triggeredBy: 'scheduler',
+      holdSeconds: 60,
+    });
+    assert.equal(scheduled.status, 202);
+    assert.deepEqual(scheduled.body.vestaboard.boards, [
+      { boardId: 'sim', accepted: 1, skipped: false, reason: 'queued' },
+    ]);
+    // The rule's "hold on screen" rides the event: the card is built out in the
+    // voice pipeline, past the point where send options could carry it.
+    assert.equal(recorded[1].holdSeconds, 60);
+    assert.equal(recorded[0].holdSeconds, undefined, 'only a scheduled page has one');
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('url push sends web.open payload and tracks browser state', async () => {
   const { webServer, base, sent } = await startTestServer();
   try {
@@ -3670,8 +3738,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
     assert.ok(artworkTab > 0 && boardTab > artworkTab, 'Artwork sits just before the simulator');
   }
   assert.match(css, /body\[data-tab="artwork"\] \.content/);
-  assert.match(html, /flap-paint\.js\?v=signal324/);
-  assert.match(html, /flap-paint\.css\?v=signal324/);
+  assert.match(html, /flap-paint\.js\?v=signal326/);
+  assert.match(html, /flap-paint\.css\?v=signal326/);
   assert.match(js, /\/api\/vestaboard-artwork/);
   assert.match(js, /\/api\/push\/vestaboard-artwork/);
   assert.match(js, /createFlapPainter/);
@@ -3685,9 +3753,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal324/);
+  assert.match(html, /styles\.css\?v=signal326/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal324/);
+  assert.match(html, /app\.js\?v=signal326/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -6020,8 +6088,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userApp.text, /tab-label-short">Artwork/);
     assert.match(userApp.text, /id="art-sheet"/);
     assert.match(userApp.text, /id="art-gallery"/);
-    assert.match(userApp.text, /flap-paint\.js\?v=signal324/);
-    assert.match(userApp.text, /flap-paint\.css\?v=signal324/);
+    assert.match(userApp.text, /flap-paint\.js\?v=signal326/);
+    assert.match(userApp.text, /flap-paint\.css\?v=signal326/);
     // The Artwork tab wears the household portal's own kit — the page head with
     // a Display picker, su-* inputs and buttons — not the scheduler's, whose
     // .field-input / .btn only exist inside .su-sched-root.
@@ -6044,8 +6112,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
       assert.match(artSheet, /class="su-input" type="text" id="art-name"/);
     }
     assert.match(userApp.text, /id="tab-scheduler"/);
-    assert.match(userApp.text, /scheduler-ui\.js\?v=signal324/);
-    assert.match(userApp.text, /scheduler\.css\?v=signal324/);
+    assert.match(userApp.text, /scheduler-ui\.js\?v=signal326/);
+    assert.match(userApp.text, /scheduler\.css\?v=signal326/);
     // The rule editor offers a closing artwork on anything that reaches a board.
     assert.match(userApp.text, /id="sched-sheet-closing"/);
     assert.match(userApp.text, /id="sched-sheet-closing-mode"/);
@@ -6152,7 +6220,15 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(schedUi, /function syncSchedClosingFields/);
     assert.match(schedUi, /closingArtwork: schedClosingSnapshot\(\)/);
     assert.match(schedUi, /ARTWORK_OPTIONS_ROUTE/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'scheduler.css'), 'utf8'), /\.sched-closing-detail \{/);
+    // "Piece", "Artwork" and "Hold it for" share the parent grid's label
+    // column so their controls line up; `display: contents` beats the UA's
+    // `[hidden]`, so the pinned-piece row needs its own hiding rule.
+    for (const sheet of [['scheduler.css'], ['admin', 'styles.css']]) {
+      const css = fs.readFileSync(path.join(realWebRoot, ...sheet), 'utf8');
+      assert.match(css, /\.sched-closing-detail \{/);
+      assert.match(css, /\.sched-closing-pick \{ display: contents; \}/);
+      assert.match(css, /\.sched-closing-pick\[hidden\] \{ display: none; \}/);
+    }
 
     const painterJs = fs.readFileSync(path.join(realWebRoot, 'flap-paint.js'), 'utf8');
     assert.match(painterJs, /root\.createFlapPainter = createFlapPainter/);
@@ -6167,8 +6243,8 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.equal(painted.status, 200);
     assert.match(painted.headers['content-type'], /javascript/);
 
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal324/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal324/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal326/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /scheduler-ui\.js\?v=signal326/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /id="sched-group-fold"/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /data-sched-group-fold="expand"/);
     assert.match(userJs, /SignalSchedulerUi/);
@@ -6299,9 +6375,9 @@ test('household login, /user/ gate, and permission 403s', async () => {
     assert.match(userJs, /push-card-top/);
     assert.doesNotMatch(userJs, /push-card-lead/);
     assert.doesNotMatch(userJs, /Hold a tile or drag the dots/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal324/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /styles\.css\?v=signal326/);
     assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /vestaboard-sim-ui\.js\?v=signal317/);
-    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal324/);
+    assert.match(fs.readFileSync(path.join(realWebRoot, 'user', 'index.html'), 'utf8'), /app\.js\?v=signal326/);
     assert.match(
       fs.readFileSync(path.join(realWebRoot, 'vestaboard-sim-ui.js'), 'utf8'),
       /Blank flaps \(spaces\) snap now/,

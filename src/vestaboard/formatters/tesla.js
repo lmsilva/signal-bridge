@@ -25,9 +25,17 @@ const {
 const { toDate, clockLabel } = require('../clock');
 const { snapshotFrame, padRows } = require('./common');
 
-function degrees(value) {
+/**
+ * `88F`, not `88°`.
+ *
+ * Flagship boards ship a heart on flap code 62, which is the code the degree
+ * symbol maps to — so a degree sign reads `IN 88♥` on the actual flaps. The
+ * unit letter says the same thing in the same two columns, and matches the
+ * Weekly Weather Report, which has always written `59F`.
+ */
+function tempF(value) {
   const whole = formatWhole(value);
-  return whole ? `${whole}\u00b0` : '';
+  return whole ? `${whole}F` : '';
 }
 
 function teslaTitle(model) {
@@ -121,8 +129,8 @@ function securityLine(security = {}) {
 }
 
 function climateRow(climate = {}) {
-  const inside = degrees(climate.insideTempF);
-  const outside = degrees(climate.outsideTempF);
+  const inside = tempF(climate.insideTempF);
+  const outside = tempF(climate.outsideTempF);
   if (!inside && !outside) {
     return '';
   }

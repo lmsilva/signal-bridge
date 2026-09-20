@@ -31,7 +31,9 @@ test('haversine and compass helpers are sane', () => {
 test('format helpers match the marketplace ISS board', () => {
   assert.match(formatGoing(27600, 'miles'), /^GOING [\d,]+ MPH$/);
   assert.match(formatHigh(420, 'miles'), /^@  [\d,]+ MI HIGH$/);
-  assert.equal(formatCoord(-1.45, -33.56), '1.45° S,  33.56° W');
+  // No degree symbol: that flap is a heart on a flagship board, and the
+  // hemisphere letters already say these are degrees.
+  assert.equal(formatCoord(-1.45, -33.56), '1.45 S,  33.56 W');
   assert.match(formatAway(6305, 'miles'), /MI AWAY @$/);
   assert.match(formatIssClock('2026-08-29T15:20:00.000Z', 'America/Denver'), /09:20 AM/);
 });
@@ -55,7 +57,7 @@ test('buildIssTrackPayload is a vestaboard iss.track card relative to home', () 
   assert.match(payload.awayLabel, /AWAY @$/);
   assert.match(payload.speedLabel, /^GOING /);
   assert.match(payload.altitudeLabel, /HIGH$/);
-  assert.match(payload.coordLabel, /°/);
+  assert.match(payload.coordLabel, /^[\d.]+ N,\s+[\d.]+ W$/);
   assert.ok(payload.timeLabel);
   assert.equal(payload.visibilityLabel, 'DAYLIGHT');
 

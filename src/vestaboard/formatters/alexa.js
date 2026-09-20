@@ -207,9 +207,18 @@ function conditionWord(condition) {
   return CONDITION_WORDS[String(condition || '').toLowerCase()] ?? '';
 }
 
-function degrees(value) {
+/**
+ * `93F`, not `93°`.
+ *
+ * Flagship boards ship a heart on flap code 62, which is where the degree
+ * symbol lands — so `NOW 93°` reads `NOW 93♥` on the actual flaps. The unit
+ * letter costs the same two columns and matches the Weekly Weather Report,
+ * which has always written `59F`. These payloads are Fahrenheit by
+ * construction (`temperatureF`, `highF`, `insideTempF`).
+ */
+function tempF(value) {
   const whole = formatWhole(value);
-  return whole ? `${whole}\u00b0` : '';
+  return whole ? `${whole}F` : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +567,7 @@ function tomorrowLine(day) {
   }
   const parts = [
     weekday(parseYmd(day.date), { short: true }),
-    degrees(day.highF),
+    tempF(day.highF),
     conditionWord(day.condition),
   ].filter(Boolean);
 
@@ -577,11 +586,11 @@ function weatherFrames(payload = {}, ctx = {}) {
   }
 
   const today = weather.next7Days?.[0];
-  const nowLine = ['NOW', degrees(current.temperatureF), conditionWord(current.condition)]
+  const nowLine = ['NOW', tempF(current.temperatureF), conditionWord(current.condition)]
     .filter(Boolean)
     .join(' ');
   const highLow = today
-    ? ['HIGH', degrees(today.highF), 'LOW', degrees(today.lowF)].filter(Boolean).join(' ')
+    ? ['HIGH', tempF(today.highF), 'LOW', tempF(today.lowF)].filter(Boolean).join(' ')
     : '';
 
   const rows = badgeFrame({
@@ -816,7 +825,7 @@ function indoorTemperatureFrames(payload = {}, ctx = {}) {
 
   if (monitors.length) {
     for (const monitor of monitors.slice(0, MAX_BODY_ROWS)) {
-      rows.push(labelValueRow(monitor.label, degrees(monitor.temperatureF)));
+      rows.push(labelValueRow(monitor.label, tempF(monitor.temperatureF)));
     }
     humidity = monitors.find((monitor) => monitor.humidity !== null)?.humidity ?? null;
   } else {
@@ -825,7 +834,7 @@ function indoorTemperatureFrames(payload = {}, ctx = {}) {
       return [];
     }
     const label = fold(payload.location?.label || reading.locationPhrase) || 'INDOOR';
-    rows.push('', labelValueRow(label, degrees(temperature)));
+    rows.push('', labelValueRow(label, tempF(temperature)));
     humidity = toNumber(reading.humidity);
   }
 
@@ -842,12 +851,12 @@ function indoorTemperatureFrames(payload = {}, ctx = {}) {
 // A10. Air quality
 // ---------------------------------------------------------------------------
 
-/** `MAIN FLOOR   99g 76°` — label left, then score, band chip and temperature. */
+/** `MAIN FLOOR   99g 76F` — label left, then score, band chip and temperature. */
 function airQualityRow(monitor) {
   const row = blankRow(COLS);
   const right = [...encodeText(formatWhole(monitor.iaqScore))];
   right.push(chipCode(BAND_CHIPS[monitor.band] || BAND_CHIPS.unknown));
-  const temperature = degrees(monitor.temperatureF);
+  const temperature = tempF(monitor.temperatureF);
   if (temperature) {
     // Folding trims a leading space, so the gap is a blank code, not text.
     right.push(BLANK, ...encodeText(temperature));
@@ -882,7 +891,7 @@ function insightLine(label, phrase, shortPhrase = phrase) {
 
 /**
  * The footer says the one thing worth knowing. Heat beats air score, because
- * a 114° room is a problem you can act on and a fair reading usually is not.
+ * a 114F room is a problem you can act on and a fair reading usually is not.
  */
 function airQualityInsight(monitors) {
   const hottest = monitors

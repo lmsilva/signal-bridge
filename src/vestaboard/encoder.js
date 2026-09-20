@@ -49,8 +49,16 @@ const PUNCTUATION = {
   '.': 56,
   '/': 59,
   '?': 60,
+  // Flap 62 is a **heart** on flagship boards. Vestaboard's own software takes
+  // either a heart or a degree symbol for this code, and the older boards it
+  // was drawn for showed a degree — so `°` still lands here rather than being
+  // dropped, but nothing the bridge composes spells a temperature with it
+  // (see `tempF` in the Alexa / Tesla formatters). Renderers draw the heart.
   '\u00b0': 62,
 };
+
+/** Both hearts people actually type, and the plain degree, all land on flap 62. */
+const HEART_CHARS = ['\u2665', '\u2764'];
 
 /** character -> code, built once. */
 const CODE_BY_CHAR = (() => {
@@ -68,6 +76,9 @@ const CODE_BY_CHAR = (() => {
   for (const [char, code] of Object.entries(PUNCTUATION)) {
     map.set(char, code);
   }
+  for (const heart of HEART_CHARS) {
+    map.set(heart, PUNCTUATION['\u00b0']);
+  }
   return map;
 })();
 
@@ -77,6 +88,10 @@ const CHAR_BY_CODE = (() => {
   for (const [char, code] of CODE_BY_CHAR) {
     map.set(code, char);
   }
+  // Several characters share flap 62, so read it back as the one the board
+  // actually shows — and as the text heart, not the emoji, which a colour font
+  // would render double-width and break every grid it appears in.
+  map.set(PUNCTUATION['\u00b0'], '\u2665');
   return map;
 })();
 

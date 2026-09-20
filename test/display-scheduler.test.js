@@ -1157,6 +1157,9 @@ test('a board airing finishes with the artwork the rule names, and says so', asy
     artworkId: 'art-winter',
     holdSeconds: 12 * 60,
     clearQueue: true,
+    // The page's own time on screen: the clean-up board waits it out rather
+    // than racing the card it is there to clear.
+    afterSeconds: 30,
   }]);
   const event = scheduler.activity.query({ limit: 10 }).find((row) => row.outcome === 'aired');
   assert.match(event.detail, /Cleared with Winter, held 12 min/);
@@ -1190,6 +1193,40 @@ test('nothing to clean up: a software rule, and a page the board never took', as
   await dropped.scheduler.tick();
 
   assert.deepEqual(calls, []);
+});
+
+test('a push that answers before its card exists still gets its clean-up board', async () => {
+  // Regression: Tesla waking the car (and the timers poll) reply before the
+  // board frames are built, so the airing comes back with no board outcomes at
+  // all. Reading that as "never reached a board" meant a rule set to finish
+  // with an artwork aired and then sat there for good.
+  const calls = [];
+  const { scheduler } = build({
+    rules: [{
+      id: 'tesla',
+      commandId: 'alexa.weather',
+      target: 'vestaboard',
+      intervalSeconds: 300,
+      holdSeconds: 60,
+      probability: 100,
+      closingArtwork: { mode: 'specific', artworkId: 'art-mountains', holdMinutes: 10, clearQueue: true },
+    }],
+    airImpl: () => ({ ok: true, kind: 'deferred' }),
+    airClosingArtwork: (rule, closing) => {
+      calls.push({ ruleId: rule.id, ...closing });
+      return { artwork: { id: 'art-mountains', name: 'Mountains' } };
+    },
+  });
+  await scheduler.tick();
+
+  assert.deepEqual(calls, [{
+    ruleId: 'tesla',
+    mode: 'specific',
+    artworkId: 'art-mountains',
+    holdSeconds: 600,
+    clearQueue: true,
+    afterSeconds: 60,
+  }]);
 });
 
 test('a closing artwork that cannot air leaves the airing itself alone', async () => {

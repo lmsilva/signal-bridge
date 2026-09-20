@@ -146,10 +146,13 @@ function formatCoord(lat, lon) {
   const ew = longitude >= 0 ? 'E' : 'W';
   const latAbs = Math.abs(latitude);
   const lonAbs = Math.abs(longitude);
-  // Marketplace: `1.45° S,  33.56° W` — tighten lon decimals when >= 100.
+  // Marketplace writes `1.45° S,  33.56° W`, but this label only ever goes to
+  // flaps, and a flagship board shows a heart where the degree symbol lands.
+  // N/S/E/W already say these are degrees of latitude and longitude.
+  // Lon decimals tighten when >= 100.
   const latStr = latAbs.toFixed(2);
   const lonStr = lonAbs >= 100 ? lonAbs.toFixed(1) : lonAbs.toFixed(2);
-  return `${latStr}° ${ns},  ${lonStr}° ${ew}`;
+  return `${latStr} ${ns},  ${lonStr} ${ew}`;
 }
 
 function formatDistance(km, unit) {
