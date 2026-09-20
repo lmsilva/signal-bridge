@@ -177,6 +177,16 @@ function createQueue({
      */
     clearSchedulerAfterHold: false,
     /**
+     * The scheduler page on the flaps: `{ coalesceKey, boardIds }`, or `null`
+     * when the last flip was not a rotation page with a key (or was a clean-up
+     * screen). While that page is still having its time — its own hold, or
+     * the board dwell — a scheduler page with the same key is the page
+     * refreshing itself (Tesla's cached preview followed by the live
+     * reading), not a new rotation flip: it is exempt from the rotation gap,
+     * the guest hold and the dwell, and it leaves the page's clocks alone.
+     */
+    schedulerPage: null,
+    /**
      * A live hold owns the board: `{ source, lane, rank, expiresAt }`.
      * Games take this when the board's Priorities list says Hold.
      * Jumpers (alarms, the doorbell) do not — they are timed dwells.
@@ -455,6 +465,7 @@ function createQueue({
     // Ending the hold by hand is "get on with it", so the pages waiting
     // behind a closing artwork are what the person wants to see next.
     state.clearSchedulerAfterHold = false;
+    state.schedulerPage = null;
     announceQueue();
     return true;
   }
@@ -476,12 +487,41 @@ function createQueue({
     // else — including that page, which may still be on its way — go first.
     if (closingPending(item, at)) return true;
     if (!state.holdUntil || at >= state.holdUntil) return false;
-    return item.scheduler;
+    // The page holding the board may still update itself.
+    return item.scheduler && !itemRefreshesPage(item, at);
   }
 
   /** A closing artwork whose page has not finished its time on screen yet. */
   function closingPending(item, at = now()) {
     return Boolean(item?.closing && item.notBefore && at < item.notBefore);
+  }
+
+  /** Is the scheduler page on the flaps still having its time on screen? */
+  function schedulerPageStillUp(at = now()) {
+    if (!state.schedulerPage) return false;
+    if (state.holdKind === 'guest' && state.holdUntil && at < state.holdUntil) return true;
+    return snapshotDwellActive(at);
+  }
+
+  /**
+   * A scheduler page with the same coalesce key as the one on the flaps, for
+   * the same boards, arriving while that page is still up: the second half
+   * of a two-step card. Only cards that declare a key (Tesla, air quality —
+   * the ones that send a cached preview and then the live reading) qualify;
+   * a rule that merely airs the same skill twice inside the dwell is still
+   * two rotation flips and still meets the gap.
+   */
+  function refreshesSchedulerPage(coalesceKey, boardIds, at = now()) {
+    const page = state.schedulerPage;
+    if (!page?.coalesceKey || !coalesceKey) return false;
+    if (String(coalesceKey) !== String(page.coalesceKey)) return false;
+    if (!sameBoardTargets(boardIds || null, page.boardIds || null)) return false;
+    return schedulerPageStillUp(at);
+  }
+
+  function itemRefreshesPage(item, at = now()) {
+    return Boolean(item?.scheduler && !item.closing && item.priority !== 'alert'
+      && refreshesSchedulerPage(item.coalesceKey, item.boardIds, at));
   }
 
   /**
@@ -718,11 +758,18 @@ function createQueue({
       state.snapshotUntil = null;
     }
 
+    const ownerSource = options.gameSource || hold.source || options.replaceSource || null;
+    // The live reading that follows a cached preview is the page on the
+    // flaps updating itself, not another rotation flip — the gap, the guest
+    // hold and the dwell were all made for pages *competing* with it.
+    const refresh = Boolean(options.scheduler && !options.closing && priority === 'snapshot'
+      && refreshesSchedulerPage(coalesceKey, boardIds, at));
+
     // A rotation flip too soon after the last one is dropped, not delayed:
     // by the time the gap passes the content is stale anyway. A closing
     // artwork is the tail of an airing that already won its turn, not a new
     // rotation page, so the gap must not eat the clean-up screen.
-    if (priority === 'snapshot' && options.scheduler && !options.closing
+    if (priority === 'snapshot' && options.scheduler && !options.closing && !refresh
       && state.lastSchedulerFlipAt !== null) {
       if (at - state.lastSchedulerFlipAt < rotationGapMs()) {
         log?.debug?.(`Vestaboard ${config.id} skip (gap) ${list[0].label || ''}`.trim());
@@ -766,12 +813,20 @@ function createQueue({
     // the page it is clearing has had its time on screen — not the moment it
     // is queued. Handlers that build their card later (Tesla waking the car)
     // would otherwise have the clean-up screen land first and be painted over.
-    const closingDueAt = options.closing
-      ? at + Math.max(0, Math.round(Number(options.closingAfterSeconds) || 0)) * 1000
-      : null;
+    let closingDueAt = null;
+    if (options.closing) {
+      closingDueAt = at + Math.max(0, Math.round(Number(options.closingAfterSeconds) || 0)) * 1000;
+      // The page being cleared is holding the board, and its hold was counted
+      // from the moment it flipped — that is when the clean-up screen is due,
+      // not `afterSeconds` past a handler that took its time (Tesla waking
+      // the car) before the scheduler could even queue it.
+      if (state.schedulerPage && state.holdKind === 'guest'
+        && state.holdUntil && at < state.holdUntil) {
+        closingDueAt = Math.min(closingDueAt, state.holdUntil);
+      }
+    }
 
     const sequenceId = `s${nextItemId}`;
-    const ownerSource = options.gameSource || hold.source || options.replaceSource || null;
     const actor = resolveActor(options);
     const commandId = options.commandId ? String(options.commandId) : null;
     const sessionId = options.sessionId ? String(options.sessionId) : null;
@@ -871,6 +926,7 @@ function createQueue({
     if (mayBreakHold) {
       state.holdUntil = null;
       state.holdKind = null;
+      state.schedulerPage = null;
     }
 
     /** Put these pages ahead of the ones already parked, keeping their order. */
@@ -976,12 +1032,25 @@ function createQueue({
       // park the restore (or the next snapshot) after the alert has finished.
       state.snapshotUntil = null;
       state.phaseUntil = null;
+    } else if (itemRefreshesPage(item, at)) {
+      // The page on the flaps updated itself. Its hold, dwell and place in
+      // the rotation gap all date from when it first flipped — a live Tesla
+      // reading landing 20s after the cached preview does not buy the page
+      // another minute, nor push its clean-up screen out.
+      state.lastSnapshot = item.frame;
+      state.restoreAfter = null;
     } else {
       state.lastSnapshot = item.frame;
       state.restoreAfter = null;
       if (item.scheduler) {
         state.lastSchedulerFlipAt = at;
       }
+      // Only a rotation page can be refreshed; a clean-up screen (or anything
+      // a person pushed) is not one, so a same-source page after it is a new
+      // flip and waits its turn like any other.
+      state.schedulerPage = item.scheduler && !item.closing && item.coalesceKey
+        ? { coalesceKey: String(item.coalesceKey), boardIds: item.boardIds || null }
+        : null;
       // A game card's own `holdSeconds` is not what parks the queue — the
       // session lock does that — so it must not leave a guest hold behind
       // that outlives the game.
@@ -1121,7 +1190,8 @@ function createQueue({
     if (!skip && state.lastPostAt !== null && at < state.lastPostAt + rateWindowMs()) return null;
     // Hardware can take another flip after the rate window; a 60s dwell
     // still keeps the current page up. Alerts and the live game skip it.
-    if (!skip && item.priority !== 'alert' && !ownedByLock(item) && snapshotDwellActive(at)) {
+    if (!skip && item.priority !== 'alert' && !ownedByLock(item) && snapshotDwellActive(at)
+      && !itemRefreshesPage(item, at)) {
       return null;
     }
 
@@ -1314,6 +1384,7 @@ function createQueue({
       // Skip is "show me the next page", so keep the pages a closing artwork
       // was holding rather than sweeping them on the way past.
       state.clearSchedulerAfterHold = false;
+      state.schedulerPage = null;
       state.snapshotUntil = null;
       state.phaseUntil = null;
       state.restoreAfter = null;

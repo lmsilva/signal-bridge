@@ -150,6 +150,9 @@ function coalesceKeyFor(payload, type) {
   if (type === 'tesla-dashboard.query' || type === 'tesla.dashboard') {
     return 'tesla-dashboard.query';
   }
+  if (type === 'air-quality.query' || type === 'alexa.air-quality') {
+    return 'air-quality.query';
+  }
   if (type !== 'smart-home.command') {
     return null;
   }

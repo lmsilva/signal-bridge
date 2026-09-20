@@ -171,6 +171,28 @@ const PUSH_DOWN_POLL_MS = 15 * 1000;
 const HEALTH_LOG_MS = 5 * 60 * 1000;
 const HISTORY_POLL_FAILURE_THRESHOLD = 3;
 
+/**
+ * One voice event can send two cards — a cached preview, then the live
+ * reading — and the scheduler asks which boards took *the event*. A board
+ * that accepted either card did; the later refusal of the second (rotation
+ * gap, duplicate, quiet) must not read as "never reached the flaps".
+ */
+function mergeBoardFanout(previous, next) {
+  if (!next) return previous;
+  if (!previous) return next;
+  const byBoard = new Map();
+  for (const row of previous.boards || []) {
+    if (row?.boardId) byBoard.set(row.boardId, row);
+  }
+  for (const row of next.boards || []) {
+    if (!row?.boardId) continue;
+    const seen = byBoard.get(row.boardId);
+    const keepEarlier = seen && Number(seen.accepted) > 0 && !(Number(row.accepted) > 0);
+    byBoard.set(row.boardId, keepEarlier ? seen : row);
+  }
+  return { ...previous, ...next, boards: [...byBoard.values()] };
+}
+
 function createListener({
   config, log, guestSnapsAuth = null, vestaboardHub = null, localeSettings = null,
   shortlinks = null, eventRoutingSettings = null,
@@ -765,7 +787,7 @@ function createListener({
           : {}),
         ...(event.actor ? { actor: event.actor } : {}),
       });
-      voiceFanout = result?.vestaboard || voiceFanout;
+      voiceFanout = mergeBoardFanout(voiceFanout, result?.vestaboard);
       sendRequest.rememberSent();
       return true;
     };
@@ -2627,6 +2649,7 @@ function createListener({
 
 module.exports = {
   createListener,
+  mergeBoardFanout,
   shouldSuppressSteamForPayload,
   shouldSuppressNowPlayingForPayload,
 };

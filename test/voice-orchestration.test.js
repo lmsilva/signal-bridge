@@ -1,9 +1,41 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shouldSuppressSteamForPayload } = require('../src/listener');
+const { shouldSuppressSteamForPayload, mergeBoardFanout } = require('../src/listener');
 const { buildSmartHomePayload, buildPhotoSlideshowPayload } = require('../src/udp-payload');
 const { sealJson } = require('../src/lan-crypto');
 const { extractActivityFields } = require('../src/activity-fields');
+
+test('a voice event that sent a preview and then a live card reports the boards that took either', () => {
+  // The bug: the scheduler read only the *last* fan-out, so a Tesla airing
+  // whose preview flipped the board and whose live reading was then refused
+  // ("gap") was recorded as never reaching a board — and its closing artwork
+  // never queued.
+  const preview = { boards: [
+    { boardId: 'sim', skipped: false, reason: 'queued', accepted: 1 },
+    { boardId: 'home', skipped: false, reason: 'queued', accepted: 1 },
+  ] };
+  const live = { boards: [
+    { boardId: 'sim', skipped: true, reason: 'gap', accepted: 0 },
+    { boardId: 'home', skipped: false, reason: 'queued', accepted: 1 },
+  ] };
+  const merged = mergeBoardFanout(preview, live);
+  assert.deepEqual(merged.boards.map((row) => [row.boardId, row.accepted, row.reason]), [
+    ['sim', 1, 'queued'],
+    ['home', 1, 'queued'],
+  ]);
+
+  // A board that took neither still reads as refused, with the latest reason.
+  const neither = mergeBoardFanout(
+    { boards: [{ boardId: 'sim', skipped: true, reason: 'quiet', accepted: 0 }] },
+    { boards: [{ boardId: 'sim', skipped: true, reason: 'gap', accepted: 0 }] },
+  );
+  assert.deepEqual(neither.boards, [{ boardId: 'sim', skipped: true, reason: 'gap', accepted: 0 }]);
+
+  // Only one card sent, or a card that never reached the hub: nothing to merge.
+  assert.equal(mergeBoardFanout(null, live), live);
+  assert.equal(mergeBoardFanout(preview, null), preview);
+  assert.equal(mergeBoardFanout(null, null), null);
+});
 
 test('shouldSuppressSteamForPayload suppresses display overlays but not control traffic', () => {
   assert.equal(shouldSuppressSteamForPayload({ type: 'weather.query' }), true);
