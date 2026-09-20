@@ -78,7 +78,7 @@ test('the three Romans mockups lock chip geometry and the blank-row rule', () =>
 
 test('the shipped corpus is board-fit KJV with a scripture reference', () => {
   const verses = loadShipped();
-  assert.ok(verses.length > 700, `only ${verses.length} verses shipped`);
+  assert.ok(verses.length > 300, `only ${verses.length} verses shipped`);
   const seen = new Set();
   for (const verse of verses) {
     assert.ok(verse.id, 'missing id');
@@ -87,10 +87,11 @@ test('the shipped corpus is board-fit KJV with a scripture reference', () => {
     assert.equal(seen.has(verse.id), false, `duplicate id ${verse.id}`);
     seen.add(verse.id);
     assert.equal(fitsBoard(verse.reference, verse.text), true, verse.id);
+    assert.equal(versePages(verse.reference, verse.text).length, 1, `${verse.id} spans more than one screen`);
   }
   // A rebuild that quietly collapsed to one book would still pass the count.
   const books = new Set(verses.map((verse) => verse.reference.replace(/ \d+:\d+$/, '')));
-  assert.ok(books.size > 40, `only ${books.size} books represented`);
+  assert.ok(books.size > 30, `only ${books.size} books represented`);
 });
 
 test('buildBibleVersePayload is a vestaboard bible.verse card', () => {
@@ -118,6 +119,10 @@ test('a longer verse pages under the same header', () => {
   assert.ok(pages.length >= 2);
   assert.equal(formatLayout(pages[0]).split('\n')[0], 'vv VERSE OF THE DAY vv');
   assert.match(formatLayout(pages[1]), /JOHN 3:16/);
+  assert.equal(fitsBoard(
+    'John 3:16',
+    'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.',
+  ), false, 'a second screen is not board-fit');
 });
 
 test('bible verse with no text renders nothing', () => {
@@ -151,6 +156,12 @@ test('createBibleVerse can add hide and restore', () => {
   const added = api.addVerse('Jesus wept.', 'John 11:35');
   assert.equal(added.ok, true);
   assert.ok(added.customCount >= 1);
+  const tooLong = api.addVerse(
+    'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.',
+    'John 3:16',
+  );
+  assert.equal(tooLong.ok, false);
+  assert.match(tooLong.error, /too long for one/);
   const payload = api.nextPayload({ random: () => 0 });
   assert.equal(payload.type, 'bible.verse');
 

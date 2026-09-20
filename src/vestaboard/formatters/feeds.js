@@ -1277,7 +1277,7 @@ function wordOfTheDayFrames(payload = {}) {
 /**
  * Bible Verse Of The Day: violet VERSE OF THE DAY chips, a single-chip
  * reference row, then a centred verse. Short verses keep a blank under the
- * reference; longer KJV lines page in chunks of four.
+ * reference; a verse that needs a second frame is not shipped.
  */
 function bibleVerseFrames(payload = {}) {
   const verse = payload.verse || {};

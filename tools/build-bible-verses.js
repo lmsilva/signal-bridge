@@ -13,7 +13,7 @@
  *   2. AUTO - a sweep of the wisdom books, gospels and epistles that keeps
  *      verses which read on their own: they open with a word that does not
  *      point back at the previous verse, they avoid genealogy / warfare /
- *      ritual vocabulary, and they fit the board in one or two frames.
+ *      ritual vocabulary, and they fit the board in a single frame.
  *
  * Every shipped row must pass `fitsBoard` from the layout module.
  *
@@ -29,11 +29,10 @@ const { fitsBoard, referenceLabel, verseLines } = require('../src/bible-verse-la
 const OUT = path.join(__dirname, '..', 'src', 'bible-verse-verses.json');
 const BASE = 'https://raw.githubusercontent.com/aruljohn/Bible-kjv/master';
 
-// A verse past four wrapped lines becomes a paged card. The queue shows a
-// paged card as one row, so length is a reading decision, not a plumbing one:
-// the sweep stays short and punchy, curated favourites may run long.
-const AUTO_MAX_LINES = 6;
-const CURATED_MAX_LINES = 16;
+// Title + reference take two rows; the verse itself has four body slots.
+// Anything past that is a second screen and does not ship.
+const AUTO_MAX_LINES = 4;
+const CURATED_MAX_LINES = 4;
 const MIN_CHARS = 28;
 
 /** Book file name -> board/display name. */

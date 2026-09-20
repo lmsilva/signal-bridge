@@ -4,8 +4,8 @@ const { centered, chipCode } = require('./vestaboard/frames');
 const BODY_ROWS = 6;
 const TITLE = 'VERSE OF THE DAY';
 const BODY_SLOTS = 4;
-// Three frames covers the marketplace-length verse (Romans 1:20). A fourth is
-// only there so a long favourite like Philippians 4:8 does not have to be cut.
+// A verse that needs a second frame is not shipped. The composer still pages
+// so a house-edited leftover can be previewed, but `fitsBoard` is one screen.
 const MAX_PAGES = 4;
 const REF_FROM = 1;
 const REF_WIDTH = 20;
@@ -162,7 +162,7 @@ function fitsBoard(reference, text) {
   const key = `${reference}\u0000${text}`;
   let hit = fitCache.get(key);
   if (hit === undefined) {
-    hit = versePages(reference, text).length > 0;
+    hit = versePages(reference, text).length === 1;
     fitCache.set(key, hit);
   }
   return hit;
