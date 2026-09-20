@@ -145,7 +145,7 @@ test('the tesla dashboard composes label-and-value rows against flush ones', () 
     rows: [
       { left: 'BATT 73%', right: 'RANGE 201MI', indent: 0, to: COLS - 2 },
       { left: 'PARKED - NOT PLUGGED', indent: 0 },
-      lr('IN 88\u00b0', 'OUT 91\u00b0', { from: 0, to: 14 }),
+      lr('IN 88F', 'OUT 91F', { from: 0, to: 14 }),
       { left: 'LOCKED - SENTRY ON', indent: 0 },
     ],
     footerLeft: '2:38PM',
@@ -155,7 +155,7 @@ test('the tesla dashboard composes label-and-value rows against flush ones', () 
     'rr  TESLA MODEL Y   rr',
     'BATT 73%  RANGE 201MI',
     'PARKED - NOT PLUGGED',
-    'IN 88\u00b0  OUT 91\u00b0',
+    'IN 88F  OUT 91F',
     'LOCKED - SENTRY ON',
     'rr      2:38PM      rr',
   ].join('\n'), 'tesla dashboard');
@@ -184,18 +184,18 @@ test('the timer list right-aligns countdowns into a clean column', () => {
 });
 
 test('folding collapses runs of spaces, so columns must be placed not padded', () => {
-  // Writing "IN 88°  OUT 91°" with two spaces does not survive folding, which
+  // Writing "IN 88F  OUT 91F" with two spaces does not survive folding, which
   // is why every aligned column in a formatter goes through lr() or explicit
   // placement instead of padded strings.
-  const padded = badgeFrame({ color: 'red', rows: ['IN 88\u00b0  OUT 91\u00b0'] });
-  assert.equal(formatLayout(padded).split('\n')[1], ' IN 88\u00b0 OUT 91\u00b0');
+  const padded = badgeFrame({ color: 'red', rows: ['IN 88F  OUT 91F'] });
+  assert.equal(formatLayout(padded).split('\n')[1], ' IN 88F OUT 91F');
 
-  const placed = badgeFrame({ color: 'red', rows: [lr('IN 88\u00b0', 'OUT 91\u00b0', { from: 1, to: 15 })] });
-  assert.equal(formatLayout(placed).split('\n')[1], ' IN 88\u00b0  OUT 91\u00b0');
+  const placed = badgeFrame({ color: 'red', rows: [lr('IN 88F', 'OUT 91F', { from: 1, to: 15 })] });
+  assert.equal(formatLayout(placed).split('\n')[1], ' IN 88F  OUT 91F');
 });
 
 test('air quality places a band chip inline with the reading', () => {
-  // The reading block is "<score><chip> <temp>°" right-aligned as a unit, so
+  // The reading block is "<score><chip> <temp>F" right-aligned as a unit, so
   // a four-character temperature shifts the whole block one column left.
   const row = (label, score, band, temp) => {
     const built = blankRow(COLS);
@@ -204,7 +204,7 @@ test('air quality places a band chip inline with the reading', () => {
       ...encodeText(score),
       CHIPS[band],
       BLANK,
-      ...encodeText(`${temp}\u00b0`),
+      ...encodeText(`${temp}F`),
     ];
     placeCodes(built, block, COLS - 1 - block.length);
     return built;
@@ -223,9 +223,9 @@ test('air quality places a band chip inline with the reading', () => {
 
   assertLayout(frame, [
     'gg   AIR QUALITY    gg',
-    ' MAIN FLOOR   99g 76\u00b0',
-    ' MACHINE ROOM 99g 71\u00b0',
-    ' DOME        66y 114\u00b0',
+    ' MAIN FLOOR   99g 76F',
+    ' MACHINE ROOM 99g 71F',
+    ' DOME        66y 114F',
     '',
     'gg DOME RUNNING HOT gg',
   ].join('\n'), 'air quality');
@@ -411,9 +411,9 @@ test('dwell grows with how much there is to read, within limits', () => {
     color: 'green',
     title: 'AIR QUALITY',
     rows: [
-      { left: 'MAIN FLOOR', right: '99 76\u00b0' },
-      { left: 'MACHINE ROOM', right: '99 71\u00b0' },
-      { left: 'DOME', right: '66 114\u00b0' },
+      { left: 'MAIN FLOOR', right: '99 76F' },
+      { left: 'MACHINE ROOM', right: '99 71F' },
+      { left: 'DOME', right: '66 114F' },
     ],
     footerLeft: 'DOME RUNNING HOT',
   });
@@ -430,7 +430,7 @@ test('dwell grows with how much there is to read, within limits', () => {
 
 test('every builder produces something the board would accept', () => {
   const frames = [
-    badgeFrame({ color: 'blue', title: 'WEATHER', rows: ['NOW 93\u00b0 SUNNY'] }),
+    badgeFrame({ color: 'blue', title: 'WEATHER', rows: ['NOW 93F SUNNY'] }),
     borderFrame({ color: 'red', lines: ['WAKE UP - 6:30AM'] }),
     cinemaFrame({ border: 'full', rows: ['NOW PLAYING', 'INTERSTELLAR'] }),
     blockTime(new Date(2026, 7, 23, 14, 38), { footer: 'SUNDAY AUG 23' }),

@@ -8536,7 +8536,8 @@
 
   // Flap codes, in board order: blank, A-Z, 1-9, 0, then punctuation. The gaps
   // are codes the board reserves and never renders, so they read as blanks.
-  const FLAP_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$() - +&=;: \'"%,.  /? \u00b0';
+  // Code 62 is the heart flagship boards ship in place of the old degree flap.
+  const FLAP_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$() - +&=;: \'"%,.  /? \u2665';
   const FLAP_CODE_BY_CHAR = (() => {
     const map = new Map();
     for (let code = 0; code < FLAP_CHARS.length; code += 1) {
@@ -9143,7 +9144,7 @@
 
   // Characters someone can stamp onto a flap from the palette. Space is
   // listed first so a blank can be picked without switching to Erase.
-  const RL_PALETTE_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$()-_+&=;:\'"%,./?°';
+  const RL_PALETTE_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$()-_+&=;:\'"%,./?\u2665';
 
   function presetCells(name) {
     return RL_PRESET_LIB.presetCells(name);
@@ -9912,7 +9913,7 @@
   function foldPreview(text) {
     return String(text || '')
       .toUpperCase()
-      .replace(/[^A-Z0-9 !@#$()+\-=;:'"%,./?°]/g, '')
+      .replace(/[^A-Z0-9 !@#$()+\-=;:'"%,./?\u00b0\u2665\u2764]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -16149,7 +16150,7 @@
     const speed = settings.distanceUnit === 'km' ? 'GOING 27,600 KM/H' : 'GOING 17,130 MPH';
     const alt = settings.distanceUnit === 'km' ? '@  420 KM HIGH' : '@  262 MI HIGH';
     const away = hasLocation ? `3,917 ${unit} AWAY @` : 'SET HOUSE PIN';
-    const coords = settings.showCoordinates !== false ? '1.45° S,  33.56° W' : '';
+    const coords = settings.showCoordinates !== false ? '1.45 S,  33.56 W' : '';
     const center = (text, width = 22) => {
       const body = String(text || '').slice(0, width);
       const pad = Math.max(0, width - body.length);

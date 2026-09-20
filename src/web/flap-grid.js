@@ -3,7 +3,8 @@
  * Codes match the Vestaboard encoder: 0 blank, 1–26 A–Z, then digits / punct / chips.
  */
 (function (root) {
-  const FLAP_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$() - +&=;: \'"%,.  /? \u00b0';
+  // Code 62 is the heart flagship boards ship in place of the old degree flap.
+  const FLAP_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$() - +&=;: \'"%,.  /? \u2665';
   const FLAP_CHIPS = ['red', 'orange', 'yellow', 'green', 'blue', 'violet', 'white', 'black', 'filled'];
   const FLAP_CHIP_BY_CODE = new Map(FLAP_CHIPS.map((name, index) => [63 + index, name]));
   const FLAP_CODE_BY_CHAR = (() => {

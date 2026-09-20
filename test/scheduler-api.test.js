@@ -61,13 +61,16 @@ function makeWebRoot() {
   return dir;
 }
 
-async function startServer({ busy = createDisplayBusy(), configOverrides = {} } = {}) {
+async function startServer({
+  busy = createDisplayBusy(), configOverrides = {}, recordVoiceEvent = null,
+} = {}) {
   // Slideshow photo origins follow public-url precedence. A developer .env
   // GUEST_PHOTOBOOTH_URL must not leak into LAN-host assertions.
   const prevBoothUrl = process.env.GUEST_PHOTOBOOTH_URL;
   delete process.env.GUEST_PHOTOBOOTH_URL;
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sched-data-'));
   const sent = [];
+  const sentOptions = [];
   const recorded = [];
   const config = {
     ROOT: dataDir,
@@ -102,8 +105,8 @@ async function startServer({ busy = createDisplayBusy(), configOverrides = {} } 
   const webServer = createWebServer({
     config,
     log: { info() {}, warn() {}, error() {}, debug() {} },
-    sendUdpPayload: (payload) => { sent.push(payload); },
-    recordVoiceEvent: async (event) => { recorded.push(event); },
+    sendUdpPayload: (payload, options = {}) => { sent.push(payload); sentOptions.push(options); },
+    recordVoiceEvent: recordVoiceEvent || (async (event) => { recorded.push(event); }),
     displayBusy: busy,
     scheduleRestart: () => {},
     webRoot: makeWebRoot(),
@@ -123,7 +126,7 @@ async function startServer({ busy = createDisplayBusy(), configOverrides = {} } 
     if (prevBoothUrl == null) delete process.env.GUEST_PHOTOBOOTH_URL;
     else process.env.GUEST_PHOTOBOOTH_URL = prevBoothUrl;
   };
-  return { webServer, base, cookie, sent, recorded, api, config };
+  return { webServer, base, cookie, sent, sentOptions, recorded, api, config };
 }
 
 const ROUTE = '/api/display-scheduler';
@@ -387,6 +390,14 @@ test('a rule can finish by clearing the board with an artwork, and that round-tr
     assert.equal(aired.status, 202, aired.body?.error || 'air with a closing artwork');
     assert.equal(aired.body.event.outcome, 'aired');
 
+    // The airing says what it finished with. Without this the clean-up board
+    // could quietly never fire (it did not, for every push that answers before
+    // its card reaches a board) and the test would still pass.
+    const activity = await api(`${ROUTE}/activity`);
+    const entry = activity.body.events.find((row) => row.outcome === 'aired');
+    assert.match(entry.detail, /Cleared with Winter, held 12 min/);
+    assert.match(entry.detail, /dropped the scheduled pages behind it/);
+
     // Unchecking the box clears the block rather than leaving a stale one.
     const off = await api(`${ROUTE}/rules/${created.body.rule.id}`, {
       method: 'PUT',
@@ -394,6 +405,47 @@ test('a rule can finish by clearing the board with an artwork, and that round-tr
     });
     assert.equal(off.status, 200, off.body?.error || 'clear closing artwork');
     assert.equal(off.body.rule.closingArtwork, undefined);
+  } finally {
+    webServer.stop();
+  }
+});
+
+test('a Push during a slow airing is not stamped as a scheduler page', async () => {
+  // An airing that hands off to the voice pipeline stays in flight until the
+  // card is built — up to half a minute while a Tesla wakes. Its send options
+  // are scoped to that dispatch, so a tap that lands in the meantime keeps its
+  // own: shared state here would give the Push the rule's hold and rotation
+  // gap, and the board would quietly drop it.
+  let release = null;
+  const airing = new Promise((resolve) => { release = resolve; });
+  const { webServer, api, base, cookie, sentOptions } = await startServer({
+    recordVoiceEvent: async () => {
+      await airing;
+      return { boards: [{ boardId: 'sim', accepted: 1 }] };
+    },
+  });
+  try {
+    const created = await api(`${ROUTE}/rules`, {
+      method: 'POST',
+      body: {
+        commandId: 'alexa.shopping-list',
+        target: 'vestaboard',
+        intervalSeconds: 3600,
+        holdSeconds: 300,
+        probability: 0,
+      },
+    });
+    const fired = api(`${ROUTE}/rules/${created.body.rule.id}/air`, { method: 'POST' });
+
+    const pushed = await request(`${base}/api/push/weather`, { method: 'POST', cookie, body: {} });
+    assert.equal(pushed.status, 200, pushed.body?.error);
+    const options = sentOptions.at(-1);
+    assert.notEqual(options.source, 'scheduler');
+    assert.notEqual(options.scheduler, true);
+    assert.equal(options.holdSeconds, undefined);
+
+    release();
+    assert.equal((await fired).status, 202);
   } finally {
     webServer.stop();
   }

@@ -385,6 +385,16 @@ function createDisplayScheduler(deps = {}) {
     return Boolean(isBoardTarget(target));
   }
 
+  /**
+   * Can this rule put anything on flaps? `closingArtwork` is kept whatever the
+   * target says (so flipping a rule to Software and back does not lose the
+   * piece), which means the engine — not the editor — decides whether there is
+   * a board to clean up. `full` is the Windows overlays only.
+   */
+  function targetReachesBoard(rule) {
+    return isBoardOnlyRule(rule) || normaliseTarget(rule?.target) === 'all';
+  }
+
   function displayBlockedReason(nowMs) {
     if (nowMs < suppressUntil) {
       return 'blocked-global-gap';
@@ -625,18 +635,25 @@ function createDisplayScheduler(deps = {}) {
    * Finish a board airing by clearing the flaps with a piece from the Artwork
    * gallery, then parking the queue behind it (§ rule `closingArtwork`).
    *
-   * Only chases a page that actually reached a board: a Windows-only rule has
+   * Only chases a page that could reach a board: a Windows-only rule has
    * nothing to clean up, and neither does an airing the board queue dropped
    * for the rotation gap or quiet hours.
+   *
+   * Board outcomes are evidence, not a requirement. A handler that answers
+   * before its card exists (Tesla waking the car, a timers poll) reports none
+   * at all, and reading that as "never landed" is what kept the clean-up
+   * screen from ever airing — so only an explicit "no board took it" refuses.
    */
-  async function airClosing(rule, event, airResult) {
+  async function airClosing(rule, event, airResult, { afterSeconds = 0 } = {}) {
     const closing = rule.closingArtwork;
     if (!closing || typeof airClosingArtwork !== 'function') {
       return null;
     }
-    const landed = Array.isArray(airResult?.boardOutcomes)
-      && airResult.boardOutcomes.some((row) => Number(row?.accepted) > 0);
-    if (!landed) {
+    if (!targetReachesBoard(rule)) {
+      return null;
+    }
+    const outcomes = Array.isArray(airResult?.boardOutcomes) ? airResult.boardOutcomes : null;
+    if (outcomes?.length && !outcomes.some((row) => Number(row?.accepted) > 0)) {
       return null;
     }
 
@@ -649,6 +666,9 @@ function createDisplayScheduler(deps = {}) {
         artworkId: closing.artworkId || null,
         holdSeconds,
         clearQueue,
+        // The clean-up screen takes the board when the page it is clearing has
+        // had its time on screen, not the moment it is queued.
+        afterSeconds,
       });
       const name = outcome?.artwork?.name || 'artwork';
       activity.amend(event?.id, {
@@ -732,7 +752,7 @@ function createDisplayScheduler(deps = {}) {
       return event2;
     }
 
-    await airClosing(rule, event, airResult);
+    await airClosing(rule, event, airResult, { afterSeconds: planned });
 
     rule.pending = false;
     delete rule.pendingSince;

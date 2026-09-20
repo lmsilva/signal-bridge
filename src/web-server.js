@@ -469,15 +469,21 @@ function createWebServer({
   shortlinksFetch = null,
   shortlinksHealthIntervalMs = undefined,
 } = {}) {
-  let schedulerAir = null;
   // Per-request, not a process global. The admin page polls /api/status and
   // the board stream on other connections; those used to finish and null a
   // shared `requestActor` while a Push was still fanning out, so the queue
   // said "by System" for a tap that came from the signed-in admin.
   const requestActorStore = new AsyncLocalStorage();
+  // The send options a scheduler airing rides on, scoped the same way and for
+  // the same reason — an airing can be in flight for half a minute.
+  const schedulerAirStore = new AsyncLocalStorage();
 
   function currentActor() {
     return requestActorStore.getStore()?.actor || null;
+  }
+
+  function currentSchedulerAir() {
+    return schedulerAirStore.getStore()?.air || null;
   }
 
   function sendUdpPayload(payload, options = {}) {
@@ -489,7 +495,7 @@ function createWebServer({
     return sendUdpPayloadIn(payload, {
       ...options,
       actor: options.actor || currentActor() || undefined,
-      ...(schedulerAir || {}),
+      ...(currentSchedulerAir() || {}),
       bypassEventRouting: true,
     });
   }
@@ -498,7 +504,7 @@ function createWebServer({
     const sendOptions = {
       ...extraSendOptions,
       actor: extraSendOptions.actor || currentActor() || undefined,
-      ...(schedulerAir || {}),
+      ...(currentSchedulerAir() || {}),
       bypassEventRouting: true,
     };
     if (typeof deliverTargetedPayloadIn !== 'function') {
@@ -5775,6 +5781,7 @@ function createWebServer({
     holdSeconds = null,
     quietHoursExempt = false,
     closing = false,
+    closingAfterSeconds = 0,
     clearQueueAfterHold = false,
   } = {}) {
     const command = commandRegistry.get(commandId);
@@ -5802,6 +5809,8 @@ function createWebServer({
     if (boardOnly && (deliveryId === 'full' || deliveryId === 'all')) {
       deliveryId = 'vestaboard';
     }
+    const hold = Number(holdSeconds);
+    const heldPage = Number.isFinite(hold) && hold > 0;
     const body = {
       ...(command.body || {}),
       ...params,
@@ -5812,25 +5821,32 @@ function createWebServer({
       // only alarm/timer fires reach the board unless the caller opts in.
       // Automated ticks stay soft. Game invites pass breakHold themselves.
       triggeredBy: manual ? 'manual' : 'scheduler',
+      // Handlers that hand off to the voice pipeline send the card themselves,
+      // after this dispatch's send options are gone. They read the page time
+      // off the body instead (see `schedulerPageTime`).
+      ...(heldPage ? { holdSeconds: hold } : {}),
     };
 
-    const hold = Number(holdSeconds);
-    schedulerAir = {
+    const air = {
       source: manual ? 'manual' : 'scheduler',
       scheduler: !manual,
       explicit: Boolean(manual),
       breakHold: false,
       targetId: deliveryId,
       quietHoursExempt: Boolean(quietHoursExempt),
-      ...(Number.isFinite(hold) && hold > 0 ? { holdSeconds: hold } : {}),
-      ...(closing ? { closing: true } : {}),
+      ...(heldPage ? { holdSeconds: hold } : {}),
+      ...(closing ? { closing: true, closingAfterSeconds } : {}),
       ...(clearQueueAfterHold ? { clearQueueAfterHold: true } : {}),
       ...(manual && currentActor() ? { actor: currentActor() } : {}),
     };
-    try {
+
+    // Scoped to this dispatch, not shared: a Tesla airing waits out the vehicle
+    // wake, and a Push someone taps during those 30s must not be stamped as a
+    // scheduler page (the same trap `requestActorStore` exists for).
+    await schedulerAirStore.run({ air }, async () => {
       switch (commandId) {
-        case 'tesla.dashboard': handleTeslaPush('tesla-dashboard', body, res); break;
-        case 'tesla.battery': handleTeslaPush('tesla-battery', body, res); break;
+        case 'tesla.dashboard': await handleTeslaPush('tesla-dashboard', body, res); break;
+        case 'tesla.battery': await handleTeslaPush('tesla-battery', body, res); break;
         case 'alexa.weather':
           await handleWeatherForecastPush(body, res); break;
         case 'alexa.shopping-list':
@@ -5975,9 +5991,7 @@ function createWebServer({
         default:
           throw new Error(`Command "${commandId}" has no scheduler dispatch`);
       }
-    } finally {
-      schedulerAir = null;
-    }
+    });
 
     if (captured.status >= 400) {
       throw new Error(captured.body?.error || `Push failed (${captured.status})`);
@@ -6019,6 +6033,7 @@ function createWebServer({
       targetId: rule.target,
       holdSeconds: closing.holdSeconds,
       closing: true,
+      closingAfterSeconds: closing.afterSeconds,
       clearQueueAfterHold: Boolean(closing.clearQueue),
       quietHoursExempt: Boolean(rule.quietHoursExempt),
     }),
@@ -6906,7 +6921,23 @@ function createWebServer({
 
   // ---- Push handlers -------------------------------------------------------
 
-  function handleTeslaPush(kind, body, res) {
+  /**
+   * A rule's "hold on screen" for the pushes that build their card later.
+   *
+   * These go out through the voice pipeline, which has its own sender, so the
+   * page time cannot ride the scheduler's send options the way a direct board
+   * push does. It travels on the synthetic event instead — without it the
+   * board falls back to house dwell and the slider does nothing.
+   */
+  function schedulerPageTime(body) {
+    if (body?.triggeredBy !== 'scheduler') {
+      return {};
+    }
+    const seconds = Number(body?.holdSeconds);
+    return Number.isFinite(seconds) && seconds > 0 ? { holdSeconds: seconds } : {};
+  }
+
+  async function handleTeslaPush(kind, body, res) {
     if (typeof recordVoiceEvent !== 'function') {
       sendJson(res, 503, { ok: false, error: 'Tesla push unavailable — listener not ready' });
       return;
@@ -6928,13 +6959,25 @@ function createWebServer({
       spokenResponse: null,
       targetId,
       triggeredBy: body?.triggeredBy || 'web-api',
+      ...schedulerPageTime(body),
       actor: body?.triggeredBy === 'scheduler'
         ? null
         : (currentActor() || body?.actor || null),
     };
+    const pending = recordVoiceEvent(event);
+    // A scheduled airing has to hear which boards took the card: its closing
+    // artwork queues behind that page, and answering before the card exists
+    // read as "never reached a board", so a rule set to finish with a piece
+    // never cleaned up. Only the scheduler waits out the vehicle wake — a
+    // human press still gets the ack while the preview is on screen.
+    if (body?.triggeredBy === 'scheduler') {
+      const vestaboard = await pending;
+      sendJson(res, 202, { ok: true, kind, targetId, vestaboard });
+      return;
+    }
     // Fire and forget: Tesla fetches can take up to 30s (vehicle wake); the
     // voice pipeline already sends a cached preview / processing ack first.
-    recordVoiceEvent(event).catch((error) => {
+    pending.catch((error) => {
       log.error(`Web push ${kind} failed`, error?.message || error);
     });
     log.info(`Web push accepted (${kind})`, { device: event.device, targetId });
@@ -6967,6 +7010,7 @@ function createWebServer({
       spokenResponse: null,
       targetId,
       triggeredBy: body?.triggeredBy || trigger,
+      ...schedulerPageTime(body),
       // Capture now — Alexa enrich may post the board card after this
       // request's store is gone, so the actor has to travel on the event.
       actor: body?.triggeredBy === 'scheduler'
@@ -10592,10 +10636,10 @@ function createWebServer({
 
         switch (pathname) {
           case '/api/push/tesla-dashboard':
-            handleTeslaPush('tesla-dashboard', body, res);
+            await handleTeslaPush('tesla-dashboard', body, res);
             return;
           case '/api/push/tesla-battery':
-            handleTeslaPush('tesla-battery', body, res);
+            await handleTeslaPush('tesla-battery', body, res);
             return;
           case '/api/push/weather':
             await handleWeatherForecastPush(body, res);

@@ -374,6 +374,7 @@ function createListener({
       // A scheduled airing's closing artwork: exempt from the rotation gap,
       // and the thing that can sweep the queue once its hold lapses.
       closing: options.closing,
+      closingAfterSeconds: options.closingAfterSeconds,
       clearQueueAfterHold: options.clearQueueAfterHold,
       actor: options.actor,
       ctx: options.ctx,
@@ -751,7 +752,16 @@ function createListener({
       const result = sendUdpPayload(attachTarget(stamped, delivery.target), {
         ...delivery.sendOptions,
         ...(event.triggeredBy === 'scheduler'
-          ? { source: 'scheduler', targetId: event.targetId }
+          ? {
+            source: 'scheduler',
+            targetId: event.targetId,
+            // The rule's "hold on screen": a card built out here (Tesla wake,
+            // shopping-list enrich) would otherwise take house dwell, and the
+            // clean-up artwork queued behind it would flip on the wrong beat.
+            ...(Number(event.holdSeconds) > 0
+              ? { holdSeconds: Number(event.holdSeconds) }
+              : {}),
+          }
           : {}),
         ...(event.actor ? { actor: event.actor } : {}),
       });

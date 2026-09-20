@@ -202,6 +202,7 @@ function routeEvent({
   quietHoursExempt = null,
   holdSeconds = null,
   closing = false,
+  closingAfterSeconds = 0,
   clearQueueAfterHold = false,
   replaceSource: replaceSourceOpt = undefined,
   replaceCard: replaceCardOpt = undefined,
@@ -259,6 +260,7 @@ function routeEvent({
       // The closing artwork of a scheduled airing: exempt from the rotation
       // gap, and optionally the thing that clears the queue behind it.
       closing: Boolean(closing),
+      closingAfterSeconds,
       clearQueueAfterHold: Boolean(clearQueueAfterHold),
       quietHoursExempt: quietHoursExempt != null
         ? Boolean(quietHoursExempt)

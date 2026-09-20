@@ -632,18 +632,25 @@ test('the designer types the same flaps the encoder does', () => {
   // one-slot drift silently types "&" when you press "+".
   const { CHAR_BY_CODE, LEGAL_CODES, UNUSED_CODES } = require('../src/vestaboard/encoder');
   const js = fs.readFileSync(path.join(__dirname, '../src/web/admin/app.js'), 'utf8');
-  const declared = /const FLAP_CHARS = '(.*)';/.exec(js);
-  assert.ok(declared, 'app.js should declare FLAP_CHARS');
-  const table = declared[1].replace(/\\'/g, "'").replace(/\\u00b0/g, '\u00b0');
+  // The simulator bezel and the shared painter carry the same table, and drift
+  // there shows the wrong glyph on a board someone is reading.
+  const gridJs = fs.readFileSync(path.join(__dirname, '../src/web/flap-grid.js'), 'utf8');
+  for (const [where, source] of [['admin app.js', js], ['flap-grid.js', gridJs]]) {
+    const declared = /const FLAP_CHARS = '(.*)';/.exec(source);
+    assert.ok(declared, `${where} should declare FLAP_CHARS`);
+    const table = declared[1]
+      .replace(/\\'/g, "'")
+      .replace(/\\u([0-9a-f]{4})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 
-  assert.equal(table.length, 63, 'codes 0-62 are characters; 63-71 are chips');
-  for (let code = 0; code <= 62; code += 1) {
-    const usable = LEGAL_CODES.has(code) && !UNUSED_CODES.has(code);
-    assert.equal(
-      table[code],
-      usable ? (CHAR_BY_CODE.get(code) ?? ' ') : ' ',
-      `flap code ${code} differs between the admin table and the encoder`,
-    );
+    assert.equal(table.length, 63, 'codes 0-62 are characters; 63-71 are chips');
+    for (let code = 0; code <= 62; code += 1) {
+      const usable = LEGAL_CODES.has(code) && !UNUSED_CODES.has(code);
+      assert.equal(
+        table[code],
+        usable ? (CHAR_BY_CODE.get(code) ?? ' ') : ' ',
+        `flap code ${code} differs between ${where} and the encoder`,
+      );
+    }
   }
 
   // Chip codes start where the character table ends.

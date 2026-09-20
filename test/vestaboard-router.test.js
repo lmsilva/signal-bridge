@@ -537,6 +537,7 @@ test('a closing artwork tells the queue it is a tail page and may sweep behind i
     scheduler: true,
     holdSeconds: 600,
     closing: true,
+    closingAfterSeconds: 60,
     clearQueueAfterHold: true,
     submit: (_boardId, frames, options) => {
       submitted = { frames, options };
@@ -546,4 +547,6 @@ test('a closing artwork tells the queue it is a tail page and may sweep behind i
   assert.equal(submitted.options.closing, true);
   assert.equal(submitted.options.clearQueueAfterHold, true);
   assert.equal(submitted.options.scheduler, true);
+  // How long the page it is clearing still has on screen.
+  assert.equal(submitted.options.closingAfterSeconds, 60);
 });

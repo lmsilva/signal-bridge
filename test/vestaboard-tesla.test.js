@@ -7,7 +7,6 @@ const { validate } = require('../src/vestaboard/encoder');
 const { parseLayout, formatLayout } = require('../src/vestaboard/notation');
 const tesla = require('../src/vestaboard/formatters/tesla');
 
-const DEG = '\u00b0';
 
 function assertLayout(actual, drawing, label) {
   assert.equal(validate(actual).ok, true, `${label} failed validation`);
@@ -56,7 +55,7 @@ test('the tesla dashboard matches the spec drawing', () => {
     'rr  TESLA MODEL Y   rr',
     'BATT 73%  RANGE 201MI',
     'PARKED - NOT PLUGGED',
-    `IN 88${DEG}  OUT 91${DEG}`,
+    'IN 88F  OUT 91F',
     'LOCKED - SENTRY ON',
     'rr      2:38PM      rr',
   ], 'tesla dashboard');

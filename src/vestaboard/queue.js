@@ -293,7 +293,9 @@ function createQueue({
   function pendingReadyMs(at = now()) {
     let soonest = null;
     for (const item of items) {
-      if (itemHeld(item, at)) {
+      // A closing artwork is held until its own slot, and that slot is exactly
+      // what the bezel's "next flip in" should be counting down to.
+      if (itemHeld(item, at) && !closingPending(item, at)) {
         continue;
       }
       if (item.notBefore && at < item.notBefore) {
@@ -470,8 +472,16 @@ function createQueue({
       return true;
     }
     if (item.priority === 'alert') return false;
+    // A clean-up screen waits out the page it is clearing and lets everything
+    // else — including that page, which may still be on its way — go first.
+    if (closingPending(item, at)) return true;
     if (!state.holdUntil || at >= state.holdUntil) return false;
     return item.scheduler;
+  }
+
+  /** A closing artwork whose page has not finished its time on screen yet. */
+  function closingPending(item, at = now()) {
+    return Boolean(item?.closing && item.notBefore && at < item.notBefore);
   }
 
   /**
@@ -501,9 +511,13 @@ function createQueue({
         scheduler: Boolean(item.scheduler),
         actor: item.actor || null,
         notBefore: item.notBefore ? new Date(item.notBefore).toISOString() : null,
-        status: item.notBefore
-          ? null
-          : (itemHeld(item) ? 'held' : (itemCutsIn(item) ? 'cutting-in' : 'waiting')),
+        // A clean-up board biding its time is held, not merely unscheduled:
+        // `notBefore` is how long the page it is clearing has left.
+        status: closingPending(item)
+          ? 'held'
+          : (item.notBefore
+            ? null
+            : (itemHeld(item) ? 'held' : (itemCutsIn(item) ? 'cutting-in' : 'waiting'))),
       };
       if (key) {
         byCard.set(key, row);
@@ -644,7 +658,8 @@ function createQueue({
     let dropped = 0;
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const item = items[i];
-      if (!item.scheduler || item.priority === 'alert') {
+      // A clean-up screen is not one of the pages that piled up behind one.
+      if (!item.scheduler || item.priority === 'alert' || item.closing) {
         continue;
       }
       items.splice(i, 1);
@@ -747,6 +762,14 @@ function createQueue({
       coalesceSeen.set(coalesceKey, at);
     }
 
+    // A closing artwork is the tail of an airing, so it takes the board when
+    // the page it is clearing has had its time on screen — not the moment it
+    // is queued. Handlers that build their card later (Tesla waking the car)
+    // would otherwise have the clean-up screen land first and be painted over.
+    const closingDueAt = options.closing
+      ? at + Math.max(0, Math.round(Number(options.closingAfterSeconds) || 0)) * 1000
+      : null;
+
     const sequenceId = `s${nextItemId}`;
     const ownerSource = options.gameSource || hold.source || options.replaceSource || null;
     const actor = resolveActor(options);
@@ -761,7 +784,7 @@ function createQueue({
       rank: hold.rank,
       // Only the first page may go immediately; later pages get their time
       // when the page before them actually lands.
-      notBefore: null,
+      notBefore: closingDueAt && closingDueAt > at ? closingDueAt : null,
       sequenceId: list.length > 1 ? sequenceId : null,
       coalesceKey,
       boardIds,
@@ -1081,7 +1104,10 @@ function createQueue({
       if (skip) {
         break;
       }
-      if (!laneLockActive(at)) {
+      // A lane lock parks pages behind the live card, so look past them for one
+      // that outranks it. A closing artwork biding its time is the other way
+      // round: it is the queue that has to look past *it*.
+      if (!laneLockActive(at) && !closingPending(items[index], at)) {
         return null;
       }
       index += 1;
