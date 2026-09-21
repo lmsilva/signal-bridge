@@ -1274,6 +1274,29 @@ test('a closing artwork that cannot air leaves the airing itself alone', async (
   assert.equal(scheduler.rules.get('verse').airingsToday, 1);
 });
 
+test('a skipped airing is a blocked-guard and does not count as aired', async () => {
+  const closingCalls = [];
+  const { scheduler } = build({
+    rules: [{
+      id: 'alerts',
+      commandId: 'alexa.weather',
+      target: 'vestaboard',
+      intervalSeconds: 300,
+      probability: 100,
+      closingArtwork: { mode: 'random', holdMinutes: 5 },
+    }],
+    airImpl: () => ({ skipped: true, detail: 'No active weather alerts' }),
+    airClosingArtwork: (rule) => { closingCalls.push(rule.id); },
+  });
+  await scheduler.tick();
+
+  const event = scheduler.activity.query({ limit: 10 }).at(-1);
+  assert.equal(event.outcome, 'blocked-guard');
+  assert.match(event.detail, /No active weather alerts/);
+  assert.equal(scheduler.rules.get('alerts').airingsToday, 0);
+  assert.deepEqual(closingCalls, []);
+});
+
 test('a cadence airing does not stamp the command duration as a Vestaboard hold', async () => {
   const { scheduler, aired } = build({
     rules: [

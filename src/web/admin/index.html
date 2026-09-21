@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal328">
+  <link rel="stylesheet" href="styles.css?v=signal329">
   <link rel="stylesheet" href="/flap-paint.css?v=signal327">
 </head>
 <body>
@@ -978,6 +978,10 @@
                 <input type="checkbox" id="weather-alerts-advisories">
                 <span>Include advisories</span>
               </label>
+              <label class="trivia-check">
+                <input type="checkbox" id="weather-alerts-skip-clear" checked>
+                <span>Ignore scheduled events if no active alerts</span>
+              </label>
               <div class="btn-row" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap">
                 <button type="button" class="btn btn-accent" id="btn-weather-alerts-save">Save filters</button>
                 <button type="button" class="btn btn-outline" id="btn-weather-alerts-push">Push Now</button>
@@ -987,7 +991,7 @@
               <label class="field-label">House pin</label>
               <p class="hint" id="weather-alerts-location">Set a city or ZIP under Location.</p>
               <p class="hint" id="weather-alerts-hint" style="margin-top:12px">
-                Alerts come from api.weather.gov for U.S. coordinates. Outside the U.S. the board shows a coverage notice.
+                Alerts come from api.weather.gov for U.S. coordinates. Outside the U.S. the board shows a coverage notice. A scheduled airing with no active alert is skipped when that box is checked; Push Now still shows All Clear.
               </p>
             </div>
           </div>
@@ -5625,6 +5629,6 @@
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal299"></script>
   <script src="settings-filter.js?v=signal307"></script>
-  <script src="app.js?v=signal328"></script>
+  <script src="app.js?v=signal329"></script>
 </body>
 </html>

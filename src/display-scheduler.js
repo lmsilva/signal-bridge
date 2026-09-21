@@ -737,6 +737,14 @@ function createDisplayScheduler(deps = {}) {
         quietHoursExempt: Boolean(rule.quietHoursExempt),
         manual,
       });
+      if (airResult?.skipped) {
+        const event2 = record(rule, 'blocked-guard', {
+          detail: airResult.detail || 'No content available',
+        });
+        advance(rule, nowMs);
+        store.persist();
+        return event2;
+      }
       event = record(rule, 'aired', {
         score,
         competingRuleIds: competingRuleIds.length > 1 ? competingRuleIds : undefined,

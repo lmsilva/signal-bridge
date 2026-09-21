@@ -8042,6 +8042,7 @@
     const maxAlerts = $('weather-alerts-max');
     const watches = $('weather-alerts-watches');
     const advisories = $('weather-alerts-advisories');
+    const skipClear = $('weather-alerts-skip-clear');
     if (severity && document.activeElement !== severity) {
       severity.value = settings.minSeverity || 'Minor';
     }
@@ -8050,6 +8051,7 @@
     }
     if (watches) watches.checked = settings.includeWatches !== false;
     if (advisories) advisories.checked = settings.includeAdvisories !== false;
+    if (skipClear) skipClear.checked = settings.skipScheduledIfClear !== false;
 
     const pill = $('weather-alerts-status-pill');
     const detail = $('weather-alerts-status-detail');
@@ -8094,6 +8096,7 @@
         maxAlerts: Number($('weather-alerts-max')?.value || 3),
         includeWatches: Boolean($('weather-alerts-watches')?.checked),
         includeAdvisories: Boolean($('weather-alerts-advisories')?.checked),
+        skipScheduledIfClear: Boolean($('weather-alerts-skip-clear')?.checked),
       });
       renderWeatherAlertsSettings(result);
       toast('Weather alert filters saved', 'good');

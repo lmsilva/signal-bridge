@@ -30,6 +30,9 @@ const DEFAULT_SETTINGS = Object.freeze({
   includeWatches: true,
   includeAdvisories: true,
   maxAlerts: 3,
+  // A scheduled tick with nothing to warn about should not flip to ALL CLEAR
+  // unless the house asks for that. Push Now still shows the quiet card.
+  skipScheduledIfClear: true,
 });
 
 function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
@@ -45,11 +48,15 @@ function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
   const includeAdvisories = incoming.includeAdvisories != null
     ? Boolean(incoming.includeAdvisories)
     : Boolean(base.includeAdvisories);
+  const skipScheduledIfClear = incoming.skipScheduledIfClear != null
+    ? Boolean(incoming.skipScheduledIfClear)
+    : Boolean(base.skipScheduledIfClear);
   return {
     minSeverity,
     includeWatches,
     includeAdvisories,
     maxAlerts,
+    skipScheduledIfClear,
   };
 }
 
@@ -239,6 +246,18 @@ function normaliseAlert(feature = {}, { timeZone } = {}) {
   };
 }
 
+/**
+ * A scheduled airing with no warning on the flaps. Manual Push Now still
+ * shows ALL CLEAR / outside-US so someone can confirm the skill is alive.
+ */
+function shouldSkipScheduledPush(payload, settings) {
+  const cfg = sanitiseSettings(settings || payload?.settings, DEFAULT_SETTINGS);
+  if (!cfg.skipScheduledIfClear) {
+    return false;
+  }
+  return payload?.mode !== 'alerts';
+}
+
 function filterAlerts(alerts, settings = DEFAULT_SETTINGS) {
   const cfg = sanitiseSettings(settings, DEFAULT_SETTINGS);
   return alerts.filter((alert) => {
@@ -405,6 +424,7 @@ module.exports = {
   shortArea,
   normaliseAlert,
   filterAlerts,
+  shouldSkipScheduledPush,
   fetchNwsAlerts,
   buildWeatherAlertsPayload,
   loadWeatherAlertsPayload,
