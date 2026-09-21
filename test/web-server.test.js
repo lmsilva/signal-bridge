@@ -3134,8 +3134,71 @@ test('weather alerts push needs a house pin and can deliver a mocked NWS alert',
     });
     assert.equal(saved.status, 200);
     assert.equal(saved.body.settings.minSeverity, 'Severe');
+    assert.equal(saved.body.settings.skipScheduledIfClear, true);
   } finally {
     server2.stop();
+  }
+});
+
+test('scheduled weather alerts skip ALL CLEAR when the house asked them to', async () => {
+  function emptyNwsConfig() {
+    const config = makeConfig({
+      weatherAlertsFetchImpl: async () => ({
+        ok: true,
+        async json() { return { features: [] }; },
+      }),
+    });
+    fs.mkdirSync(path.join(config.ROOT, 'data'), { recursive: true });
+    fs.writeFileSync(path.join(config.ROOT, 'data', 'locale-settings.json'), `${JSON.stringify({
+      city: 'Lehi',
+      label: 'Lehi, UT',
+      postalCode: '84043',
+      country: 'US',
+      latitude: 40.41,
+      longitude: -111.85,
+      timeZone: 'America/Denver',
+      temperatureUnit: 'F',
+    }, null, 2)}\n`);
+    return config;
+  }
+
+  const { webServer, base, sent } = await startTestServer({ config: emptyNwsConfig() });
+  try {
+    const settings = await getJson(base, '/api/weather-alerts/settings');
+    assert.equal(settings.body.settings.skipScheduledIfClear, true);
+
+    const pushed = await postJson(base, '/api/push/weather-alerts');
+    assert.equal(pushed.status, 200, pushed.body?.error);
+    assert.equal(pushed.body.mode, 'clear');
+    assert.equal(sent.length, 1);
+
+    const created = await postJson(base, '/api/display-scheduler/rules', {
+      commandId: 'weather.alerts',
+      target: 'vestaboard',
+      intervalSeconds: 300,
+      probability: 100,
+    });
+    assert.equal(created.status, 201, created.body?.error);
+    const rule = webServer.scheduler.rules.get(created.body.rule.id);
+    const skipped = await webServer.scheduler.airRule(rule, { manual: false });
+    assert.equal(skipped.outcome, 'blocked-guard');
+    assert.match(skipped.detail, /No active weather alerts/);
+    assert.equal(sent.length, 1, 'a quiet scheduled tick must not flip the board');
+
+    const airedNow = await postJson(base, `/api/display-scheduler/rules/${rule.id}/air`);
+    assert.equal(airedNow.status, 202, airedNow.body?.error);
+    assert.equal(airedNow.body.event.outcome, 'aired');
+    assert.equal(sent.length, 2);
+
+    const off = await postJson(base, '/api/weather-alerts/settings', {
+      skipScheduledIfClear: false,
+    });
+    assert.equal(off.body.settings.skipScheduledIfClear, false);
+    const forced = await webServer.scheduler.airRule(rule, { manual: false });
+    assert.equal(forced.outcome, 'aired');
+    assert.equal(sent.length, 3);
+  } finally {
+    webServer.stop();
   }
 });
 
@@ -3756,9 +3819,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal328/);
+  assert.match(html, /styles\.css\?v=signal329/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal328/);
+  assert.match(html, /app\.js\?v=signal329/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -4058,6 +4121,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="word-clock-day-part"/);
   assert.match(html, /id="weather-alerts-settings-card"/);
   assert.match(html, /id="btn-weather-alerts-push"/);
+  assert.match(html, /id="weather-alerts-skip-clear"/);
+  assert.match(html, /Ignore scheduled events if no active alerts/);
+  assert.match(js, /skipScheduledIfClear/);
   assert.match(js, /quiet-hours/);
   assert.match(js, /\/api\/chuck-norris\/facts/);
   assert.match(js, /\/api\/push\/chuck-norris/);

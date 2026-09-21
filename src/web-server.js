@@ -179,7 +179,7 @@ const { createDateBook } = require('./date-book');
 const { createRedLetter } = require('./red-letter');
 const { createPlexTop10 } = require('./plex-top10');
 const { createRingDoorbellService } = require('./ring-doorbell');
-const { createWeatherAlerts } = require('./weather-alerts');
+const { createWeatherAlerts, shouldSkipScheduledPush } = require('./weather-alerts');
 const { createStockMarket } = require('./stock-market');
 const { createCurrencyRates } = require('./currency-rates');
 const { createIssTracker } = require('./iss-tracker');
@@ -3445,6 +3445,7 @@ function createWebServer({
       includeWatches: body?.includeWatches,
       includeAdvisories: body?.includeAdvisories,
       maxAlerts: body?.maxAlerts,
+      skipScheduledIfClear: body?.skipScheduledIfClear,
     });
     handleWeatherAlertsSettingsGet(res);
   }
@@ -3465,6 +3466,18 @@ function createWebServer({
     }
     if (!payload) {
       sendJson(res, 502, { ok: false, error: 'Weather alerts are unavailable' });
+      return;
+    }
+    // A scheduled tick with nothing to warn about stays off the flaps when
+    // the house asked for that. Push Now / Air now still show ALL CLEAR.
+    if (body?.triggeredBy === 'scheduler'
+      && shouldSkipScheduledPush(payload, weatherAlerts.getSettings())) {
+      sendJson(res, 409, {
+        ok: false,
+        skipScheduled: true,
+        error: 'No active weather alerts',
+        mode: payload.mode,
+      });
       return;
     }
     const targetId = plexTargetId(body);
@@ -5997,6 +6010,9 @@ function createWebServer({
       }
     });
 
+    if (captured.status === 409 && captured.body?.skipScheduled) {
+      return { skipped: true, detail: captured.body.error };
+    }
     if (captured.status >= 400) {
       throw new Error(captured.body?.error || `Push failed (${captured.status})`);
     }

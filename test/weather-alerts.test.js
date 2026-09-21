@@ -12,6 +12,8 @@ const {
   normaliseAlert,
   filterAlerts,
   buildWeatherAlertsPayload,
+  shouldSkipScheduledPush,
+  sanitiseSettings,
   createWeatherAlerts,
   DEFAULT_SETTINGS,
 } = require('../src/weather-alerts');
@@ -149,4 +151,25 @@ test('createWeatherAlerts persists filters and builds via a mocked NWS fetch', a
   });
   assert.equal(payload.mode, 'alerts');
   assert.equal(payload.alerts.length, 1);
+});
+
+test('skipScheduledIfClear defaults on and a missing key does not flip it off', () => {
+  assert.equal(DEFAULT_SETTINGS.skipScheduledIfClear, true);
+  assert.equal(sanitiseSettings({}).skipScheduledIfClear, true);
+  assert.equal(sanitiseSettings({ skipScheduledIfClear: false }).skipScheduledIfClear, false);
+  assert.equal(
+    sanitiseSettings({ minSeverity: 'Severe' }, { ...DEFAULT_SETTINGS, skipScheduledIfClear: false })
+      .skipScheduledIfClear,
+    false,
+  );
+});
+
+test('shouldSkipScheduledPush only skips a quiet scheduled card', () => {
+  const clear = { mode: 'clear', settings: { skipScheduledIfClear: true } };
+  const outside = { mode: 'outside-us', settings: { skipScheduledIfClear: true } };
+  const alerts = { mode: 'alerts', settings: { skipScheduledIfClear: true } };
+  assert.equal(shouldSkipScheduledPush(clear), true);
+  assert.equal(shouldSkipScheduledPush(outside), true);
+  assert.equal(shouldSkipScheduledPush(alerts), false);
+  assert.equal(shouldSkipScheduledPush(clear, { skipScheduledIfClear: false }), false);
 });
