@@ -13615,6 +13615,8 @@
     if (hint) {
       if (!text) {
         hint.textContent = '';
+      } else if (!/[.!?]$/.test(String(text).trim())) {
+        hint.textContent = 'Does not finish on one screen';
       } else if (!ref || ref.length > 20 || pages > 1) {
         hint.textContent = 'Too long for one screen';
       } else {

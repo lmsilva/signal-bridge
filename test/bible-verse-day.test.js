@@ -88,6 +88,7 @@ test('the shipped corpus is board-fit KJV with a scripture reference', () => {
     seen.add(verse.id);
     assert.equal(fitsBoard(verse.reference, verse.text), true, verse.id);
     assert.equal(versePages(verse.reference, verse.text).length, 1, `${verse.id} spans more than one screen`);
+    assert.match(verse.text.trim(), /[.!?]$/, `${verse.id} does not finish its sentence`);
   }
   // A rebuild that quietly collapsed to one book would still pass the count.
   const books = new Set(verses.map((verse) => verse.reference.replace(/ \d+:\d+$/, '')));
@@ -123,6 +124,14 @@ test('a longer verse pages under the same header', () => {
     'John 3:16',
     'For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.',
   ), false, 'a second screen is not board-fit');
+});
+
+test('a verse that trails off with a colon is not board-fit', () => {
+  assert.equal(fitsBoard(
+    'Psalm 103:2',
+    'Bless the Lord, O my soul, and forget not all his benefits:',
+  ), false);
+  assert.equal(loadShipped().some((verse) => verse.id === 'psalm-103-2'), false);
 });
 
 test('bible verse with no text renders nothing', () => {
@@ -162,6 +171,12 @@ test('createBibleVerse can add hide and restore', () => {
   );
   assert.equal(tooLong.ok, false);
   assert.match(tooLong.error, /too long for one/);
+  const unfinished = api.addVerse(
+    'Bless the Lord, O my soul, and forget not all his benefits:',
+    'Psalm 103:2',
+  );
+  assert.equal(unfinished.ok, false);
+  assert.match(unfinished.error, /does not finish/);
   const payload = api.nextPayload({ random: () => 0 });
   assert.equal(payload.type, 'bible.verse');
 

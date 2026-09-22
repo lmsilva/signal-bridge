@@ -16,9 +16,21 @@ const {
   MAX_PAGES,
   verseLines,
   verseLineCount,
+  versePages,
+  finishesThought,
   fitsBoard,
 } = require('./bible-verse-layout');
 const { applyCorpusRemove } = require('./corpus-remove');
+
+function unfitReason(reference, text) {
+  if (versePages(reference, text).length !== 1) {
+    return 'That verse is too long for one Vestaboard screen';
+  }
+  if (!finishesThought(text)) {
+    return 'That verse does not finish on one Vestaboard screen';
+  }
+  return null;
+}
 
 const TYPE = 'bible.verse';
 
@@ -188,8 +200,9 @@ function createBibleVerse(config, log) {
       if (!where) {
         return { ok: false, error: 'Add a scripture reference' };
       }
-      if (!fitsBoard(where, next)) {
-        return { ok: false, error: 'That verse is too long for one Vestaboard screen' };
+      const unfit = unfitReason(where, next);
+      if (unfit) {
+        return { ok: false, error: unfit };
       }
       const settings = settingsApi.get();
       const custom = [...settings.custom, { id: newCustomId(), text: next, reference: where }];
@@ -226,8 +239,9 @@ function createBibleVerse(config, log) {
           if (!nextRef) {
             return { ok: false, error: 'Add a scripture reference' };
           }
-          if (!fitsBoard(nextRef, nextText)) {
-            return { ok: false, error: 'That verse is too long for one Vestaboard screen' };
+          const unfit = unfitReason(nextRef, nextText);
+          if (unfit) {
+            return { ok: false, error: unfit };
           }
           custom[customIndex] = {
             ...custom[customIndex],
@@ -260,8 +274,9 @@ function createBibleVerse(config, log) {
         if (!nextRef) {
           return { ok: false, error: 'Add a scripture reference' };
         }
-        if (!fitsBoard(nextRef, nextText)) {
-          return { ok: false, error: 'That verse is too long for one Vestaboard screen' };
+        const unfit = unfitReason(nextRef, nextText);
+        if (unfit) {
+          return { ok: false, error: unfit };
         }
         if (original
           && cleanText(original.text) === nextText

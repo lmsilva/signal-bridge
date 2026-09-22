@@ -4,8 +4,9 @@ const { centered, chipCode } = require('./vestaboard/frames');
 const BODY_ROWS = 6;
 const TITLE = 'VERSE OF THE DAY';
 const BODY_SLOTS = 4;
-// A verse that needs a second frame is not shipped. The composer still pages
-// so a house-edited leftover can be previewed, but `fitsBoard` is one screen.
+// A verse that needs a second frame, or that trails off with a colon, is not
+// shipped. The composer still pages so a leftover long house edit can be
+// previewed, but `fitsBoard` is one finished screen.
 const MAX_PAGES = 4;
 const REF_FROM = 1;
 const REF_WIDTH = 20;
@@ -158,11 +159,17 @@ function verseLineCount(text) {
   return hit;
 }
 
+// KJV often ends a verse with : or ; because the next verse continues the
+// sentence. On a 6×22 card that reads as a cut-off quote (Psalm 103:2).
+function finishesThought(text) {
+  return /[.!?]$/.test(cleanText(text));
+}
+
 function fitsBoard(reference, text) {
   const key = `${reference}\u0000${text}`;
   let hit = fitCache.get(key);
   if (hit === undefined) {
-    hit = versePages(reference, text).length === 1;
+    hit = versePages(reference, text).length === 1 && finishesThought(text);
     fitCache.set(key, hit);
   }
   return hit;
@@ -187,5 +194,6 @@ module.exports = {
   versePages,
   verseRows,
   previewLines,
+  finishesThought,
   fitsBoard,
 };
