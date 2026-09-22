@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-09-21 (Weather Alerts skip a scheduled ALL CLEAR)
+**Last updated:** 2026-09-22 (Bible verses must finish on one screen)
 
 ---
 
@@ -243,10 +243,10 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/stoic-quotes.js` | **Stoic Quotes** — pick a shipped or house-edited quote and build `stoic.quotes`. No network. Skips recent ids |
 | `src/stoic-quotes-settings.js` | Hidden shipped ids, text/author overrides, custom quotes, recent ids in `data/stoic-quotes-settings.json`. Settings → News |
 | `src/stoic-quotes-quotes.json` | Shipped Stoic quotes (~500 board-fit) from benhoneywill + rishabkumar dumps (MIT). Rebuild with `tools/build-stoic-quotes.js` |
-| `src/bible-verse-layout.js` | **Bible Verse Of The Day layout** — violet title chips, single-chip reference row, centred body, blank row 3 when the verse is 1-3 lines. A verse must fit one screen (`fitsBoard` is one frame); leftover long house edits can still preview as pages |
+| `src/bible-verse-layout.js` | **Bible Verse Of The Day layout** — violet title chips, single-chip reference row, centred body, blank row 3 when the verse is 1-3 lines. A verse must finish on one screen (`fitsBoard` is one frame and sentence-final `.` `!` or `?`); leftover long house edits can still preview as pages |
 | `src/bible-verse.js` | **Bible Verse Of The Day** — pick a shipped or house-edited KJV verse and build `bible.verse`. No network. Skips recent ids |
 | `src/bible-verse-settings.js` | Hidden shipped ids, text/reference overrides, custom verses, recent ids in `data/bible-verse-settings.json`. Settings → News |
-| `src/bible-verse-verses.json` | Shipped King James verses (~322 single-screen board-fit, public domain). Rebuild with `node tools/build-bible-verses.js` |
+| `src/bible-verse-verses.json` | Shipped King James verses (~302 single-screen finished thoughts, public domain). Rebuild with `node tools/build-bible-verses.js` |
 | `src/on-this-day.js` | **On This Day in History** — pick a shipped or house-edited event for today’s month/day (house timezone) and build `history.day`. No network. Skips recent ids |
 | `src/on-this-day-settings.js` | Hidden shipped ids, text/year overrides, custom facts, optional min/max year, recent ids in `data/on-this-day-settings.json`. Settings → News |
 | `src/on-this-day-events.json` | Shipped On This Day events (~5k board-fit across 366 days) from byabbe.se / Wikipedia (CC BY-SA). Rebuild with `tools/build-on-this-day.js` |
@@ -630,7 +630,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `geo.facts` | **Vestaboard only.** World Geography Facts: a random capital / landmark / planet quirk under green `WORLD GEOGRAPHY` chips. Push tile + schedulable. Settings → News edits, hides, adds facts, optional category pool |
 | `talk.starters` | **Vestaboard only.** Conversation Starters: a random icebreaker under violet `LET'S TALK` chips; short prompts are vertically centred in the body rows. Push tile + schedulable. Settings → News edits, hides, and adds prompts |
 | `stoic.quotes` | **Vestaboard only.** Stoic Quotes: a random quote under white `STOIC` chips with author attribution. Push tile + schedulable. Settings → News edits, hides, and adds quotes |
-| `bible.verse` | **Vestaboard only.** Bible Verse Of The Day: a random KJV verse under violet `VERSE OF THE DAY` chips with the reference on a single-chip row. Short verses keep a blank under the reference; a verse that needs a second screen does not ship. Push tile + schedulable. Settings → News edits, hides, and adds verses |
+| `bible.verse` | **Vestaboard only.** Bible Verse Of The Day: a random KJV verse under violet `VERSE OF THE DAY` chips with the reference on a single-chip row. Short verses keep a blank under the reference; a verse that needs a second screen, or that trails off with `:` / `;`, does not ship. Push tile + schedulable. Settings → News edits, hides, and adds verses |
 | `history.day` | **Vestaboard only.** On This Day in History: a random event for today’s date (house timezone) under red `ON THIS DAY` chips. Push tile + schedulable. Settings → News edits, hides, adds facts, optional year range |
 | `bake.inspire` | **Vestaboard only.** Baking Inspiration: yellow `BAKE THIS` chips, a title, and ≤5 ingredients. Push tile + schedulable. Settings → News edits, hides, and adds ideas |
 | `world.population` | **Vestaboard only.** World Population Tracker: green chips, comma-formatted estimate from a tunable UN-style baseline (births − deaths per second). Push tile + schedulable. Settings → Global |
@@ -950,6 +950,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-09-22: **Bible verses that trail off no longer ship** — Psalm 103:2 fit the four body rows but ended with a colon (`…AND FORGET NOT ALL HIS BENEFITS:`), so the card read as a cut-off quote. `fitsBoard` now also requires a finished sentence (`.!?`); 20 curated KJV rows that ended in `:` `;` `,` or `)` are dropped (322 → 302). A house add/edit of an unfinished verse is refused. Cache-bust `signal330`. Tests: `bible-verse-day`.
 - 2026-09-21: **Weather Alerts skip a quiet scheduled tick** — with **Ignore scheduled events if no active alerts** on (default, `skipScheduledIfClear`), a Display Scheduler tick that would have shown ALL CLEAR or the outside-US card is a `blocked-guard` skip instead of flipping the flaps. Push Now and Air now still show the quiet card. Cache-bust `signal329`. Tests: `weather-alerts`, `display-scheduler`, `web-server`.
 - 2026-09-20: **Bible verses that need a second screen no longer ship** — 503 of the 825 KJV rows wrapped past the four body slots under `VERSE OF THE DAY` + the reference, so the board paged. The corpus is now the **322** that fit one frame; `fitsBoard` is that one-frame test, the rebuild caps curated and sweep verses at four lines, and a house add/edit that overflows is refused. The composer still pages so a leftover long custom can be previewed. Cache-bust admin `app.js` `signal328`. Tests: `bible-verse-day` (every shipped verse is one page; John 3:16 is not board-fit; add of a long verse is refused).
 - 2026-09-20: **The shipped piece labelled Cute Bird is now Cute Beaver** — the grid on `art-cute-bird` is the beaver drawing; the name on the design, the rebuild tool, and the shipped-name golden is now **Cute Beaver**. The id stays `art-cute-bird` so a favourite, house override, hidden row or scheduler `closingArtwork.artworkId` already pointed at it still resolves. Scheduler picklists and both Artwork pages read the name from the gallery, so they pick it up with no UI change. The earlier dinosaur that shipped as `art-cute-beaver` stays gone.

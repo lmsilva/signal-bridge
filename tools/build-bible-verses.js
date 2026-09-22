@@ -15,7 +15,8 @@
  *      point back at the previous verse, they avoid genealogy / warfare /
  *      ritual vocabulary, and they fit the board in a single frame.
  *
- * Every shipped row must pass `fitsBoard` from the layout module.
+ * Every shipped row must pass `fitsBoard` from the layout module: one
+ * finished screen (no second frame, and the sentence ends with . ! or ?).
  *
  *   node tools/build-bible-verses.js
  */
@@ -487,7 +488,7 @@ async function main() {
       continue;
     }
     if (!add(file, ref.chapter, ref.verse, text, 'curated')) {
-      console.warn(`  curated dropped (too long / bad ref): ${ref.book} ${ref.chapter}:${ref.verse}`);
+      console.warn(`  curated dropped (too long / unfinished / bad ref): ${ref.book} ${ref.chapter}:${ref.verse}`);
     }
   }
   const curatedCount = rows.size;
