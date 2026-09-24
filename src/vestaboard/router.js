@@ -109,6 +109,7 @@ const COMMAND_TO_TYPE = {
   'guestbook.invite': 'guest.book.invite',
   'ring.doorbell': 'ring.doorbell',
   'stocks.market': 'stocks.market',
+  'crypto.market': 'crypto.market',
   'fx.rates': 'fx.rates',
   'iss.track': 'iss.track',
   'starlink.track': 'starlink.track',

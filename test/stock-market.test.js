@@ -35,11 +35,12 @@ function yahooChart(symbol, price, previous) {
   };
 }
 
-test('parseTickers caps at ten unique symbols', () => {
+test('parseTickers keeps every unique symbol and the default list is still ten', () => {
   const tickers = parseTickers('aapl, MSFT, aapl, goog, amzn, nvda, meta, tsla, spy, qqq, dia, ibm');
-  assert.equal(tickers.length, 10);
+  assert.equal(tickers.length, 11);
   assert.equal(tickers[0], 'AAPL');
-  assert.ok(!tickers.includes('IBM'));
+  assert.equal(tickers.at(-1), 'IBM');
+  assert.equal(DEFAULT_TICKERS.length, 10);
 });
 
 test('formatPrice and formatChange stay board-short', () => {

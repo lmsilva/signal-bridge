@@ -1581,6 +1581,32 @@ function stockMarketFrames(payload = {}) {
   return frames;
 }
 
+/**
+ * Crypto Market — same five-row quote card as stocks, titled CRYPTO MARKET.
+ */
+function cryptoMarketFrames(payload = {}) {
+  const quotes = (payload.quotes || []).filter((quote) => quote?.priceLabel);
+  if (!quotes.length) {
+    return [];
+  }
+  const frames = [];
+  for (let index = 0; index < quotes.length; index += 5) {
+    const chunk = quotes.slice(index, index + 5);
+    const body = [0, 1, 2, 3, 4].map((rowIndex) => (
+      chunk[rowIndex] ? stockQuoteRow(chunk[rowIndex]) : blankRow(COLS)
+    ));
+    const title = quotes.length > 5
+      ? `CRYPTO ${Math.floor(index / 5) + 1}/${Math.ceil(quotes.length / 5)}`
+      : 'CRYPTO MARKET';
+    frames.push(snapshotFrame(
+      assertValidLayout([stocksChipRow(title), ...body], 'crypto market'),
+      'Crypto Market',
+      'crypto.market',
+    ));
+  }
+  return frames;
+}
+
 function fxChipRow(text) {
   const row = blankRow(COLS);
   row[0] = chipCode('white');
@@ -1935,6 +1961,7 @@ const FORMATTERS = {
   'us.weather-map': usWeatherMapFrames,
   'red-letter.card': redLetterFrames,
   'stocks.market': stockMarketFrames,
+  'crypto.market': cryptoMarketFrames,
   'fx.rates': currencyRatesFrames,
   'plex.top10': plexTop10Frames,
   'iss.track': issTrackFrames,
@@ -1984,6 +2011,7 @@ module.exports = {
   usWeatherMapFrames,
   redLetterFrames,
   stockMarketFrames,
+  cryptoMarketFrames,
   currencyRatesFrames,
   plexTop10Frames,
   plexTop10Title,

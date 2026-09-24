@@ -1,5 +1,6 @@
 /**
- * Stock Market — live quotes for a house watchlist (up to 10 tickers).
+ * Stock Market — live quotes for a house watchlist.
+ * The default list is 10 tickers; there is no cap on how many the house tracks.
  *
  * Quotes come from Yahoo Finance's public chart endpoint (no API key). An
  * optional Finnhub token under Settings can be used instead when configured.
@@ -11,7 +12,6 @@ const path = require('path');
 const { fold } = require('./vestaboard/encoder');
 
 const TYPE = 'stocks.market';
-const MAX_TICKERS = 10;
 const YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const FINNHUB_QUOTE = 'https://finnhub.io/api/v1/quote';
 const USER_AGENT = 'Mozilla/5.0 (compatible; SignalBridge/1.0)';
@@ -46,9 +46,6 @@ function cleanTickers(list) {
     }
     seen.add(ticker);
     out.push(ticker);
-    if (out.length >= MAX_TICKERS) {
-      break;
-    }
   }
   return out;
 }
@@ -399,7 +396,6 @@ function createStockMarket(config = {}, log = console) {
           changeMode: DEFAULT_SETTINGS.changeMode,
           provider: DEFAULT_SETTINGS.provider,
         },
-        maxTickers: MAX_TICKERS,
         providers: ['auto', 'yahoo', 'finnhub'],
       };
     },
@@ -415,7 +411,6 @@ function createStockMarket(config = {}, log = console) {
 
 module.exports = {
   TYPE,
-  MAX_TICKERS,
   DEFAULT_TICKERS,
   DEFAULT_SETTINGS,
   cleanTicker,
