@@ -4128,6 +4128,7 @@ textarea.field-input.filter-search {
   #tab-settings .on-this-day-settings-card,
   #tab-settings .baking-inspiration-settings-card,
   #tab-settings .stock-market-settings-card,
+  #tab-settings .crypto-market-settings-card,
   #tab-settings .currency-rates-settings-card,
   #tab-settings .plex-top10-settings-card,
   #tab-settings .learn-japanese-settings-card,
@@ -5148,6 +5149,7 @@ textarea.field-input.filter-search {
 
 @media (min-width: 720px) {
   .stock-market-settings-card .settings-columns,
+  .crypto-market-settings-card .settings-columns,
   .currency-rates-settings-card .settings-columns,
   .starlink-tracker-settings-card .settings-columns,
   .space-launch-alerts-settings-card .settings-columns,

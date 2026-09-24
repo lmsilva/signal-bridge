@@ -229,6 +229,7 @@ const SETTINGS_CARD_KINDS = Object.freeze({
   'on-this-day-settings-card': ['vestaboard'],
   'baking-inspiration-settings-card': ['vestaboard'],
   'stock-market-settings-card': ['vestaboard'],
+  'crypto-market-settings-card': ['vestaboard'],
   'currency-rates-settings-card': ['vestaboard'],
   'plex-top10-settings-card': ['vestaboard'],
   'wiki-ck-settings-card': ['full', 'vestaboard'],

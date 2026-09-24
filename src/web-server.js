@@ -181,6 +181,7 @@ const { createPlexTop10 } = require('./plex-top10');
 const { createRingDoorbellService } = require('./ring-doorbell');
 const { createWeatherAlerts, shouldSkipScheduledPush } = require('./weather-alerts');
 const { createStockMarket } = require('./stock-market');
+const { createCryptoMarket } = require('./crypto-market');
 const { createCurrencyRates } = require('./currency-rates');
 const { createIssTracker } = require('./iss-tracker');
 const { createStarlinkTracker } = require('./starlink-tracker');
@@ -658,6 +659,7 @@ function createWebServer({
   });
   const weatherAlerts = createWeatherAlerts(config, log);
   const stockMarket = createStockMarket(config, log);
+  const cryptoMarket = createCryptoMarket(config, log);
   const currencyRates = createCurrencyRates(config, log);
   const issTracker = createIssTracker(config, log);
   const starlinkTracker = createStarlinkTracker(config, log);
@@ -783,6 +785,7 @@ function createWebServer({
     getOnThisDayStatus: () => onThisDay.statusSnapshot(),
     getBakingInspirationStatus: () => bakingInspiration.statusSnapshot(),
     getStockMarketStatus: () => stockMarket.statusSnapshot(),
+    getCryptoMarketStatus: () => cryptoMarket.statusSnapshot(),
     getCurrencyRatesStatus: () => currencyRates.statusSnapshot(localeSettings.get()),
     getSpaceLaunchAlertsStatus: () => spaceLaunchAlerts.statusSnapshot(),
     getPhotoCount: () => qrImageCache.list().length,
@@ -3570,6 +3573,66 @@ function createWebServer({
     });
   }
 
+  function handleCryptoMarketSettingsGet(res) {
+    sendJson(res, 200, { ok: true, ...cryptoMarket.statusSnapshot() });
+  }
+
+  function handleCryptoMarketSettingsPut(body, res) {
+    if (body?.reset) {
+      cryptoMarket.resetSettings();
+      handleCryptoMarketSettingsGet(res);
+      return;
+    }
+    cryptoMarket.updateSettings({
+      symbols: body?.symbols,
+      changeMode: body?.changeMode,
+    });
+    handleCryptoMarketSettingsGet(res);
+  }
+
+  async function handleCryptoMarketPush(body, res) {
+    let payload = null;
+    try {
+      payload = await cryptoMarket.nextPayload();
+    } catch (error) {
+      log.warn?.('Crypto market fetch failed', error?.message || error);
+      sendJson(res, 502, { ok: false, error: error?.message || 'Crypto quotes are unavailable' });
+      return;
+    }
+    if (!payload) {
+      sendJson(res, 502, {
+        ok: false,
+        error: 'No crypto quotes returned — check symbols under Settings → News',
+      });
+      return;
+    }
+    const targetId = plexTargetId(body);
+    const extra = {};
+    if (body?.triggeredBy === 'scheduler') {
+      extra.source = 'scheduler';
+      extra.explicit = false;
+    } else {
+      extra.explicit = true;
+    }
+    const delivery = typeof deliverTargetedPayload === 'function'
+      ? deliverTargetedPayload(payload, targetId, extra)
+      : sendUdpPayload(payload, { ...extra, targetId });
+    log.info('Crypto market', {
+      targetId,
+      count: payload.quotes?.length || 0,
+      errors: payload.errors?.length || 0,
+    });
+    sendJson(res, 200, {
+      ok: true,
+      type: payload.type,
+      targetId,
+      quotes: payload.quotes,
+      errors: payload.errors,
+      asOf: payload.asOf,
+      vestaboard: delivery?.vestaboard || null,
+    });
+  }
+
   function handleUsWeatherMapSettingsGet(res) {
     sendJson(res, 200, { ok: true, ...usWeatherMap.statusSnapshot() });
   }
@@ -5917,6 +5980,8 @@ function createWebServer({
           await handleWeatherAlertsPush(body, res); break;
         case 'stocks.market':
           await handleStockMarketPush(body, res); break;
+        case 'crypto.market':
+          await handleCryptoMarketPush(body, res); break;
         case 'fx.rates':
           await handleCurrencyRatesPush(body, res); break;
         case 'iss.track':
@@ -9969,6 +10034,11 @@ function createWebServer({
           handleStockMarketSettingsGet(res);
           return;
         }
+        if (pathname === '/api/crypto-market/settings') {
+          if (!requireAdminSession(req, res)) return;
+          handleCryptoMarketSettingsGet(res);
+          return;
+        }
         if (pathname === '/api/currency-rates/settings') {
           if (!requireAdminSession(req, res)) return;
           handleCurrencyRatesSettingsGet(res);
@@ -10971,6 +11041,12 @@ function createWebServer({
             return;
           case '/api/stock-market/settings':
             handleStockMarketSettingsPut(body, res);
+            return;
+          case '/api/push/crypto-market':
+            await handleCryptoMarketPush(body, res);
+            return;
+          case '/api/crypto-market/settings':
+            handleCryptoMarketSettingsPut(body, res);
             return;
           case '/api/push/currency-rates':
             await handleCurrencyRatesPush(body, res);

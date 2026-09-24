@@ -3248,6 +3248,51 @@ test('stock market push delivers quotes and settings can retune the watchlist', 
   }
 });
 
+test('crypto market push delivers CoinGecko quotes and settings can retune the list', async () => {
+  const calls = [];
+  const config = makeConfig({
+    cryptoMarketFetchImpl: async (url) => {
+      calls.push(String(url));
+      return {
+        ok: true,
+        async json() {
+          return [
+            { symbol: 'btc', name: 'Bitcoin', market_cap_rank: 1, current_price: 84278, price_change_24h: -2323, price_change_percentage_24h: -2.68 },
+            { symbol: 'eth', name: 'Ethereum', market_cap_rank: 2, current_price: 2684.41, price_change_24h: 37, price_change_percentage_24h: 1.4 },
+            { symbol: 'sol', name: 'Solana', market_cap_rank: 7, current_price: 115.2, price_change_24h: 2.1, price_change_percentage_24h: 1.8 },
+          ];
+        },
+      };
+    },
+  });
+  const { webServer, base, sent } = await startTestServer({ config });
+  try {
+    const settings = await getJson(base, '/api/crypto-market/settings');
+    assert.equal(settings.status, 200);
+    assert.equal(settings.body.source, 'CoinGecko');
+    assert.equal(settings.body.settings.symbols.length, 10);
+
+    const saved = await postJson(base, '/api/crypto-market/settings', {
+      symbols: 'btc, ETH, btc, sol',
+      changeMode: 'percent',
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.body.settings.symbols, ['BTC', 'ETH', 'SOL']);
+
+    const pushed = await postJson(base, '/api/push/crypto-market');
+    assert.equal(pushed.status, 200, pushed.body?.error);
+    assert.equal(pushed.body.type, 'crypto.market');
+    assert.equal(pushed.body.quotes.length, 3);
+    assert.equal(pushed.body.quotes[0].symbol, 'BTC');
+    assert.equal(pushed.body.quotes[0].direction, 'down');
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].type, 'crypto.market');
+    assert.equal(calls.length, 1);
+  } finally {
+    webServer.stop();
+  }
+});
+
 test('us weather map push paints the country from one upstream call', async () => {
   const calls = [];
   const config = makeConfig({
@@ -3819,9 +3864,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal330/);
+  assert.match(html, /styles\.css\?v=signal331/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal330/);
+  assert.match(html, /app\.js\?v=signal331/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -4099,6 +4144,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(html, /id="baking-inspiration-manage-sheet"/);
   assert.match(html, /id="stock-market-settings-card"/);
   assert.match(html, /id="btn-stock-market-push"/);
+  assert.match(html, /id="crypto-market-settings-card"/);
+  assert.match(html, /id="btn-crypto-market-push"/);
   assert.match(html, /id="currency-rates-settings-card"/);
   assert.match(html, /id="btn-currency-rates-push"/);
   assert.match(html, /id="iss-tracker-settings-card"/);
@@ -4167,6 +4214,8 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /\/api\/push\/baking-inspiration/);
   assert.match(js, /\/api\/stock-market\/settings/);
   assert.match(js, /\/api\/push\/stock-market/);
+  assert.match(js, /\/api\/crypto-market\/settings/);
+  assert.match(js, /\/api\/push\/crypto-market/);
   assert.match(js, /\/api\/currency-rates\/settings/);
   assert.match(js, /\/api\/push\/currency-rates/);
   assert.match(js, /\/api\/iss-tracker\/settings/);
@@ -4189,6 +4238,7 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(css, /\.on-this-day-settings-card/);
   assert.match(css, /\.baking-inspiration-settings-card/);
   assert.match(css, /\.stock-market-settings-card/);
+  assert.match(css, /\.crypto-market-settings-card/);
   assert.match(css, /\.currency-rates-settings-card/);
   assert.match(css, /\.iss-tracker-settings-card/);
   assert.match(css, /\.starlink-tracker-settings-card/);

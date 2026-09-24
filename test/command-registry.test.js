@@ -271,6 +271,8 @@ test('every command declares the display kinds it can air on', () => {
   assert.equal(supportsKind('weather.alerts', 'full'), false);
   assert.equal(supportsKind('stocks.market', 'vestaboard'), true);
   assert.equal(supportsKind('stocks.market', 'full'), false);
+  assert.equal(supportsKind('crypto.market', 'vestaboard'), true);
+  assert.equal(supportsKind('crypto.market', 'full'), false);
   assert.equal(supportsKind('fx.rates', 'vestaboard'), true);
   assert.equal(supportsKind('fx.rates', 'full'), false);
   assert.equal(supportsKind('iss.track', 'vestaboard'), true);
@@ -470,6 +472,24 @@ test('stocks.market is Vestaboard-only and needs a watchlist', () => {
 
   const ready = createCommandRegistry({ getStockMarketStatus: () => ({ tickerCount: 8 }) });
   assert.equal(ready.hasContent('stocks.market'), true);
+});
+
+test('crypto.market is Vestaboard-only and needs a watchlist', () => {
+  const command = COMMANDS.find((entry) => entry.id === 'crypto.market');
+  assert.ok(command);
+  assert.ok(command.pushable);
+  assert.ok(command.schedulable);
+  assert.equal(command.supportsContentCheck, true);
+  assert.deepEqual(kindsOf(command), ['vestaboard']);
+  assert.equal(pushCategoryOf(command), 'news');
+  assert.equal(command.route, '/api/push/crypto-market');
+  assert.equal(command.icon, 'crypto');
+
+  const empty = createCommandRegistry({ getCryptoMarketStatus: () => ({ symbolCount: 0 }) });
+  assert.equal(empty.hasContent('crypto.market'), false);
+
+  const ready = createCommandRegistry({ getCryptoMarketStatus: () => ({ symbolCount: 10 }) });
+  assert.equal(ready.hasContent('crypto.market'), true);
 });
 
 test('fx.rates is Vestaboard-only and needs a quote list', () => {
