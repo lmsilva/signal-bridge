@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal331">
+  <link rel="stylesheet" href="styles.css?v=signal332">
   <link rel="stylesheet" href="/flap-paint.css?v=signal327">
 </head>
 <body>
@@ -2226,6 +2226,13 @@
             <div class="settings-col">
               <label class="field-label" for="stock-market-tickers">Tickers</label>
               <textarea class="field-input" id="stock-market-tickers" rows="4" maxlength="2000" placeholder="AAPL, MSFT, GOOGL, AMZN, NVDA" spellcheck="false"></textarea>
+              <label class="field-label field-label-spaced">Change window</label>
+              <div class="segmented" id="stock-market-window" role="group" aria-label="Change window">
+                <button type="button" class="segmented-btn" data-stock-window="hour">Hour</button>
+                <button type="button" class="segmented-btn" data-stock-window="day">Day</button>
+                <button type="button" class="segmented-btn active" data-stock-window="week">Week</button>
+                <button type="button" class="segmented-btn" data-stock-window="month">Month</button>
+              </div>
               <label class="field-label field-label-spaced">Change display</label>
               <div class="segmented" id="stock-market-change-mode" role="group" aria-label="Change display">
                 <button type="button" class="segmented-btn active" data-stock-change="percent">Percent</button>
@@ -2256,7 +2263,7 @@
                 <div class="vb-wordmark">VESTABOARD</div>
               </div>
               <p class="hint" id="stock-market-hint" style="margin-top:8px">
-                Defaults cover mega-cap tech plus SPY/QQQ/DIA. Indexes use Yahoo symbols like ^GSPC. Five tickers fit on a page; a longer list flips.
+                The title says which window the move covers (hourly, daily, weekly, monthly). Week is the default. Day uses the prior close; the other windows use Yahoo's chart. Five tickers a page.
               </p>
             </div>
           </div>
@@ -2275,7 +2282,14 @@
             <div class="settings-col">
               <label class="field-label" for="crypto-market-symbols">Symbols</label>
               <textarea class="field-input" id="crypto-market-symbols" rows="4" maxlength="2000" placeholder="BTC, ETH, SOL" spellcheck="false"></textarea>
-              <label class="field-label field-label-spaced">24h change</label>
+              <label class="field-label field-label-spaced">Change window</label>
+              <div class="segmented" id="crypto-market-window" role="group" aria-label="Change window">
+                <button type="button" class="segmented-btn" data-crypto-window="hour">Hour</button>
+                <button type="button" class="segmented-btn" data-crypto-window="day">Day</button>
+                <button type="button" class="segmented-btn active" data-crypto-window="week">Week</button>
+                <button type="button" class="segmented-btn" data-crypto-window="month">Month</button>
+              </div>
+              <label class="field-label field-label-spaced">Change display</label>
               <div class="segmented" id="crypto-market-change-mode" role="group" aria-label="Change display">
                 <button type="button" class="segmented-btn active" data-crypto-change="percent">Percent</button>
                 <button type="button" class="segmented-btn" data-crypto-change="points">Points</button>
@@ -2293,7 +2307,7 @@
                 <div class="vb-wordmark">VESTABOARD</div>
               </div>
               <p class="hint" id="crypto-market-hint" style="margin-top:8px">
-                Ranked by market cap on CoinGecko (tokenized products skipped). Five coins per page. Type any symbols you want to follow.
+                The title says which window the move covers. Week is the default (CoinGecko 7-day change). Five coins a page.
               </p>
             </div>
           </div>
@@ -5666,6 +5680,6 @@
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal299"></script>
   <script src="settings-filter.js?v=signal307"></script>
-  <script src="app.js?v=signal331"></script>
+  <script src="app.js?v=signal332"></script>
 </body>
 </html>

@@ -3523,6 +3523,7 @@ function createWebServer({
     stockMarket.updateSettings({
       tickers: body?.tickers,
       changeMode: body?.changeMode,
+      changeWindow: body?.changeWindow,
       provider: body?.provider,
       finnhubApiKey: body?.finnhubApiKey,
       clearFinnhubApiKey: body?.clearFinnhubApiKey,
@@ -3586,6 +3587,7 @@ function createWebServer({
     cryptoMarket.updateSettings({
       symbols: body?.symbols,
       changeMode: body?.changeMode,
+      changeWindow: body?.changeWindow,
     });
     handleCryptoMarketSettingsGet(res);
   }

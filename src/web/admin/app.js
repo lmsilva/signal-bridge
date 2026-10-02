@@ -15370,6 +15370,27 @@
     return active?.getAttribute('data-stock-change') === 'points' ? 'points' : 'percent';
   }
 
+  function setStockWindow(windowId) {
+    const want = ['hour', 'day', 'week', 'month'].includes(windowId) ? windowId : 'week';
+    document.querySelectorAll('#stock-market-window [data-stock-window]').forEach((btn) => {
+      const on = btn.getAttribute('data-stock-window') === want;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
+  function currentStockWindow() {
+    const active = document.querySelector('#stock-market-window .segmented-btn.active');
+    const value = active?.getAttribute('data-stock-window');
+    return ['hour', 'day', 'week', 'month'].includes(value) ? value : 'week';
+  }
+
+  function marketPreviewTitle(kind, windowId, pages) {
+    const word = { hour: 'HOURLY', day: 'DAILY', week: 'WEEKLY', month: 'MONTHLY' }[windowId] || 'WEEKLY';
+    const base = kind === 'crypto' ? 'CRYPTO' : 'STOCKS';
+    return pages > 1 ? `${base} ${word} 1/${pages}` : `${base} ${word}`;
+  }
+
   function renderStockMarketPreview(tickers = []) {
     const host = $('stock-market-preview');
     if (!host) {
@@ -15382,7 +15403,7 @@
       .filter(Boolean);
     const page = list.slice(0, 5);
     const pages = Math.max(1, Math.ceil(Math.max(list.length, 1) / 5));
-    const title = list.length > 5 ? `STOCKS 1/${pages}` : 'STOCK MARKET';
+    const title = marketPreviewTitle('stocks', currentStockWindow(), pages);
     const mode = currentStockChangeMode();
     const samples = [
       { price: '319.70', percent: '+3.3%', points: '+10.35', dir: 'up' },
@@ -15431,6 +15452,7 @@
       input.value = tickers.join(', ');
     }
     setStockChangeMode(settings.changeMode || 'percent');
+    setStockWindow(settings.changeWindow || 'week');
     const provider = $('stock-market-provider');
     if (provider && document.activeElement !== provider) {
       provider.value = settings.provider || 'auto';
@@ -15479,6 +15501,17 @@
     renderStockMarketPreview(tickers);
   });
 
+  $('stock-market-window')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-stock-window]');
+    if (!btn) return;
+    setStockWindow(btn.getAttribute('data-stock-window'));
+    const tickers = String($('stock-market-tickers')?.value || '')
+      .split(/[\s,;|]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    renderStockMarketPreview(tickers);
+  });
+
   $('stock-market-tickers')?.addEventListener('input', () => {
     const tickers = String($('stock-market-tickers')?.value || '')
       .split(/[\s,;|]+/)
@@ -15494,6 +15527,7 @@
       const result = await apiPost('/api/stock-market/settings', {
         tickers: $('stock-market-tickers')?.value,
         changeMode: currentStockChangeMode(),
+        changeWindow: currentStockWindow(),
         provider: $('stock-market-provider')?.value,
         finnhubApiKey: $('stock-market-finnhub-key')?.value,
         clearFinnhubApiKey: Boolean($('stock-market-clear-key')?.checked),
@@ -15553,6 +15587,15 @@
     return active?.getAttribute('data-crypto-change') === 'points' ? 'points' : 'percent';
   }
 
+  function setCryptoWindow(windowId) {
+    const want = ['hour', 'day', 'week', 'month'].includes(windowId) ? windowId : 'week';
+    document.querySelectorAll('#crypto-market-window [data-crypto-window]').forEach((btn) => {
+      const on = btn.getAttribute('data-crypto-window') === want;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+
   function renderCryptoMarketPreview(symbols = []) {
     const host = $('crypto-market-preview');
     if (!host) {
@@ -15563,7 +15606,7 @@
       .filter(Boolean);
     const page = list.slice(0, 5);
     const pages = Math.max(1, Math.ceil(Math.max(list.length, 1) / 5));
-    const title = list.length > 5 ? `CRYPTO 1/${pages}` : 'CRYPTO MARKET';
+    const title = marketPreviewTitle('crypto', currentCryptoWindow(), pages);
     const mode = currentCryptoChangeMode();
     const samples = [
       { price: '84278', percent: '-2.7%', points: '-2323', dir: 'down' },
@@ -15613,6 +15656,7 @@
       input.value = symbols.join(', ');
     }
     setCryptoChangeMode(settings.changeMode || 'percent');
+    setCryptoWindow(settings.changeWindow || 'week');
 
     const pill = $('crypto-market-status-pill');
     const detail = $('crypto-market-status-detail');
@@ -15646,6 +15690,17 @@
     renderCryptoMarketPreview(symbols);
   });
 
+  $('crypto-market-window')?.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-crypto-window]');
+    if (!btn) return;
+    setCryptoWindow(btn.getAttribute('data-crypto-window'));
+    const symbols = String($('crypto-market-symbols')?.value || '')
+      .split(/[\s,;|]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+    renderCryptoMarketPreview(symbols);
+  });
+
   $('crypto-market-symbols')?.addEventListener('input', () => {
     const symbols = String($('crypto-market-symbols')?.value || '')
       .split(/[\s,;|]+/)
@@ -15661,6 +15716,7 @@
       const result = await apiPost('/api/crypto-market/settings', {
         symbols: $('crypto-market-symbols')?.value,
         changeMode: currentCryptoChangeMode(),
+        changeWindow: currentCryptoWindow(),
       });
       renderCryptoMarketSettings(result);
       toast('Crypto watchlist saved', 'good');
