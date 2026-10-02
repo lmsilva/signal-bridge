@@ -8,6 +8,7 @@
 // a single frame is skipped rather than paged, because a multi-frame question
 // is unreadable from across a room. The measured gate is in 02 §6.
 
+const { marketWindowTitle } = require('../../stock-market');
 const {
   ROWS,
   COLS,
@@ -1564,14 +1565,14 @@ function stockMarketFrames(payload = {}) {
     return [];
   }
   const frames = [];
+  const pages = Math.ceil(quotes.length / 5);
+  const changeWindow = payload.settings?.changeWindow || payload.changeWindow;
   for (let index = 0; index < quotes.length; index += 5) {
     const chunk = quotes.slice(index, index + 5);
     const body = [0, 1, 2, 3, 4].map((rowIndex) => (
       chunk[rowIndex] ? stockQuoteRow(chunk[rowIndex]) : blankRow(COLS)
     ));
-    const title = quotes.length > 5
-      ? `STOCKS ${Math.floor(index / 5) + 1}/${Math.ceil(quotes.length / 5)}`
-      : 'STOCK MARKET';
+    const title = marketWindowTitle('stocks', changeWindow, Math.floor(index / 5) + 1, pages);
     frames.push(snapshotFrame(
       assertValidLayout([stocksChipRow(title), ...body], 'stock market'),
       'Stock Market',
@@ -1590,14 +1591,14 @@ function cryptoMarketFrames(payload = {}) {
     return [];
   }
   const frames = [];
+  const pages = Math.ceil(quotes.length / 5);
+  const changeWindow = payload.settings?.changeWindow || payload.changeWindow;
   for (let index = 0; index < quotes.length; index += 5) {
     const chunk = quotes.slice(index, index + 5);
     const body = [0, 1, 2, 3, 4].map((rowIndex) => (
       chunk[rowIndex] ? stockQuoteRow(chunk[rowIndex]) : blankRow(COLS)
     ));
-    const title = quotes.length > 5
-      ? `CRYPTO ${Math.floor(index / 5) + 1}/${Math.ceil(quotes.length / 5)}`
-      : 'CRYPTO MARKET';
+    const title = marketWindowTitle('crypto', changeWindow, Math.floor(index / 5) + 1, pages);
     frames.push(snapshotFrame(
       assertValidLayout([stocksChipRow(title), ...body], 'crypto market'),
       'Crypto Market',

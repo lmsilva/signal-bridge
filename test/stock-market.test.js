@@ -9,10 +9,12 @@ const {
   parseTickers,
   formatPrice,
   formatChange,
+  marketWindowTitle,
   buildStockMarketPayload,
   createStockMarket,
   DEFAULT_TICKERS,
 } = require('../src/stock-market');
+const { formatLayout } = require('../src/vestaboard/notation');
 const { stockMarketFrames } = require('../src/vestaboard/formatters/feeds');
 
 function yahooChart(symbol, price, previous) {
@@ -79,6 +81,52 @@ test('stockMarketFrames page after five quotes', () => {
   const payload = buildStockMarketPayload({ quotes });
   const frames = stockMarketFrames(payload);
   assert.equal(frames.length, 2);
+});
+
+test('the board title names the change window', () => {
+  assert.equal(marketWindowTitle('stocks', 'week'), 'STOCKS WEEKLY');
+  assert.equal(marketWindowTitle('crypto', 'month', 1, 2), 'CRYPTO MONTHLY 1/2');
+  const payload = buildStockMarketPayload({
+    quotes: [{ symbol: 'AAPL', price: 100, previous: 90, change: 10, percent: 11 }],
+    settings: { changeWindow: 'day', tickers: ['AAPL'] },
+  });
+  assert.match(formatLayout(stockMarketFrames(payload)[0].rows), /STOCKS DAILY/);
+});
+
+test('a weekly Yahoo quote uses the close from a week earlier', async () => {
+  const now = 1_800_000_000;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stock-window-'));
+  const api = createStockMarket({
+    stockMarketSettingsPath: path.join(dir, 'stock-market-settings.json'),
+    stockMarketFetchImpl: async (url) => {
+      assert.match(String(url), /range=1mo/);
+      assert.match(String(url), /interval=1d/);
+      return {
+        ok: true,
+        async json() {
+          return {
+            chart: {
+              result: [{
+                meta: {
+                  symbol: 'AAPL',
+                  regularMarketPrice: 110,
+                  regularMarketTime: now,
+                  currency: 'USD',
+                },
+                timestamp: [now - 8 * 86400, now - 6 * 86400],
+                indicators: { quote: [{ close: [100, 108] }] },
+              }],
+            },
+          };
+        },
+      };
+    },
+  });
+  api.updateSettings({ tickers: ['AAPL'], changeWindow: 'week' });
+  const payload = await api.nextPayload();
+  assert.equal(payload.settings.changeWindow, 'week');
+  assert.equal(payload.quotes[0].previous, 100);
+  assert.equal(payload.quotes[0].percent, 10);
 });
 
 test('stockMarketFrames refuse an empty payload', () => {

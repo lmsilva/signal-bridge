@@ -71,8 +71,8 @@ test('createCryptoMarket matches symbols from one CoinGecko page', async () => {
     cryptoMarketFetchImpl: async () => {
       calls += 1;
       return markets([
-        { symbol: 'btc', name: 'Bitcoin', market_cap_rank: 1, current_price: 84278, price_change_24h: -1, price_change_percentage_24h: -0.1 },
-        { symbol: 'eth', name: 'Ethereum', market_cap_rank: 2, current_price: 2684, price_change_24h: 10, price_change_percentage_24h: 0.4 },
+        { symbol: 'btc', name: 'Bitcoin', market_cap_rank: 1, current_price: 84278, price_change_24h: -1, price_change_percentage_24h: -0.1, price_change_percentage_7d_in_currency: -5 },
+        { symbol: 'eth', name: 'Ethereum', market_cap_rank: 2, current_price: 2684, price_change_24h: 10, price_change_percentage_24h: 0.4, price_change_percentage_7d_in_currency: 2 },
       ]);
     },
   });
@@ -80,6 +80,8 @@ test('createCryptoMarket matches symbols from one CoinGecko page', async () => {
   const payload = await api.nextPayload();
   assert.equal(payload.quotes.length, 2);
   assert.deepEqual(payload.quotes.map((row) => row.symbol), ['ETH', 'BTC']);
+  assert.equal(payload.settings.changeWindow, 'week');
+  assert.equal(payload.quotes.find((row) => row.symbol === 'BTC').percent, -5);
   assert.ok(payload.errors.some((line) => line.startsWith('DOGE:')));
   assert.equal(calls, 2, 'a missing symbol asks for the second page once');
   const again = await api.nextPayload();

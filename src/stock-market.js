@@ -21,12 +21,37 @@ const DEFAULT_TICKERS = Object.freeze([
   'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'SPY', 'QQQ', 'DIA',
 ]);
 
+const CHANGE_WINDOWS = Object.freeze(['hour', 'day', 'week', 'month']);
+
 const DEFAULT_SETTINGS = Object.freeze({
   tickers: [...DEFAULT_TICKERS],
   changeMode: 'percent', // percent | points
+  changeWindow: 'week', // hour | day | week | month
   provider: 'auto', // auto | yahoo | finnhub
   finnhubApiKey: '',
 });
+
+function sanitiseChangeWindow(value, fallback = 'week') {
+  const raw = String(value || '').trim().toLowerCase();
+  return CHANGE_WINDOWS.includes(raw) ? raw : (CHANGE_WINDOWS.includes(fallback) ? fallback : 'week');
+}
+
+/** Title that fits the 18 flaps between the corner chips. */
+function marketWindowTitle(kind, changeWindow, page = 1, pages = 1) {
+  const windowId = sanitiseChangeWindow(changeWindow);
+  const word = { hour: 'HOURLY', day: 'DAILY', week: 'WEEKLY', month: 'MONTHLY' }[windowId];
+  const base = kind === 'crypto' ? 'CRYPTO' : 'STOCKS';
+  const single = `${base} ${word}`;
+  if (pages <= 1) {
+    return single.slice(0, 18);
+  }
+  const paged = `${single} ${page}/${pages}`;
+  if (paged.length <= 18) {
+    return paged;
+  }
+  const short = { hour: 'HR', day: 'DAY', week: 'WK', month: 'MO' }[windowId];
+  return `${base} ${short} ${page}/${pages}`.slice(0, 18);
+}
 
 function cleanTicker(value) {
   return String(value || '')
@@ -68,6 +93,9 @@ function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
     .toLowerCase() === 'points'
     ? 'points'
     : 'percent';
+  const changeWindow = sanitiseChangeWindow(
+    incoming.changeWindow != null ? incoming.changeWindow : base.changeWindow,
+  );
   let provider = String(incoming.provider != null ? incoming.provider : base.provider)
     .trim()
     .toLowerCase();
@@ -80,6 +108,7 @@ function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
   return {
     tickers: tickers.length ? tickers : [...DEFAULT_TICKERS],
     changeMode,
+    changeWindow,
     provider,
     finnhubApiKey,
   };
@@ -211,18 +240,48 @@ async function fetchText(url, {
   }
 }
 
-async function fetchYahooQuote(symbol, { fetchImpl, timeoutMs } = {}) {
-  const url = `${YAHOO_CHART}/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+const YAHOO_WINDOW = Object.freeze({
+  hour: { range: '1d', interval: '5m', ms: 60 * 60 * 1000 },
+  day: { range: '5d', interval: '1d', ms: 0 },
+  week: { range: '1mo', interval: '1d', ms: 7 * 24 * 60 * 60 * 1000 },
+  month: { range: '3mo', interval: '1d', ms: 30 * 24 * 60 * 60 * 1000 },
+});
+
+function closeAtOrBefore(result, targetSec) {
+  const stamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const closes = result?.indicators?.quote?.[0]?.close || [];
+  let chosen = null;
+  for (let i = 0; i < stamps.length; i += 1) {
+    const close = Number(closes[i]);
+    if (!Number.isFinite(close)) {
+      continue;
+    }
+    if (Number(stamps[i]) <= targetSec) {
+      chosen = close;
+    }
+  }
+  return chosen;
+}
+
+async function fetchYahooQuote(symbol, { fetchImpl, timeoutMs, changeWindow = 'week' } = {}) {
+  const windowId = sanitiseChangeWindow(changeWindow);
+  const spec = YAHOO_WINDOW[windowId];
+  const url = `${YAHOO_CHART}/${encodeURIComponent(symbol)}?interval=${spec.interval}&range=${spec.range}`;
   const response = await fetchText(url, { fetchImpl, timeoutMs });
   const data = await response.json();
-  const meta = data?.chart?.result?.[0]?.meta;
+  const result = data?.chart?.result?.[0];
+  const meta = result?.meta;
   if (!meta || !Number.isFinite(Number(meta.regularMarketPrice))) {
     throw new Error(`Yahoo has no quote for ${symbol}`);
   }
   const price = Number(meta.regularMarketPrice);
-  const previous = Number(
-    meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose,
-  );
+  let previous = null;
+  if (windowId === 'day') {
+    previous = Number(meta.chartPreviousClose != null ? meta.chartPreviousClose : meta.previousClose);
+  } else {
+    const nowSec = Number(meta.regularMarketTime) || Math.floor(Date.now() / 1000);
+    previous = closeAtOrBefore(result, nowSec - Math.floor(spec.ms / 1000));
+  }
   const change = Number.isFinite(previous) ? price - previous : null;
   const percent = Number.isFinite(previous) && previous !== 0
     ? (change / previous) * 100
@@ -235,6 +294,7 @@ async function fetchYahooQuote(symbol, { fetchImpl, timeoutMs } = {}) {
     percent,
     currency: String(meta.currency || 'USD'),
     source: 'yahoo',
+    changeWindow: windowId,
   };
 }
 
@@ -267,6 +327,12 @@ async function fetchFinnhubQuote(symbol, apiKey, { fetchImpl, timeoutMs } = {}) 
 }
 
 async function fetchQuote(symbol, settings = DEFAULT_SETTINGS, options = {}) {
+  const windowId = sanitiseChangeWindow(settings.changeWindow);
+  // Finnhub's quote is the session change. Hour, week, and month come from
+  // Yahoo's chart so the number matches the window on the title.
+  if (windowId !== 'day') {
+    return fetchYahooQuote(symbol, { ...options, changeWindow: windowId });
+  }
   const provider = settings.provider || 'auto';
   const preferFinnhub = provider === 'finnhub'
     || (provider === 'auto' && settings.finnhubApiKey);
@@ -285,7 +351,7 @@ async function fetchQuote(symbol, settings = DEFAULT_SETTINGS, options = {}) {
 
   if (provider !== 'finnhub') {
     try {
-      return await fetchYahooQuote(symbol, options);
+      return await fetchYahooQuote(symbol, { ...options, changeWindow: 'day' });
     } catch (error) {
       errors.push(error?.message || String(error));
     }
@@ -343,6 +409,7 @@ function buildStockMarketPayload({
     settings: {
       tickers: cfg.tickers,
       changeMode: cfg.changeMode,
+      changeWindow: cfg.changeWindow,
       provider: cfg.provider,
       hasFinnhubKey: Boolean(cfg.finnhubApiKey),
     },
@@ -394,6 +461,7 @@ function createStockMarket(config = {}, log = console) {
         defaults: {
           tickers: [...DEFAULT_TICKERS],
           changeMode: DEFAULT_SETTINGS.changeMode,
+          changeWindow: DEFAULT_SETTINGS.changeWindow,
           provider: DEFAULT_SETTINGS.provider,
         },
         providers: ['auto', 'yahoo', 'finnhub'],
@@ -416,8 +484,12 @@ module.exports = {
   cleanTicker,
   parseTickers,
   sanitiseSettings,
+  CHANGE_WINDOWS,
+  sanitiseChangeWindow,
+  marketWindowTitle,
   formatPrice,
   formatChange,
+  closeAtOrBefore,
   boardSymbol,
   quoteForBoard,
   fetchYahooQuote,

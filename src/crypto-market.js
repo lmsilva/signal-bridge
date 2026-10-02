@@ -11,7 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const { fold } = require('./vestaboard/encoder');
-const { formatChange } = require('./stock-market');
+const { formatChange, sanitiseChangeWindow } = require('./stock-market');
 
 const TYPE = 'crypto.market';
 const MARKETS_URL = 'https://api.coingecko.com/api/v3/coins/markets';
@@ -26,7 +26,8 @@ const DEFAULT_SYMBOLS = Object.freeze([
 
 const DEFAULT_SETTINGS = Object.freeze({
   symbols: [...DEFAULT_SYMBOLS],
-  changeMode: 'percent', // percent | points — 24h move
+  changeMode: 'percent', // percent | points
+  changeWindow: 'week', // hour | day | week | month
 });
 
 function cleanSymbol(value) {
@@ -68,9 +69,13 @@ function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
     .toLowerCase() === 'points'
     ? 'points'
     : 'percent';
+  const changeWindow = sanitiseChangeWindow(
+    incoming.changeWindow != null ? incoming.changeWindow : base.changeWindow,
+  );
   return {
     symbols: symbols.length ? symbols : [...DEFAULT_SYMBOLS],
     changeMode,
+    changeWindow,
   };
 }
 
@@ -150,7 +155,7 @@ async function fetchMarketsPage(page, {
   timeoutMs = DEFAULT_TIMEOUT_MS,
   fetchImpl = fetch,
 } = {}) {
-  const url = `${MARKETS_URL}?vs_currency=usd&order=market_cap_desc&per_page=${PAGE_SIZE}&page=${page}&sparkline=false`;
+  const url = `${MARKETS_URL}?vs_currency=usd&order=market_cap_desc&per_page=${PAGE_SIZE}&page=${page}&sparkline=false&price_change_percentage=1h,24h,7d,30d`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(500, timeoutMs));
   try {
@@ -185,22 +190,47 @@ function indexBySymbol(rows, into = new Map()) {
   return into;
 }
 
-function quoteFromRow(row) {
+const PERCENT_FIELDS = Object.freeze({
+  hour: ['price_change_percentage_1h_in_currency', 'price_change_percentage_1h'],
+  day: ['price_change_percentage_24h_in_currency', 'price_change_percentage_24h'],
+  week: ['price_change_percentage_7d_in_currency', 'price_change_percentage_7d'],
+  month: ['price_change_percentage_30d_in_currency', 'price_change_percentage_30d'],
+});
+
+function firstPercent(row, changeWindow) {
+  for (const key of PERCENT_FIELDS[sanitiseChangeWindow(changeWindow)]) {
+    const value = Number(row?.[key]);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function quoteFromRow(row, changeWindow = 'week') {
   const price = Number(row?.current_price);
   if (!Number.isFinite(price)) {
     return null;
   }
-  const change = Number(row?.price_change_24h);
-  const percent = Number(row?.price_change_percentage_24h);
+  const windowId = sanitiseChangeWindow(changeWindow);
+  const percent = firstPercent(row, windowId);
+  let change = null;
+  if (windowId === 'day' && Number.isFinite(Number(row?.price_change_24h))) {
+    change = Number(row.price_change_24h);
+  } else if (Number.isFinite(percent) && percent > -100) {
+    const then = price / (1 + percent / 100);
+    change = price - then;
+  }
   return {
     symbol: cleanSymbol(row.symbol),
     name: String(row.name || ''),
     rank: Number(row.market_cap_rank) || null,
     price,
-    change: Number.isFinite(change) ? change : null,
-    percent: Number.isFinite(percent) ? percent : null,
+    change,
+    percent,
     currency: 'USD',
     source: 'coingecko',
+    changeWindow: windowId,
   };
 }
 
@@ -249,6 +279,7 @@ function buildCryptoMarketPayload({
     settings: {
       symbols: cfg.symbols,
       changeMode: cfg.changeMode,
+      changeWindow: cfg.changeWindow,
     },
     quotes: rows,
     errors: errors.slice(0, 20),
@@ -288,7 +319,7 @@ async function loadCryptoMarketPayload({
   const errors = [];
   for (const symbol of cfg.symbols) {
     const row = index.get(symbol);
-    const quote = row ? quoteFromRow(row) : null;
+    const quote = row ? quoteFromRow(row, cfg.changeWindow) : null;
     if (!quote) {
       errors.push(`${symbol}: not in the CoinGecko top ${PAGE_SIZE * 2}`);
       continue;
@@ -317,6 +348,7 @@ function createCryptoMarket(config = {}, log = console) {
         defaults: {
           symbols: [...DEFAULT_SYMBOLS],
           changeMode: DEFAULT_SETTINGS.changeMode,
+          changeWindow: DEFAULT_SETTINGS.changeWindow,
         },
         source: 'CoinGecko',
       };

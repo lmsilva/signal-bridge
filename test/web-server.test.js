@@ -3257,9 +3257,9 @@ test('crypto market push delivers CoinGecko quotes and settings can retune the l
         ok: true,
         async json() {
           return [
-            { symbol: 'btc', name: 'Bitcoin', market_cap_rank: 1, current_price: 84278, price_change_24h: -2323, price_change_percentage_24h: -2.68 },
-            { symbol: 'eth', name: 'Ethereum', market_cap_rank: 2, current_price: 2684.41, price_change_24h: 37, price_change_percentage_24h: 1.4 },
-            { symbol: 'sol', name: 'Solana', market_cap_rank: 7, current_price: 115.2, price_change_24h: 2.1, price_change_percentage_24h: 1.8 },
+            { symbol: 'btc', name: 'Bitcoin', market_cap_rank: 1, current_price: 84278, price_change_24h: -2323, price_change_percentage_24h: -2.68, price_change_percentage_7d_in_currency: -4.2 },
+            { symbol: 'eth', name: 'Ethereum', market_cap_rank: 2, current_price: 2684.41, price_change_24h: 37, price_change_percentage_24h: 1.4, price_change_percentage_7d_in_currency: 3.1 },
+            { symbol: 'sol', name: 'Solana', market_cap_rank: 7, current_price: 115.2, price_change_24h: 2.1, price_change_percentage_24h: 1.8, price_change_percentage_7d_in_currency: 1.8 },
           ];
         },
       };
@@ -3278,6 +3278,7 @@ test('crypto market push delivers CoinGecko quotes and settings can retune the l
     });
     assert.equal(saved.status, 200);
     assert.deepEqual(saved.body.settings.symbols, ['BTC', 'ETH', 'SOL']);
+    assert.equal(saved.body.settings.changeWindow, 'week');
 
     const pushed = await postJson(base, '/api/push/crypto-market');
     assert.equal(pushed.status, 200, pushed.body?.error);
@@ -3864,9 +3865,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal331/);
+  assert.match(html, /styles\.css\?v=signal332/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal331/);
+  assert.match(html, /app\.js\?v=signal332/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
@@ -3986,7 +3987,11 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /setHours\(24, 0, 0, 0\)/);
   assert.match(js, /dateBookPreviewEvent\(draft\)/);
   assert.match(js, /Mirror stockMarketFrames/);
-  assert.match(js, /STOCKS 1\/\$\{pages\}/);
+  assert.match(js, /\$\{base\} \$\{word\} 1\/\$\{pages\}/);
+  assert.match(html, /id="stock-market-window"/);
+  assert.match(html, /id="crypto-market-window"/);
+  assert.match(js, /function setStockWindow\(/);
+  assert.match(js, /function setCryptoWindow\(/);
   assert.match(js, /flapChipCode\('white'\)/);
   assert.match(js, /sample\.dir === 'down' \? 'red'/);
   assert.match(html, /id="btn-red-letter-designer-undo"/);
