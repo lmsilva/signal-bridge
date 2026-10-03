@@ -5348,6 +5348,8 @@ function createWebServer({
           ? { scheduleSelection: body.scheduleSelection } : {}),
         ...(body && Object.prototype.hasOwnProperty.call(body, 'showTime')
           ? { showTime: body.showTime } : {}),
+        ...(body && Object.prototype.hasOwnProperty.call(body, 'listCount')
+          ? { listCount: body.listCount } : {}),
       });
     sendJson(res, 200, { ok: true, ...redLetterState(), settings });
   }

@@ -1962,6 +1962,7 @@ test('the Date Book is a CRUD collection and Red Letter will not push an empty o
     assert.deepEqual(empty.body.events, []);
     assert.equal(empty.body.upcoming, 0);
     assert.equal(empty.body.settings.pushSelection, 'next');
+    assert.equal(empty.body.settings.listCount, 3);
     assert.equal(empty.body.boardPreview, null);
 
     // Nothing to count down to must be a refusal, not a blank board.
@@ -2053,6 +2054,18 @@ test('the Date Book is a CRUD collection and Red Letter will not push an empty o
     assert.equal(onlySchedule.body.settings.pushSelection, 'random');
     assert.equal(onlySchedule.body.settings.scheduleSelection, 'random');
     assert.equal(onlySchedule.body.settings.showTime, false);
+    assert.equal(onlySchedule.body.settings.listCount, 3);
+
+    const listed = await postJson(base, '/api/red-letter/settings', {
+      pushSelection: 'list',
+      listCount: 9,
+    });
+    assert.equal(listed.body.settings.pushSelection, 'list');
+    assert.equal(listed.body.settings.listCount, 5);
+    assert.equal(listed.body.settings.scheduleSelection, 'random');
+    assert.equal(listed.body.settings.showTime, false);
+    assert.equal(listed.body.boardPreview.card, 'list');
+    assert.equal(listed.body.boardPreview.event.name, 'Amanda visits');
 
     const holiday = await postJson(base, '/api/date-book/events', {
       name: 'Thanksgiving',
@@ -2086,6 +2099,10 @@ test('admin Settings has a Red Letter card, a Date Book sheet and the layout des
   assert.match(html, /id="red-letter-settings-card"[^>]*data-settings-group="global"/);
   assert.match(html, /data-red-letter-push="next"/);
   assert.match(html, /data-red-letter-push="random"/);
+  assert.match(html, /data-red-letter-push="list"/);
+  assert.match(html, /data-red-letter-schedule="list"/);
+  assert.match(html, /id="red-letter-list-count"/);
+  assert.match(html, /data-red-letter-count="5"/);
   assert.match(html, /data-red-letter-schedule="next"/);
   assert.match(html, /data-red-letter-schedule="random"/);
 
@@ -3869,9 +3886,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal333/);
+  assert.match(html, /styles\.css\?v=signal334/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal333/);
+  assert.match(html, /app\.js\?v=signal334/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);

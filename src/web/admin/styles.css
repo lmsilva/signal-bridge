@@ -855,6 +855,11 @@ body[data-tab="artwork"] .content { max-width: 1180px; }
 }
 
 .segmented-btn.active { background: var(--accent); color: var(--accent-ink); }
+.red-letter-selection .segmented-btn {
+  font-size: 0.78rem;
+  padding: 9px 4px;
+  line-height: 1.2;
+}
 .segmented-btn:disabled {
   opacity: 0.45;
   cursor: default;

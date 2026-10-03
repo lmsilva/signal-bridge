@@ -32,6 +32,8 @@ const {
   paintedRows,
   countdownFitsCompact,
   countdownRows,
+  summaryEventRow,
+  listCountdownRows,
   dayOfDefaultRows,
   buildRedLetterPayload,
   createRedLetter,
@@ -496,12 +498,16 @@ test('the heart card matches the marketplace drawing', () => {
 
 // ------------------------------------------------------------- payload wiring
 
-test('settings only accept the two selections and default to next', () => {
+test('settings accept next, random, and a next-few count from 1 to 5', () => {
   assert.deepEqual(sanitiseSettings({}), DEFAULT_SETTINGS);
   assert.deepEqual(
     sanitiseSettings({ pushSelection: 'RANDOM', scheduleSelection: 'nonsense', showTime: false }),
-    { pushSelection: 'random', scheduleSelection: 'next', showTime: false },
+    { pushSelection: 'random', scheduleSelection: 'next', listCount: 3, showTime: false },
   );
+  assert.equal(sanitiseSettings({ listCount: 4 }).listCount, 4);
+  assert.equal(sanitiseSettings({ listCount: 9 }).listCount, 5);
+  assert.equal(sanitiseSettings({ listCount: 0 }).listCount, 1);
+  assert.equal(sanitiseSettings({ pushSelection: 'list' }).pushSelection, 'list');
 });
 
 test('auto mode reads the calendar and the formatter takes the rows', () => {
@@ -553,6 +559,7 @@ test('a one-field settings save does not reset the other selection', () => {
   assert.deepEqual(redLetter.getSettings(), {
     pushSelection: 'random',
     scheduleSelection: 'random',
+    listCount: 3,
     showTime: false,
   });
 
@@ -561,6 +568,7 @@ test('a one-field settings save does not reset the other selection', () => {
   assert.deepEqual(redLetter.getSettings(), {
     pushSelection: 'next',
     scheduleSelection: 'random',
+    listCount: 3,
     showTime: false,
   });
 
@@ -568,8 +576,13 @@ test('a one-field settings save does not reset the other selection', () => {
   assert.deepEqual(redLetter.getSettings(), {
     pushSelection: 'next',
     scheduleSelection: 'next',
+    listCount: 3,
     showTime: false,
   });
+
+  redLetter.updateSettings({ listCount: 4 });
+  assert.equal(redLetter.getSettings().pushSelection, 'next');
+  assert.equal(redLetter.getSettings().listCount, 4);
 });
 
 test('the service honours push and schedule selections separately', () => {
@@ -624,6 +637,89 @@ test('the service honours push and schedule selections separately', () => {
   const randomLater = redLetter.nextPayload({ asOf: NOON, trigger: 'push', random: () => 0.99 });
   assert.equal(randomLater.event.name, 'Later');
   assert.equal(randomLater.card, 'countdown');
+});
+
+test('the next few keeps the days and cuts a long title with ..', () => {
+  assert.equal(formatLayout([summaryEventRow("Lily's Baby Shower!", 300)]), "LILY'S BABY SHO.. 300D");
+  assert.equal(formatLayout([summaryEventRow('Wedding Anniversary', 356)]), 'WEDDING ANNIVER.. 356D');
+  const daddy = formatLayout([summaryEventRow('Daddy Birthday', 4)]);
+  assert.equal(daddy, `DADDY BIRTHDAY${' '.repeat(6)}4D`);
+  assert.equal(daddy.length, 22);
+  assert.equal(formatLayout([summaryEventRow('Visit', 1)]).endsWith(' 1D'), true);
+  assert.equal(formatLayout([summaryEventRow('Trip', 12)]).endsWith(' 12D'), true);
+
+  const one = formatLayout(listCountdownRows([
+    { name: "Lily's Baby Shower!", days: 300 },
+  ])).split('\n');
+  assert.deepEqual(one, [
+    'rr   COUNTDOWN TO   rr',
+    '',
+    '',
+    "LILY'S BABY SHO.. 300D",
+    '',
+    '',
+  ]);
+
+  const four = formatLayout(listCountdownRows([
+    { name: 'Wedding Anniversary', days: 356 },
+    { name: 'Daddy Birthday', days: 4 },
+    { name: 'Visit', days: 12 },
+    { name: 'Trip', days: 1 },
+  ])).split('\n');
+  assert.equal(four[0], 'rr   COUNTDOWN TO   rr');
+  assert.equal(four[1], 'WEDDING ANNIVER.. 356D');
+  assert.equal(four[2], 'DADDY BIRTHDAY      4D');
+  assert.equal(four[5], '', 'four events leave the last body row blank');
+
+  const two = formatLayout(listCountdownRows([
+    { name: 'Alpha', days: 2 },
+    { name: 'Beta', days: 9 },
+  ])).split('\n');
+  assert.equal(two[1], '');
+  assert.match(two[2], /^ALPHA +2D$/);
+  assert.match(two[3], /^BETA +9D$/);
+  assert.equal(two[4], '');
+  assert.equal(two[5], '');
+});
+
+test('the next few lists that many upcoming events and ignores a specific event id', () => {
+  const config = bookConfig('list');
+  const dateBook = createDateBook(config, quiet);
+  const redLetter = createRedLetter(config, quiet, { dateBook });
+  dateBook.add({ name: "Lily's Baby Shower!", date: '2027-06-25', message: 'Bring a gift' });
+  dateBook.add({ name: 'Daddy Birthday', date: '2026-09-02', message: 'Cake' });
+  dateBook.add({ name: 'Visit', date: '2026-09-10', message: 'Hi' });
+  dateBook.add({ name: 'Later', date: '2026-12-01', message: 'Later' });
+  dateBook.add({ name: 'Much Later', date: '2027-01-01', message: 'Way later' });
+  dateBook.add({ name: 'Too Far', date: '2027-03-01', message: 'Sixth' });
+
+  redLetter.updateSettings({ pushSelection: 'list', listCount: 4, showTime: true });
+  const payload = redLetter.nextPayload({ asOf: NOON, trigger: 'push' });
+  assert.equal(payload.card, 'list');
+  assert.equal(payload.listCount, 4);
+  assert.deepEqual(payload.events.map((event) => event.name), [
+    'Daddy Birthday', 'Visit', 'Later', 'Much Later',
+  ]);
+  assert.equal(payload.event.name, 'Daddy Birthday');
+  const lines = formatLayout(payload.rows).split('\n');
+  assert.equal(lines[0], 'rr   COUNTDOWN TO   rr');
+  assert.match(lines[1], /^DADDY BIRTHDAY +4D$/);
+  assert.equal(lines[5], '');
+  assert.equal(redLetterFrames(payload).length, 1);
+  assert.equal(validate(payload.rows).ok, true);
+
+  redLetter.updateSettings({ listCount: 1 });
+  const only = redLetter.nextPayload({ asOf: NOON, trigger: 'push' });
+  assert.equal(only.events.length, 1);
+  assert.equal(formatLayout(only.rows).split('\n')[3], lines[1]);
+
+  const forced = redLetter.nextPayload({
+    asOf: NOON,
+    trigger: 'push',
+    eventId: 'visit-0910',
+  });
+  assert.equal(forced.card, 'countdown');
+  assert.equal(forced.event.name, 'Visit');
 });
 
 test('the designer types the same flaps the encoder does', () => {

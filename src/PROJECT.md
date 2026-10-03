@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-10-02 (Word of the Day admin names each part of speech)
+**Last updated:** 2026-10-03 (Red Letter can list the next few events)
 
 ---
 
@@ -259,7 +259,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/calendar-clock.js` | **Calendar Clock** — marketplace monthly calendar + house clock (no network). Seven chip columns, `SMTWTFS`/`MTWTFSS` only when the month fits in five week-rows, per-month colour with a contrasting today chip. Builds `calendar.clock`. Settings in `data/calendar-clock-settings.json` (week start; Settings → Global) |
 | `src/word-clock.js` | **Word Clock** — the time spelled out (no network): `IT'S A QUARTER PAST TWELVE IN THE AFTERNOON.` Midnight and noon are named, not counted; multiples of five drop the word `MINUTES`. `layoutLines()` narrows the wrap until the block is roughly rectangular, then `wordClockRows()` centres it on both axes across all six rows. Builds `word.clock`; `statusSnapshot().boardRows` is what the admin bezel paints. Settings in `data/word-clock-settings.json` (`rounding` five/exact, `dayPart`; Settings → Global) |
 | `src/date-book.js` | **Date Book** — the house event list in `data/date-book.json`. One-off or yearly calendar dates, or a weekday of the month (last Thursday of November), optional clock time (blank = midnight), civil-date maths in the house zone (`zonedAtMs` / `zonedMidnightMs`), next-occurrence + expiry, and `pickEvent` (`next` prefers a day-of card; `random` draws from every upcoming event). No board code |
-| `src/red-letter.js` | **Red Letter** — Date Book events on the flaps. Hourglass countdown card (wide fallback when the name will not fit beside it), confetti/full-bleed day-of card, and painted layouts where `-1` cells are message-flow slots the message rewraps into. Settings in `data/red-letter-settings.json`. Builds `red-letter.card` |
+| `src/red-letter.js` | **Red Letter** — Date Book events on the flaps. Hourglass countdown card (wide fallback when the name will not fit beside it), confetti/full-bleed day-of card, a next-few list (`listCount` 1–5: `COUNTDOWN TO` plus one title-and-days line each), and painted layouts where `-1` cells are message-flow slots the message rewraps into. Settings in `data/red-letter-settings.json`. Builds `red-letter.card` |
 | `tools/build-stoic-quotes.js` | Fetch open Stoic dumps and keep quotes that fit 4×22 under `STOIC` plus an author line |
 | `src/learn-japanese-settings.js` | Filters + recent ids in `data/learn-japanese-settings.json` (JLPT N5/N4, parts of speech). Settings → Language |
 | `src/learn-japanese-words.json` | Shipped JLPT N5+N4 romaji lexicon (~1240 words) converted from OpenJLPT / JMDict. Rebuild with `tools/build-learn-japanese-words.js` |
@@ -579,7 +579,7 @@ Priority: env vars → `data/config.json` → `config.example.json`
 | `vestaboardSimulator.stateFile` | Board key + current face (default `data/vestaboard-simulator.json`) |
 | `data/vestaboard-settings.json` | The board list (not a config key — written from the Settings tab). Keys inside it are encrypted with `data/secret.key`; a board may name a `tokenEnv` instead, which wins |
 | `data/date-book.json` | **Date Book** events: `{ id, name, message, date, time, schedule, ordinal, weekday, month, recurring, enabled, layout }`. `schedule` is `date` or `weekday` (nth weekday of a month). `time` is `HH:mm` or empty (midnight). `layout.cells` is a 6×22 code grid where `-1` marks a message-flow flap. Admin paints one flap at a time in the designer; household users pick a shared theme (or Confetti to clear it) |
-| `data/red-letter-settings.json` | **Red Letter**: `pushSelection` / `scheduleSelection` (`next` / `random`) and `showTime` |
+| `data/red-letter-settings.json` | **Red Letter**: `pushSelection` / `scheduleSelection` (`next` / `random` / `list`), `listCount` (1–5, default 3) and `showTime` |
 | `data/plex-top10-settings.json` | **Plex Top 10 Movies**: `source` (`library` / `global`), `genres[]` (empty = all), `librarySectionKey` (empty = first movie section), `cacheMinutes`. Reuses the Feature Presentation server URL and token; written only by the admin |
 | `plex.*` / `data/plex-settings.json` | **Feature Presentation** (Vestaboard only). Seeded from `config.plex` (`enabled`, `serverUrl`, `monitoredPlayers[]`, `mediaTypes`, poll/stop-grace, `pushOnStop`, `quietHoursExempt`, `showCriticScore`). Token is `PLEX_TOKEN` or encrypted `data/plex-credentials.json` — never in `config.json`. State in `data/plex-now-playing.json`. Never UDP, never a full-display formatter |
 | `PROXY_OWN_IP` / `PROXY_PORT` | Auth only (env) |
@@ -892,7 +892,7 @@ Public APIs: `GET /api/displays` (+ events SSE), `GET /api/guest/session`, `POST
 | `POST /api/push/calendar-clock` | Vestaboard Calendar Clock (`calendar.clock`). Target coerced to a board |
 | `GET` / `POST /api/word-clock/settings` | Word Clock reading (`rounding` `five`/`exact`, `dayPart` bool) plus `payload` and `boardRows` for the preview. `POST { reset: true }` restores the defaults |
 | `POST /api/push/word-clock` | Vestaboard Word Clock (`word.clock`). Target coerced to a board |
-| `GET` / `POST` / `PUT /api/red-letter/settings` | Red Letter push vs schedule selection (`next` / `random`) and `showTime`. Also returns the Date Book with each event's next occurrence and `boardPreview` (the card Push Now would send). `{ reset: true }` restores defaults |
+| `GET` / `POST` / `PUT /api/red-letter/settings` | Red Letter push vs schedule selection (`next` / `random` / `list`), `listCount` (1–5) and `showTime`. Also returns the Date Book with each event's next occurrence and `boardPreview` (the card Push Now would send). `{ reset: true }` restores defaults |
 | `GET` / `POST /api/date-book/events` | List / add Date Book events (`name`, `message`, `date` or weekday rule, `time`, `recurring`, `layout`). **400** without a name and a date or weekday-of-month. A `PUT` that omits `layout` keeps the saved artwork; `layout: null` clears it |
 | `PUT` / `DELETE /api/date-book/events/:id` | Patch one event (including `layout` — `{ cells }` to save artwork, `null` to remove it) or delete it. **404** for an unknown id |
 | `POST /api/date-book/preview` | Both cards for `{ eventId }` or an unsaved `{ event }` — `{ countdown, dayOf }`, each with server-built `rows`. The admin previews and the designer render these, so the sheet cannot drift from the board |
@@ -954,6 +954,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-10-03: **Red Letter can list the next few events** — Push Now and On a schedule gain **The next few**, with a count locked to 1–5 (default 3). That card is one `COUNTDOWN TO` header plus up to five title-and-days lines (`DADDY BIRTHDAY      4D`), centred when there are fewer than five. A title that will not fit beside the days ends in `..` (`LILY'S BABY SHO.. 300D`). The single next/random cards are unchanged. Cache-bust `signal334`. Tests: `red-letter`, `web-server`.
 - 2026-10-02: **Word of the Day settings spell out each part of speech** — the filter and the word picker say Noun, Verb, Adjective, Adverb, Preposition, Conjunction, Pronoun, and Interjection. The Vestaboard headline stays short (`ORACY, N.`). Cache-bust `signal333`. Tests: `word-of-the-day`, `web-server`.
 - 2026-10-01: **Stock and crypto moves say which window they cover** — Settings → News picks Hour, Day, Week, or Month for both watchlists (default **Week**). The board title is `STOCKS WEEKLY` / `CRYPTO DAILY` (and so on), so the percent is no longer an unlabeled day change. Day is the prior close for stocks and 24h for coins; the other windows use Yahoo's chart and CoinGecko's 1h/7d/30d change. Cache-bust `signal332`. Tests: `stock-market`, `crypto-market`, `web-server`.
 - 2026-09-23: **Crypto Market, and stocks are no longer capped at 10** — `crypto.market` is a Vestaboard push + schedule sibling of Stock Market. Quotes are one CoinGecko `coins/markets` call (no API key); the default watchlist is the ten largest coins by market cap (BTC, ETH, USDT, BNB, XRP, USDC, SOL, TRX, ZEC, HYPE — Figure HELOC skipped). Settings → News edits the symbols and percent vs points. Stock Market keeps a default of 10 but no longer drops anything past that. Cache-bust `signal331`. Tests: `crypto-market`, `stock-market`, `command-registry`, `web-server`.

@@ -26,7 +26,7 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/logo.png">
   <link rel="stylesheet" href="/vestaboard-bezel.css?v=1">
-  <link rel="stylesheet" href="styles.css?v=signal333">
+  <link rel="stylesheet" href="styles.css?v=signal334">
   <link rel="stylesheet" href="/flap-paint.css?v=signal327">
 </head>
 <body>
@@ -1079,14 +1079,24 @@
           <div class="settings-columns red-letter-settings-columns">
             <div class="settings-col">
               <label class="field-label">Push Now shows</label>
-              <div class="segmented" id="red-letter-push-selection" role="group" aria-label="What a manual push shows">
+              <div class="segmented red-letter-selection" id="red-letter-push-selection" role="group" aria-label="What a manual push shows">
                 <button type="button" class="segmented-btn active" data-red-letter-push="next" aria-pressed="true">The next one</button>
                 <button type="button" class="segmented-btn" data-red-letter-push="random" aria-pressed="false">A random one</button>
+                <button type="button" class="segmented-btn" data-red-letter-push="list" aria-pressed="false">The next few</button>
               </div>
               <label class="field-label field-label-spaced">On a schedule, show</label>
-              <div class="segmented" id="red-letter-schedule-selection" role="group" aria-label="What a scheduled slot shows">
+              <div class="segmented red-letter-selection" id="red-letter-schedule-selection" role="group" aria-label="What a scheduled slot shows">
                 <button type="button" class="segmented-btn active" data-red-letter-schedule="next" aria-pressed="true">The next one</button>
                 <button type="button" class="segmented-btn" data-red-letter-schedule="random" aria-pressed="false">A random one</button>
+                <button type="button" class="segmented-btn" data-red-letter-schedule="list" aria-pressed="false">The next few</button>
+              </div>
+              <label class="field-label field-label-spaced">How many in the next few</label>
+              <div class="segmented" id="red-letter-list-count" role="group" aria-label="How many upcoming events the next few shows">
+                <button type="button" class="segmented-btn" data-red-letter-count="1" aria-pressed="false">1</button>
+                <button type="button" class="segmented-btn" data-red-letter-count="2" aria-pressed="false">2</button>
+                <button type="button" class="segmented-btn active" data-red-letter-count="3" aria-pressed="true">3</button>
+                <button type="button" class="segmented-btn" data-red-letter-count="4" aria-pressed="false">4</button>
+                <button type="button" class="segmented-btn" data-red-letter-count="5" aria-pressed="false">5</button>
               </div>
               <label class="trivia-check" style="margin-top:14px">
                 <input type="checkbox" id="red-letter-show-time" checked>
@@ -1097,7 +1107,7 @@
                 <button type="button" class="btn btn-outline" id="btn-red-letter-push">Push Now</button>
               </div>
               <p class="hint" id="red-letter-hint" style="margin-top:12px">
-                The next one prefers a day-of message when something is happening today. A random pick can be any upcoming event.
+                The next one prefers a day-of message when something is happening today. A random pick can be any upcoming event. The next few lists that many titles and the days left on one card; a long title ends in .. so the days still fit.
               </p>
             </div>
             <div class="settings-col red-letter-preview-col">
@@ -5680,6 +5690,6 @@
   <script src="/avatar-crop.js?v=signal266"></script>
   <script src="house-users.js?v=signal299"></script>
   <script src="settings-filter.js?v=signal307"></script>
-  <script src="app.js?v=signal333"></script>
+  <script src="app.js?v=signal334"></script>
 </body>
 </html>
