@@ -35,11 +35,14 @@ const TITLE = 'Red Letter';
 /** A painted cell holding this instead of a code is where the message goes. */
 const MESSAGE_CELL = -1;
 
-const SELECTIONS = Object.freeze(['next', 'random']);
+const SELECTIONS = Object.freeze(['next', 'random', 'list']);
+const LIST_MIN = 1;
+const LIST_MAX = 5;
 
 const DEFAULT_SETTINGS = Object.freeze({
   pushSelection: 'next',
   scheduleSelection: 'next',
+  listCount: 3,
   showTime: true,
 });
 
@@ -144,6 +147,50 @@ function countdownRows(model = {}) {
   return countdownFitsCompact(model.name)
     ? countdownCompactRows(model)
     : countdownWideRows(model);
+}
+
+/**
+ * Days sit on the right of a 22-flap row: ` 1D`, ` 12D`, or ` 350D`.
+ * The title takes whatever is left. If it does not fit, it keeps
+ * (room - 2) characters and ends in `..`, so the days are never pushed off.
+ */
+function summaryDaySuffix(days) {
+  const n = Math.max(0, Math.floor(Number(days) || 0));
+  // The leading blank is a real flap, not a character fold() would trim.
+  return { label: `${n}D`, width: String(n).length + 2 };
+}
+
+function summaryEventRow(name, days) {
+  const suffix = summaryDaySuffix(days);
+  const room = Math.max(0, COLS - suffix.width);
+  let title = fold(name);
+  if (title.length > room) {
+    title = `${title.slice(0, Math.max(0, room - 2))}..`;
+  }
+  const row = blankRow(COLS);
+  if (title) {
+    placeText(row, title, 0);
+  }
+  placeText(row, suffix.label, COLS - suffix.label.length);
+  return row;
+}
+
+/** Header, then up to five title/days lines, centred in the five body rows. */
+function listCountdownRows(items = []) {
+  const rows = [0, 1, 2, 3, 4, 5].map(() => blankRow(COLS));
+  const chip = chipCode('red');
+  rows[0][0] = chip;
+  rows[0][1] = chip;
+  rows[0][COLS - 2] = chip;
+  rows[0][COLS - 1] = chip;
+  placeCentered(rows[0], 'COUNTDOWN TO', 3, COLS - 6);
+
+  const lines = items.slice(0, LIST_MAX).map((item) => summaryEventRow(item?.name, item?.days));
+  const offset = Math.floor((LIST_MAX - lines.length) / 2);
+  lines.forEach((line, index) => {
+    rows[1 + offset + index] = line;
+  });
+  return rows;
 }
 
 // ------------------------------------------------------------------ day of
@@ -321,6 +368,15 @@ function paintedRows(layout, message = '') {
 
 // ----------------------------------------------------------------- payload
 
+function sanitiseListCount(value, fallback = DEFAULT_SETTINGS.listCount) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) {
+    const fb = Math.round(Number(fallback));
+    return fb >= LIST_MIN && fb <= LIST_MAX ? fb : DEFAULT_SETTINGS.listCount;
+  }
+  return Math.min(LIST_MAX, Math.max(LIST_MIN, n));
+}
+
 function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
   const incoming = raw && typeof raw === 'object' ? raw : {};
   const pick = (key) => {
@@ -328,9 +384,11 @@ function sanitiseSettings(raw = {}, base = DEFAULT_SETTINGS) {
     return SELECTIONS.includes(value) ? value : DEFAULT_SETTINGS[key];
   };
   const showTime = incoming.showTime != null ? incoming.showTime : base.showTime;
+  const listCount = incoming.listCount != null ? incoming.listCount : base.listCount;
   return {
     pushSelection: pick('pushSelection'),
     scheduleSelection: pick('scheduleSelection'),
+    listCount: sanitiseListCount(listCount, base.listCount),
     showTime: showTime !== false,
   };
 }
@@ -418,6 +476,68 @@ function buildRedLetterPayload(event, {
   };
 }
 
+function eventSummary(event = {}) {
+  return {
+    id: event.id || '',
+    name: event.name,
+    message: event.message || '',
+    date: event.date || '',
+    recurring: event.recurring === true,
+  };
+}
+
+/**
+ * One card listing the next few upcoming events: title and days only.
+ * `events` are Date Book rows with `next` already attached.
+ */
+function buildRedLetterListPayload(events = [], {
+  asOf = new Date(),
+  timeZone = null,
+  listCount = DEFAULT_SETTINGS.listCount,
+  showTime = true,
+  trigger = 'push',
+} = {}) {
+  const count = sanitiseListCount(listCount);
+  const picked = events.filter((event) => event?.name && event.next).slice(0, count);
+  if (!picked.length) {
+    return null;
+  }
+  const at = asOf instanceof Date ? asOf : new Date(asOf);
+  const first = picked[0];
+  return {
+    type: TYPE,
+    title: TITLE,
+    card: 'list',
+    trigger,
+    selection: 'list',
+    listCount: count,
+    showTime: showTime !== false,
+    custom: false,
+    overflow: false,
+    event: eventSummary(first),
+    events: picked.map((event) => ({
+      ...eventSummary(event),
+      daysAway: event.next.daysAway,
+      date: event.next.date || event.date || '',
+    })),
+    occurrence: {
+      date: first.next.date,
+      daysAway: first.next.daysAway,
+      days: first.next.days,
+      hours: first.next.hours,
+      minutes: first.next.minutes,
+      isToday: first.next.isToday,
+      observed: first.next.observed,
+    },
+    rows: listCountdownRows(picked.map((event) => ({
+      name: event.name,
+      days: event.next.daysAway,
+    }))),
+    asOf: at.toISOString(),
+    timeZone: timeZone || '',
+  };
+}
+
 /** The formatter wants rows; a payload that already carries them just hands them over. */
 function redLetterRows(payload = {}) {
   return Array.isArray(payload.rows) && payload.rows.length === ROWS ? payload.rows : null;
@@ -496,6 +616,16 @@ function createRedLetter(config = {}, log = console, { dateBook } = {}) {
     const settings = settingsApi.get();
     const timeZone = zone();
     const selection = selectionFor(trigger);
+    if (!eventId && selection === 'list') {
+      const upcoming = dateBook?.upcoming?.({ asOf, timeZone }) || [];
+      return buildRedLetterListPayload(upcoming, {
+        asOf,
+        timeZone,
+        listCount: settings.listCount,
+        showTime: settings.showTime,
+        trigger,
+      });
+    }
     const event = eventId
       ? dateBook?.get?.(eventId)
       : dateBook?.pick?.({ mode: selection, asOf, timeZone, random });
@@ -560,6 +690,8 @@ module.exports = {
   TITLE,
   MESSAGE_CELL,
   SELECTIONS,
+  LIST_MIN,
+  LIST_MAX,
   DEFAULT_SETTINGS,
   HOURGLASS,
   CONFETTI,
@@ -572,6 +704,9 @@ module.exports = {
   countdownCompactRows,
   countdownWideRows,
   countdownRows,
+  summaryDaySuffix,
+  summaryEventRow,
+  listCountdownRows,
   seedFrom,
   confettiRows,
   dayOfDefaultRows,
@@ -580,8 +715,10 @@ module.exports = {
   flowMessage,
   centreRuns,
   paintedRows,
+  sanitiseListCount,
   sanitiseSettings,
   buildRedLetterPayload,
+  buildRedLetterListPayload,
   redLetterRows,
   createRedLetterSettings,
   createRedLetter,

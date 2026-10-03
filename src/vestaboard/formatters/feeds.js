@@ -1445,7 +1445,9 @@ function redLetterFrames(payload = {}) {
   }
   return [snapshotFrame(
     assertValidLayout(rows, 'red letter'),
-    payload.card === 'day-of' ? 'Red Letter Day' : 'Red Letter Countdown',
+    payload.card === 'day-of' ? 'Red Letter Day'
+      : payload.card === 'list' ? 'Red Letter List'
+        : 'Red Letter Countdown',
     'red-letter.card',
   )];
 }

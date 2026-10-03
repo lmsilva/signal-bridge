@@ -8731,6 +8731,7 @@
     const settings = data.settings || {};
     setSegmented('red-letter-push-selection', 'data-red-letter-push', settings.pushSelection || 'next');
     setSegmented('red-letter-schedule-selection', 'data-red-letter-schedule', settings.scheduleSelection || 'next');
+    setSegmented('red-letter-list-count', 'data-red-letter-count', String(settings.listCount || 3));
     const showTime = $('red-letter-show-time');
     if (showTime) showTime.checked = settings.showTime !== false;
 
@@ -8742,17 +8743,26 @@
       pill.textContent = total ? `${upcoming} upcoming` : 'Empty';
       pill.className = `status-pill ${upcoming ? 'is-ok' : ''}`;
     }
+    const listCount = Math.min(5, Math.max(1, Number(settings.listCount) || 3));
     const label = $('red-letter-preview-label');
     if (label) {
-      label.textContent = settings.pushSelection === 'random' ? 'A random pick' : 'The next one';
+      label.textContent = settings.pushSelection === 'random'
+        ? 'A random pick'
+        : settings.pushSelection === 'list'
+          ? `The next ${listCount}`
+          : 'The next one';
     }
     if (detail) {
       const today = Number(data.today || 0);
       const pushRandom = settings.pushSelection === 'random';
+      const pushList = settings.pushSelection === 'list';
       if (!total) {
         detail.textContent = 'Nothing in the Date Book yet. Add a birthday, an anniversary or a visit and the board will count down to it.';
       } else if (!data.nextUp) {
         detail.textContent = `${total} event${total === 1 ? '' : 's'} on file, none of them still ahead.`;
+      } else if (pushList) {
+        const shown = Math.min(listCount, upcoming);
+        detail.textContent = `${upcoming} upcoming. Push Now lists the next ${shown}, title and days, on one card.`;
       } else if (pushRandom) {
         detail.textContent = today
           ? `${today} event${today === 1 ? '' : 's'} today. Push Now picks at random from ${upcoming} upcoming.`
@@ -8817,6 +8827,11 @@
   $('red-letter-schedule-selection')?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-red-letter-schedule]');
     if (button) saveRedLetterSettings({ scheduleSelection: button.dataset.redLetterSchedule });
+  });
+
+  $('red-letter-list-count')?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-red-letter-count]');
+    if (button) saveRedLetterSettings({ listCount: Number(button.dataset.redLetterCount) });
   });
 
   $('red-letter-show-time')?.addEventListener('change', (event) => {
