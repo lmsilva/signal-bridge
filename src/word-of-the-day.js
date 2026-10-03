@@ -7,7 +7,7 @@
 
 const SHIPPED = require('./word-of-the-day-words.json');
 const { createWordOfTheDaySettings } = require('./word-of-the-day-settings');
-const { wordLines, fitsBoard } = require('./word-of-the-day-layout');
+const { wordLines, fitsBoard, posAdminLabel } = require('./word-of-the-day-layout');
 
 const TYPE = 'word.day';
 
@@ -31,7 +31,7 @@ function loadPartsOfSpeech() {
   if (Array.isArray(SHIPPED?.partsOfSpeech) && SHIPPED.partsOfSpeech.length) {
     return SHIPPED.partsOfSpeech.map((row) => ({
       id: String(row.id || '').trim(),
-      label: String(row.label || '').trim(),
+      label: posAdminLabel(row.id),
       count: Number(row.count) || 0,
     })).filter((row) => row.id);
   }
@@ -41,7 +41,7 @@ function loadPartsOfSpeech() {
   }
   return [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .map(([id, count]) => ({ id, label: id, count }));
+    .map(([id, count]) => ({ id, label: posAdminLabel(id), count }));
 }
 
 function allowedPos(settings = {}) {
