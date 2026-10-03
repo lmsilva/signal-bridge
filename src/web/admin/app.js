@@ -12105,8 +12105,10 @@
     }
     const words = Array.isArray(data.words) ? data.words : [];
     const current = select.value;
+    const parts = Array.isArray(data.partsOfSpeech) ? data.partsOfSpeech : (wordOfTheDayState.partsOfSpeech || []);
+    const posName = (pos, entry) => parts.find((row) => row.id === pos)?.label || entry.posLabel || entry.pos;
     select.innerHTML = words.map((entry) => {
-      const label = `${entry.word} · ${entry.posLabel || entry.pos}`;
+      const label = `${entry.word} · ${posName(entry.pos, entry)}`;
       return `<option value="${escapeHtml(entry.id)}">${escapeHtml(label)}</option>`;
     }).join('');
     if (current && [...select.options].some((option) => option.value === current)) {

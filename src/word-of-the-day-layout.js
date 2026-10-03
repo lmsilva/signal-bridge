@@ -36,6 +36,26 @@ const POS_LABELS = Object.freeze({
   other: 'OTHER',
 });
 
+/** Spelled-out names for the admin filter. The board keeps POS_LABELS. */
+const POS_ADMIN_LABELS = Object.freeze({
+  noun: 'Noun',
+  verb: 'Verb',
+  adj: 'Adjective',
+  adjective: 'Adjective',
+  adverb: 'Adverb',
+  adv: 'Adverb',
+  prep: 'Preposition',
+  preposition: 'Preposition',
+  conj: 'Conjunction',
+  conjunction: 'Conjunction',
+  pronoun: 'Pronoun',
+  pron: 'Pronoun',
+  interjection: 'Interjection',
+  interj: 'Interjection',
+  phrase: 'Phrase',
+  other: 'Other',
+});
+
 function cleanText(value) {
   return String(value || '')
     .replace(/<[^>]+>/g, ' ')
@@ -48,6 +68,11 @@ function cleanText(value) {
 function posLabel(pos) {
   const key = String(pos || '').trim().toLowerCase();
   return POS_LABELS[key] || POS_LABELS.other;
+}
+
+function posAdminLabel(pos) {
+  const key = String(pos || '').trim().toLowerCase();
+  return POS_ADMIN_LABELS[key] || POS_ADMIN_LABELS.other;
 }
 
 function withPeriod(text) {
@@ -151,8 +176,10 @@ module.exports = {
   TEXT_WIDTH,
   DEF_ROWS,
   POS_LABELS,
+  POS_ADMIN_LABELS,
   cleanText,
   posLabel,
+  posAdminLabel,
   withPeriod,
   wordHeadline,
   definitionLines,

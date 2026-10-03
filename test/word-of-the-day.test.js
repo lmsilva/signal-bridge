@@ -15,6 +15,7 @@ const {
   TEXT_WIDTH,
   DEF_ROWS,
   wordHeadline,
+  posAdminLabel,
   definitionLines,
   wordLines,
   wordRows,
@@ -153,6 +154,26 @@ test('headline and definition helpers match entry facts', () => {
   assert.equal(wordHeadline('oracy', 'noun'), 'ORACY, N.');
   assert.equal(definitionLines('The ability to express oneself in speech.').length, 3);
   assert.ok(wordLines('sympatric', 'adj', 'Occurring in the same geographical area.'));
+});
+
+test('admin part-of-speech names are spelled out and the board stays short', () => {
+  assert.equal(posAdminLabel('noun'), 'Noun');
+  assert.equal(posAdminLabel('verb'), 'Verb');
+  assert.equal(posAdminLabel('adj'), 'Adjective');
+  assert.equal(posAdminLabel('adverb'), 'Adverb');
+  assert.equal(posAdminLabel('prep'), 'Preposition');
+  assert.equal(posAdminLabel('conj'), 'Conjunction');
+  assert.equal(posAdminLabel('pronoun'), 'Pronoun');
+  assert.equal(posAdminLabel('interjection'), 'Interjection');
+  const labels = Object.fromEntries(loadPartsOfSpeech().map((row) => [row.id, row.label]));
+  assert.equal(labels.noun, 'Noun');
+  assert.equal(labels.adj, 'Adjective');
+  assert.equal(labels.adverb, 'Adverb');
+  assert.equal(labels.prep, 'Preposition');
+  assert.equal(labels.conj, 'Conjunction');
+  assert.equal(labels.pronoun, 'Pronoun');
+  assert.equal(labels.interjection, 'Interjection');
+  assert.equal(wordHeadline('oracy', 'noun'), 'ORACY, N.');
 });
 
 test('empty payload yields no frames', () => {

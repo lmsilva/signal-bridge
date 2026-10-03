@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-10-01 (Stock and crypto moves name their window)
+**Last updated:** 2026-10-02 (Word of the Day admin names each part of speech)
 
 ---
 
@@ -954,6 +954,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-10-02: **Word of the Day settings spell out each part of speech** — the filter and the word picker say Noun, Verb, Adjective, Adverb, Preposition, Conjunction, Pronoun, and Interjection. The Vestaboard headline stays short (`ORACY, N.`). Cache-bust `signal333`. Tests: `word-of-the-day`, `web-server`.
 - 2026-10-01: **Stock and crypto moves say which window they cover** — Settings → News picks Hour, Day, Week, or Month for both watchlists (default **Week**). The board title is `STOCKS WEEKLY` / `CRYPTO DAILY` (and so on), so the percent is no longer an unlabeled day change. Day is the prior close for stocks and 24h for coins; the other windows use Yahoo's chart and CoinGecko's 1h/7d/30d change. Cache-bust `signal332`. Tests: `stock-market`, `crypto-market`, `web-server`.
 - 2026-09-23: **Crypto Market, and stocks are no longer capped at 10** — `crypto.market` is a Vestaboard push + schedule sibling of Stock Market. Quotes are one CoinGecko `coins/markets` call (no API key); the default watchlist is the ten largest coins by market cap (BTC, ETH, USDT, BNB, XRP, USDC, SOL, TRX, ZEC, HYPE — Figure HELOC skipped). Settings → News edits the symbols and percent vs points. Stock Market keeps a default of 10 but no longer drops anything past that. Cache-bust `signal331`. Tests: `crypto-market`, `stock-market`, `command-registry`, `web-server`.
 - 2026-09-22: **Bible verses that trail off no longer ship** — Psalm 103:2 fit the four body rows but ended with a colon (`…AND FORGET NOT ALL HIS BENEFITS:`), so the card read as a cut-off quote. `fitsBoard` now also requires a finished sentence (`.!?`); 20 curated KJV rows that ended in `:` `;` `,` or `)` are dropped (322 → 302). A house add/edit of an unfinished verse is refused. Cache-bust `signal330`. Tests: `bible-verse-day`.

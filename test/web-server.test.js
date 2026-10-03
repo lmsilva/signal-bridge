@@ -1486,6 +1486,10 @@ test('word of the day push delivers an entry and settings can filter parts of sp
     assert.ok(listed.body.available >= 1200);
     assert.ok(listed.body.words.length >= 3);
     assert.ok(listed.body.words.every((entry) => entry.lines?.length === 6));
+    const posLabels = Object.fromEntries((listed.body.partsOfSpeech || []).map((row) => [row.id, row.label]));
+    assert.equal(posLabels.noun, 'Noun');
+    assert.equal(posLabels.adverb, 'Adverb');
+    assert.equal(posLabels.interjection, 'Interjection');
 
     const pushed = await postJson(base, '/api/push/word-of-the-day', { word: 'oracy' });
     assert.equal(pushed.status, 200);
@@ -3865,9 +3869,9 @@ test('the wide Settings cards span the grid and column up inside', () => {
   assert.match(js, /function schedTargetReachesBoard/);
   assert.match(js, /closingArtwork: schedClosingSnapshot\(\)/);
   assert.match(css, /\.sched-closing-detail \{/);
-  assert.match(html, /styles\.css\?v=signal332/);
+  assert.match(html, /styles\.css\?v=signal333/);
   assert.match(html, /settings-filter\.js\?v=signal307/);
-  assert.match(html, /app\.js\?v=signal332/);
+  assert.match(html, /app\.js\?v=signal333/);
   assert.match(html, /id="vb-house-dwell"/);
   assert.match(html, /id="btn-vb-house-priorities"/);
   assert.match(html, /id="btn-vb-house-dwell-save"/);
