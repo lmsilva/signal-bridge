@@ -248,10 +248,14 @@ test('delete during the FINAL hold keeps the finished match, not an abort row', 
 // ---------------------------------------------------------------------------
 // The rest of this file is written against the shape play.autodarts.io actually
 // puts on `autodarts.matches` / `<matchId>.state`: `player` for the thrower,
-// `gameScores` for the score as the turn began, `turns[0].throws` for the darts
-// in hand, and `winner` / `gameWinner` at -1 until someone takes it. The tidier
-// shape used above is a paraphrase, and writing the live tests against it is how
-// a board that only moved between legs passed every one of them.
+// `gameScores` for the score as the turn began, the open visit's `throws` for
+// the darts in hand, and `winner` / `gameWinner` at -1 until someone takes it.
+// A one-element `turns` array is that visit. Once the leg is underway the
+// array is the whole history, oldest first, and the open visit is the one
+// whose `finishedAt` is still empty or Go's zero time — reading `turns[0]`
+// freezes the wall on the first three darts. The tidier shape used above is
+// a paraphrase, and writing the live tests against it is how a board that
+// only moved between legs passed every one of them.
 // ---------------------------------------------------------------------------
 
 function boardThrow(name, bed, multiplier, number, x, y) {
@@ -513,4 +517,93 @@ test('a socket that goes quiet mid-match is topped up over HTTP', async () => {
 
   assert.equal(lastCard(sent).players[0].score, 440);
   assert.deepEqual(lastCard(sent).turn.darts.map((d) => (d ? d.seg : null)), ['T20', 'S1', null]);
+});
+
+test('a later visit is the one on the board, not the first turn of the leg', async () => {
+  const { live, sent } = harness();
+  await live.forceSeed('match-live');
+
+  // `turns` is the whole leg, oldest first. The first visit is already pulled;
+  // the open one (Go's zero time) is who is throwing now.
+  live.ingestEvent({
+    channel: 'autodarts.matches',
+    topic: 'match-live.state',
+    data: {
+      id: 'match-live',
+      variant: 'X01',
+      player: 0,
+      players: [
+        { index: 0, name: 'trashpanda', userId: 'u-1' },
+        { index: 1, name: 'war d', userId: 'u-2' },
+      ],
+      gameScores: [420, 501],
+      winner: -1,
+      turns: [
+        {
+          id: 'turn-a',
+          playerId: 'u-1',
+          finishedAt: '2026-10-10T19:36:40Z',
+          throws: [T20, S20, S20],
+          points: 81,
+          busted: false,
+        },
+        {
+          id: 'turn-b',
+          playerId: 'u-2',
+          finishedAt: '0001-01-01T00:00:00Z',
+          throws: [T20],
+          points: 60,
+          busted: false,
+        },
+      ],
+    },
+  });
+
+  const card = lastCard(sent);
+  assert.equal(card.currentPlayerIndex, 1);
+  assert.equal(card.players[0].score, 420);
+  assert.equal(card.players[1].score, 441);
+  assert.deepEqual(card.turn.darts.map((dart) => (dart ? dart.seg : null)), ['T20', null, null]);
+  assert.equal(card.turn.points, 60);
+});
+
+test('the open turn names the thrower when the state never moves player', async () => {
+  const { live, sent } = harness();
+  await live.forceSeed('match-live');
+
+  live.ingestEvent({
+    channel: 'autodarts.matches',
+    topic: 'match-live.state',
+    data: {
+      id: 'match-live',
+      variant: 'X01',
+      players: [
+        { index: 0, name: 'trashpanda', userId: 'u-1' },
+        { index: 1, name: 'TOMMY', userId: 'u-2' },
+      ],
+      gameScores: [340, 501],
+      winner: -1,
+      turns: [
+        {
+          id: 'turn-a',
+          playerId: 'u-1',
+          finishedAt: '2026-10-10T19:37:10Z',
+          throws: [T20, T20, T20],
+          points: 180,
+        },
+        {
+          id: 'turn-b',
+          playerId: 'u-2',
+          throws: [S20, S1],
+          points: 21,
+        },
+      ],
+    },
+  });
+
+  const card = lastCard(sent);
+  assert.equal(card.currentPlayerIndex, 1);
+  assert.equal(card.players[1].score, 480);
+  assert.equal(card.players[0].score, 340);
+  assert.deepEqual(card.turn.darts.map((dart) => (dart ? dart.seg : null)), ['S20', 'S1', null]);
 });

@@ -97,9 +97,124 @@ function winnerNameFrom(state = {}, players = []) {
   return String(raw);
 }
 
-function playerIndexFrom(state = {}) {
-  const playerRaw = state.player ?? state.currentPlayerIndex ?? state.throwingPlayer ?? 0;
-  return Number.isFinite(Number(playerRaw)) ? Number(playerRaw) : 0;
+/** Go's zero time. Autodarts leaves this on the visit that is still at the board. */
+const OPEN_TURN_EPOCH = '0001-01-01';
+
+function explicitPlayerIndex(state = {}) {
+  const playerRaw = state.player ?? state.currentPlayerIndex ?? state.throwingPlayer;
+  if (playerRaw && typeof playerRaw === 'object') {
+    const index = Number(playerRaw.index);
+    return Number.isInteger(index) && index >= 0 ? index : null;
+  }
+  if (playerRaw == null || playerRaw === '') return null;
+  const index = Number(playerRaw);
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
+
+function turnPlayerId(turn) {
+  if (!turn || typeof turn !== 'object') return null;
+  if (turn.playerId || turn.userId) return String(turn.playerId || turn.userId);
+  if (turn.player && typeof turn.player === 'object') {
+    const id = turn.player.id || turn.player.userId || turn.player.playerId;
+    return id ? String(id) : null;
+  }
+  return null;
+}
+
+function rosterPlayerId(row) {
+  if (!row || typeof row !== 'object') return null;
+  const id = row.userId || row.playerId || row.id || row.player?.id;
+  return id ? String(id) : null;
+}
+
+function indexForTurn(turn, roster) {
+  if (!turn || typeof turn !== 'object') return null;
+  const id = turnPlayerId(turn);
+  if (id && Array.isArray(roster)) {
+    const index = roster.findIndex((row) => rosterPlayerId(row) === id);
+    if (index >= 0) return index;
+  }
+  const direct = Number(turn.playerIndex);
+  if (Number.isInteger(direct) && direct >= 0) return direct;
+  if (typeof turn.player === 'number' && Number.isInteger(turn.player) && turn.player >= 0) {
+    return turn.player;
+  }
+  return null;
+}
+
+function turnBelongsTo(turn, playerIndex, roster) {
+  const id = turnPlayerId(turn);
+  if (!id || !Array.isArray(roster)) return false;
+  return rosterPlayerId(roster[playerIndex]) === id;
+}
+
+function isOpenTurn(turn) {
+  if (!turn || typeof turn !== 'object') return false;
+  if (turn.finishedAt == null || turn.finishedAt === '') return true;
+  return String(turn.finishedAt).trim().toLowerCase().startsWith(OPEN_TURN_EPOCH);
+}
+
+function compareTurns(a, b) {
+  const rank = (turn) => {
+    const round = Number(turn?.round);
+    const index = Number(turn?.turn ?? turn?.turnIndex);
+    const created = Date.parse(turn?.createdAt || '');
+    return [
+      Number.isFinite(round) ? round : -1,
+      Number.isFinite(index) ? index : -1,
+      Number.isFinite(created) ? created : 0,
+    ];
+  };
+  const left = rank(a);
+  const right = rank(b);
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) return left[i] - right[i];
+  }
+  return 0;
+}
+
+/** Newest visit. Equal rank keeps the later entry (history is oldest-first). */
+function newestTurn(turns) {
+  return turns.reduce((best, turn) => (compareTurns(turn, best) >= 0 ? turn : best));
+}
+
+/**
+ * The visit in hand. `turns` is the whole leg, oldest first, and the open
+ * one is the throw that has not been pulled yet — `turns[0]` is only that
+ * visit at the start of the leg. A payload that still sends a single turn
+ * keeps working, because that turn is the open one.
+ */
+function selectCurrentTurn(turns, playerIndex, roster) {
+  const list = (Array.isArray(turns) ? turns : []).filter((row) => row && typeof row === 'object');
+  if (!list.length) return null;
+  const open = list.filter(isOpenTurn);
+  const pool = open.length ? open : list;
+  if (Number.isInteger(playerIndex) && playerIndex >= 0) {
+    const mine = pool.filter((turn) => turnBelongsTo(turn, playerIndex, roster));
+    if (mine.length) return newestTurn(mine);
+  }
+  return newestTurn(pool);
+}
+
+function rawTurnFromState(state = {}) {
+  if (Array.isArray(state.turns) && state.turns.length) {
+    return selectCurrentTurn(state.turns, explicitPlayerIndex(state), state.players) || {};
+  }
+  if (state.turn && typeof state.turn === 'object') return state.turn;
+  if (Array.isArray(state.throws)) return { throws: state.throws, points: state.points, busted: state.busted };
+  return {};
+}
+
+function playerIndexFrom(state = {}, turn = null) {
+  const explicit = explicitPlayerIndex(state);
+  // A named open turn wins over a `player` index that has not moved yet.
+  // A turn that does not name anyone (the older single-turn payload) leaves
+  // that index alone.
+  const fromTurn = turnPlayerId(turn) ? indexForTurn(turn, state.players) : null;
+  if (fromTurn != null && fromTurn !== explicit) return fromTurn;
+  if (explicit != null) return explicit;
+  const fallback = indexForTurn(turn, state.players);
+  return fallback != null ? fallback : 0;
 }
 
 /**
@@ -170,10 +285,7 @@ function mapTurn(raw = {}) {
 }
 
 function turnFromState(state = {}) {
-  if (Array.isArray(state.turns) && state.turns.length) return mapTurn(state.turns[0] || {});
-  if (state.turn && typeof state.turn === 'object') return mapTurn(state.turn);
-  if (Array.isArray(state.throws)) return mapTurn({ throws: state.throws, points: state.points });
-  return mapTurn({});
+  return mapTurn(rawTurnFromState(state));
 }
 
 function matchIsFinished(state = {}) {
@@ -277,8 +389,9 @@ function matchFromState(matchId, state = {}, meta = {}, revision = 0) {
     ...(meta.settings || {}),
     ...(state.settings || {}),
   };
-  const currentPlayerIndex = playerIndexFrom(state);
-  const turn = turnFromState(state);
+  const rawTurn = rawTurnFromState(state);
+  const currentPlayerIndex = playerIndexFrom(state, rawTurn);
+  const turn = mapTurn(rawTurn);
   const players = mapPlayers(state, meta, turn, currentPlayerIndex);
   const startedAt = meta.startedAt || meta.createdAt || state.startedAt || state.createdAt || null;
   let durationSec = Number(state.durationSec ?? state.duration ?? meta.durationSec ?? 0) || 0;

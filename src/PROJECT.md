@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-10-03 (Red Letter can list the next few events)
+**Last updated:** 2026-10-10 (Autodarts follows the open visit)
 
 ---
 
@@ -315,7 +315,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/autodarts-aggregates.js` | `data/autodarts-players.json` — weighted X01 avg, ranking, rivalry, records |
 | `src/autodarts-history.js` | Cloud Match History sync (`GET /as/v0/matches/filter` + throttled per-match stats); scheduled sync = 3 recent pages after 10m boot delay; manual sync cooldown; local archive is offline cache |
 | `src/autodarts-payload.js` | UDP `autodarts.match` / `.close` / `.dashboard` builders |
-| `src/autodarts-live.js` | WS supervisor via `play.ws.autodarts.com` + `ws` package: board match → auto-push on every dart (remaining = `gameScores` minus in-hand points; same turn id = correction), interrupt-resume, inactivity, FINAL only when `winner` is set (a GameShot is a won leg), archive; HTTP state refresh every 20s if the socket goes quiet; board-state poll **only when WS is down** (60s) |
+| `src/autodarts-live.js` | WS supervisor via `play.ws.autodarts.com` + `ws` package: board match → auto-push on every dart (remaining = `gameScores` minus the **open** visit's points; `turns` is the whole leg, oldest first, and the visit in hand is the one not yet pulled — `turns[0]` only at the start). Same turn id = correction. Interrupt-resume, inactivity, FINAL only when `winner` is set (a GameShot is a won leg), archive; HTTP state refresh every 20s if the socket goes quiet; board-state poll **only when WS is down** (60s) |
 | `src/autodarts-service.js` | Facade for Settings card, Test/board picker, push helpers |
 | `src/huupe-parser.js` | Pure logcat parsers for the Huupe Mini — HAL shot JSON, Unity Family Mode lines, **Countdown `HuupeCountdown` JSON** (`start`/`shot`/`fix`/`retake`/`end`), activity focus, sensor errors; shot dedupe + **PII redaction** (the launcher logs profile email, password hash and Stripe id in the clear) |
 | `src/huupe-adb.js` | Bridge-side ADB collector: finds `adb`, connects, identifies the hoop via `getprop`, streams `logcat`, retries with backoff. Heartbeats the live stream every 30s (`adb shell echo`) because a sleeping hoop drops the connection without closing it, and logcat silence is normal. **Does not sweep the LAN on a cold start** — discovery is an explicit Settings action; `autoDiscover` is only the recovery path when a known host stops answering |
@@ -954,6 +954,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-10-10: **Autodarts follows the visit in hand** — start, the roster and the winner were reaching the wall, and the score and the thrower were not. `turns` on a live match is the whole leg, oldest first, so reading `turns[0]` kept the first three darts up for the rest of the game and never moved `player` when that field lagged. The open visit is the one Autodarts has not closed (`finishedAt` empty or Go's zero time); its `playerId` is who is at the oche, and remaining is still `gameScores` minus the points in that hand. The Vestaboard live card is that scoreboard (green chip on the thrower, darts in hand) instead of a static GAME ON page that only changed when somebody won. Tests: `autodarts-live`, `vestaboard-gaming`.
 - 2026-10-03: **Red Letter can list the next few events** — Push Now and On a schedule gain **The next few**, with a count locked to 1–5 (default 3). That card is one `COUNTDOWN TO` header plus up to five title-and-days lines (`DADDY BIRTHDAY      4D`), centred when there are fewer than five. A title that will not fit beside the days ends in `..` (`LILY'S BABY SHO.. 300D`). The single next/random cards are unchanged. Cache-bust `signal334`. Tests: `red-letter`, `web-server`.
 - 2026-10-02: **Word of the Day settings spell out each part of speech** — the filter and the word picker say Noun, Verb, Adjective, Adverb, Preposition, Conjunction, Pronoun, and Interjection. The Vestaboard headline stays short (`ORACY, N.`). Cache-bust `signal333`. Tests: `word-of-the-day`, `web-server`.
 - 2026-10-01: **Stock and crypto moves say which window they cover** — Settings → News picks Hour, Day, Week, or Month for both watchlists (default **Week**). The board title is `STOCKS WEEKLY` / `CRYPTO DAILY` (and so on), so the percent is no longer an unlabeled day change. Day is the prior close for stocks and 24h for coins; the other windows use Yahoo's chart and CoinGecko's 1h/7d/30d change. Cache-bust `signal332`. Tests: `stock-market`, `crypto-market`, `web-server`.

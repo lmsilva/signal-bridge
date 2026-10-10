@@ -154,6 +154,36 @@ test('an autodarts start names the mode, the pairing and the race', () => {
   ], 'autodarts start');
 });
 
+test('an autodarts leg shows the remaining, the thrower and the darts in hand', () => {
+  const frames = gaming.autodartsMatchFrames({
+    type: 'autodarts.match',
+    match: {
+      status: 'live',
+      variant: 'X01',
+      settingsLine: '501 · Straight-Double · First to 3 legs',
+      currentPlayerIndex: 1,
+      turn: {
+        points: 60,
+        busted: false,
+        darts: [{ seg: 'T20' }, null, null],
+      },
+      players: [
+        { name: 'trashpanda', score: 420, legs: 1 },
+        { name: 'Tommy', score: 441, legs: 0 },
+      ],
+    },
+  });
+
+  assertLayout(frames[0].rows, [
+    'gg    AUTODARTS     gg',
+    ' TRASHPANDA    420 L1',
+    'gTOMMY         441 L0',
+    ' T20 -- --',
+    ' FIRST TO 3',
+    'gg       LIVE       gg',
+  ], 'autodarts live score');
+});
+
 test('an autodarts finish flanks the winner and reads isWinner, not match.winner', () => {
   const frames = gaming.autodartsMatchFrames({
     type: 'autodarts.match',

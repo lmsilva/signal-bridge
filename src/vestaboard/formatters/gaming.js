@@ -180,6 +180,38 @@ function parseSettingsLine(line) {
   };
 }
 
+function playerScoreRow(player, active, showLegs) {
+  const score = formatWhole(toNumber(player.score) ?? 0);
+  const legs = toNumber(player.legs) ?? 0;
+  const right = showLegs ? `${score} L${formatWhole(legs)}` : score;
+  const nameWidth = Math.max(1, BODY_WIDTH - right.length - 1);
+  const row = lr(fitName(player.name, nameWidth), right);
+  if (active) row[0] = chipCode('green');
+  return row;
+}
+
+function dartLine(turn) {
+  const darts = Array.isArray(turn?.darts) ? turn.darts.slice(0, 3) : [];
+  if (!darts.some((dart) => dart && (dart.seg || dart.name))) return '';
+  while (darts.length < 3) darts.push(null);
+  return darts.map((dart) => fold(dart?.seg || dart?.name || '') || '--').join(' ');
+}
+
+/** Remaining, the thrower, and the darts in hand — the board follows the leg. */
+function autodartsLiveRows(match, players, settings) {
+  const thrower = Number(match.currentPlayerIndex);
+  const shown = players.slice(0, 4);
+  const showLegs = shown.some((player) => (toNumber(player.legs) ?? 0) > 0);
+  const rows = shown.map((player, index) => playerScoreRow(player, index === thrower, showLegs));
+  if (rows.length >= 4) return rows;
+  const darts = dartLine(match.turn);
+  if (darts) rows.push(darts);
+  if (rows.length >= 4) return rows;
+  if (settings.legs) rows.push(`FIRST TO ${settings.legs}`);
+  else if (settings.score) rows.push(String(settings.score));
+  return rows;
+}
+
 function winnerRow(name) {
   const folded = fitName(name);
   const text = `${folded} WINS`;
@@ -209,18 +241,20 @@ function autodartsMatchFrames(payload = {}) {
   const names = players.map((player) => fitName(player.name));
 
   if (!finished) {
-    const versus = names.length === 1
-      ? names[0]
-      : `${names[0]} VS ${names[1]}`;
+    const scored = players.some((player) => Number.isFinite(Number(player.score)));
     const rows = badgeFrame({
       color: 'green',
       title: 'AUTODARTS',
-      rows: padRows([
-        settings.score ? `GAME ON - ${settings.score}` : 'GAME ON',
-        versus,
-        settings.legs ? `FIRST TO ${settings.legs} LEGS` : fold(match.variant),
-      ].filter(Boolean)),
-      footerLeft: 'THROW SHARP',
+      rows: padRows(scored
+        ? autodartsLiveRows(match, players, settings)
+        : [
+          settings.score ? `GAME ON - ${settings.score}` : 'GAME ON',
+          names.length === 1 ? names[0] : `${names[0]} VS ${names[1]}`,
+          settings.legs ? `FIRST TO ${settings.legs} LEGS` : fold(match.variant),
+        ].filter(Boolean)),
+      footerLeft: scored
+        ? (match.turn?.busted ? 'BUST' : 'LIVE')
+        : 'THROW SHARP',
     });
     return [snapshotFrame(rows, 'Autodarts live', 'autodarts.match')];
   }
