@@ -137,13 +137,19 @@ function normalizeAlarmNotification(notification, deviceNameMap = {}, options = 
   const remainingSec = parseAlarmRemainingSeconds(notification, timeZone);
   const serial = notification.deviceSerialNumber || null;
 
+  const fireAt = triggerMs != null ? new Date(triggerMs).toISOString() : null;
+
   return {
     amazonId,
     deviceSerialNumber: serial,
     device: deviceNameMap[serial] || notification.deviceName || serial || 'unknown-device',
     label: notification.alarmLabel || notification.reminderLabel || null,
     status: notification.status || 'ON',
-    triggerTime: triggerMs != null ? new Date(triggerMs).toISOString() : null,
+    triggerTime: fireAt,
+    // diffTimerSnapshots only treats a disappearance as a fire when `fireAt`
+    // is set. Alarms used to store the instant on `triggerTime` alone, so a
+    // wake alarm that went off was logged as an empty list.
+    fireAt,
     remainingSec,
     recurrence: notification.recurringPattern || notification.recurrence || null,
     alarmType: notification.type === 'MusicAlarm' ? 'music' : 'standard',
@@ -193,7 +199,7 @@ function pickPrimaryAlarmEvent(events, trigger) {
     return { kind: 'list' };
   }
 
-  const priority = ['started', 'cancelled'];
+  const priority = ['fired', 'started', 'cancelled'];
   for (const kind of priority) {
     const match = events.find((entry) => entry.kind === kind);
     if (match) {
@@ -213,7 +219,9 @@ function isImmediateUserAlarmTrigger(trigger) {
 }
 
 function shouldEmitAlarmSnapshot(events, trigger) {
-  const notifyEvents = (events || []).filter((entry) => ['started', 'cancelled'].includes(entry.kind));
+  const notifyEvents = (events || []).filter((entry) => (
+    ['started', 'cancelled', 'fired'].includes(entry.kind)
+  ));
   if (notifyEvents.length > 0) {
     return true;
   }
@@ -231,6 +239,58 @@ function listActiveAlarms(alarmMap) {
       }
       return String(a.device || '').localeCompare(String(b.device || ''));
     });
+}
+
+// A stop a few seconds before the bell is still the bell (clock skew). A
+// row that drops any time in the next hour is the alarm ringing out, not a
+// cancel — Echo alarms keep ringing, and the "still going off" announcement
+// lands well after the scheduled minute. Cancelling earlier stays a cancel.
+const FIRE_EARLY_MS = 45 * 1000;
+const FIRE_LATE_MS = 60 * 60 * 1000;
+
+function alarmFireAtMs(alarm) {
+  const raw = alarm?.fireAt || alarm?.triggerTime;
+  const ms = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function withinAlarmFireWindow(fireAt, now) {
+  return fireAt != null && now >= fireAt - FIRE_EARLY_MS && now <= fireAt + FIRE_LATE_MS;
+}
+
+function reclassifyAlarmEvents(events, now = Date.now()) {
+  return (events || []).map((entry) => {
+    if (!entry || !['removed', 'cancelled', 'fired'].includes(entry.kind)) {
+      return entry;
+    }
+    const fireAt = alarmFireAtMs(entry.timer || entry.alarm);
+    if (!withinAlarmFireWindow(fireAt, now) || entry.kind === 'fired') {
+      return entry;
+    }
+    return { ...entry, kind: 'fired' };
+  });
+}
+
+// A daily alarm keeps its id and jumps triggerTime to tomorrow. That is a
+// fire of the occurrence that just passed, not a silent edit.
+function recurringAlarmFires(previousAlarms, currentAlarms, now = Date.now()) {
+  const events = [];
+  for (const [amazonId, previous] of Object.entries(previousAlarms || {})) {
+    const current = currentAlarms?.[amazonId];
+    if (!current) {
+      continue;
+    }
+    const prevAt = alarmFireAtMs(previous);
+    const nextAt = alarmFireAtMs(current);
+    if (prevAt == null || nextAt == null || nextAt <= prevAt + 60 * 1000) {
+      continue;
+    }
+    if (!withinAlarmFireWindow(prevAt, now)) {
+      continue;
+    }
+    events.push({ kind: 'fired', amazonId, timer: previous });
+  }
+  return events;
 }
 
 function pickHighlightAmazonId(_activeAlarms, event, trigger) {
@@ -262,6 +322,7 @@ function createAlarmSync({
 
   let mirror = loadMirror(mirrorPath);
   let pollTimer = null;
+  let wakeTimers = new Map();
   let pollInFlight = false;
   let immediatePollRequested = false;
 
@@ -289,9 +350,12 @@ function createAlarmSync({
     const previousAlarms = mirror.alarms;
     const prevActiveCount = listActiveAlarms(previousAlarms).length;
 
-    const events = diffTimerSnapshots(previousAlarms, currentMap, {
-      fireVerifySlackMs: settings.fireVerifySlackMs || 30000,
-    });
+    const events = [
+      ...reclassifyAlarmEvents(diffTimerSnapshots(previousAlarms, currentMap, {
+        fireVerifySlackMs: settings.fireVerifySlackMs || 90000,
+      })),
+      ...recurringAlarmFires(previousAlarms, currentMap),
+    ];
 
     const hasRemoval = events.some(
       (entry) => entry.kind === 'cancelled' || entry.kind === 'removed',
@@ -308,14 +372,17 @@ function createAlarmSync({
     const gainedAlarms = activeAlarms.length > prevActiveCount;
     const lostAlarms = activeAlarms.length < prevActiveCount;
     const shouldEmit = shouldEmitAlarmSnapshot(events, trigger) || gainedAlarms || lostAlarms;
+    const hasFired = notifyEvents.some((entry) => entry.kind === 'fired');
 
     if (!shouldEmit) {
+      rescheduleWakeTimers();
       return;
     }
 
     const hasCancel = notifyEvents.some((entry) => entry.kind === 'cancelled');
     const isExplicitShow = trigger === 'show-alarms';
-    if (!activeAlarms.length && !hasCancel && !lostAlarms && !isExplicitShow) {
+    if (!activeAlarms.length && !hasFired && !hasCancel && !lostAlarms && !isExplicitShow) {
+      rescheduleWakeTimers();
       return;
     }
 
@@ -331,6 +398,7 @@ function createAlarmSync({
       ? { ...event, alarm: event.timer }
       : event;
 
+    rescheduleWakeTimers();
     emitSnapshot({
       trigger,
       device: mappedEvent?.alarm?.device || device,
@@ -341,6 +409,37 @@ function createAlarmSync({
       // belongs to the whole house, so it carries no target.
       targetId: trigger === 'show-alarms' ? (options.targetId || null) : null,
     });
+  }
+
+  function clearWakeTimer(amazonId) {
+    const handle = wakeTimers.get(amazonId);
+    if (handle) {
+      clearTimeout(handle);
+      wakeTimers.delete(amazonId);
+    }
+  }
+
+  function scheduleWakeTimer(alarm) {
+    clearWakeTimer(alarm.amazonId);
+    if (!isActiveAlarm(alarm) || alarm.remainingSec == null || alarm.remainingSec <= 0) {
+      return;
+    }
+    const delayMs = Math.max(1000, alarm.remainingSec * 1000);
+    const handle = setTimeout(() => {
+      wakeTimers.delete(alarm.amazonId);
+      pollNotifications('fire-verify');
+    }, delayMs);
+    wakeTimers.set(alarm.amazonId, handle);
+  }
+
+  function rescheduleWakeTimers() {
+    for (const handle of wakeTimers.values()) {
+      clearTimeout(handle);
+    }
+    wakeTimers.clear();
+    for (const alarm of listActiveAlarms(mirror.alarms)) {
+      scheduleWakeTimer(alarm);
+    }
   }
 
   function pollNotifications(reason = 'scheduled', device = null, options = {}) {
@@ -417,6 +516,7 @@ function createAlarmSync({
       activeAlarms: listActiveAlarms(mirror.alarms).length,
     });
 
+    rescheduleWakeTimers();
     pollNotifications('startup');
     pollTimer = setInterval(() => pollNotifications('scheduled'), settings.pollIntervalMs);
   }
@@ -426,6 +526,10 @@ function createAlarmSync({
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    for (const handle of wakeTimers.values()) {
+      clearTimeout(handle);
+    }
+    wakeTimers.clear();
   }
 
   return {
@@ -447,5 +551,7 @@ module.exports = {
   isActiveAlarm,
   listActiveAlarms,
   shouldEmitAlarmSnapshot,
+  reclassifyAlarmEvents,
+  recurringAlarmFires,
   DEFAULTS,
 };

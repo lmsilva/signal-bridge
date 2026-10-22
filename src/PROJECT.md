@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-10-10 (Autodarts follows the open visit)
+**Last updated:** 2026-10-22 (Alarm fires reach the Vestaboard)
 
 ---
 
@@ -109,7 +109,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/udp-payload.js` | Build typed UDP payloads (broadcast, time, weather, indoor temperature, timer, reminder, `qr.display`, `guest.photobooth`, `input.text`, `photo.slideshow`, `route-planner.query`) |
 | `src/voice-query-parser.js` | Detect time/weather/indoor temperature/timer/reminder/music/route/guest-photobooth/trivia/library-tour/platform-now-playing voice queries from history |
 | `src/voice-event-dedup.js` | Suppress re-displays: activity-id + 2-min window, 30-min instants, content keys for vivint/notifications; **smart-home** keys on device+action+target so Amazon’s delayed `lights on` fragment does not replay |
-| `src/event-routing.js` / `src/event-routing-settings.js` | **Event routing** — which automated UDP families may fan out where. Each family has one or more **routes** (`destinations` + week-grid `slots`; empty slots = any hour). Matching routes at send time union their targets; none match → skip. Legacy v1 `windows` migrate to slots. Manual Push / Scheduler bypass. `data/event-routing-settings.json`; Settings → Global compact list + editor sheet |
+| `src/event-routing.js` / `src/event-routing-settings.js` | **Event routing** — which automated UDP families may fan out where. Each family has one or more **routes** (`destinations` + week-grid `slots`; empty slots = any hour). Matching routes at send time union their targets; none match → skip. Legacy v1 `windows` migrate to slots. Manual Push / Scheduler bypass. A **fire** (`alarm.snapshot` / `timer.snapshot` with `event.kind: fired`, or `reminder.fired`) whose route is Software (`full`) also reaches Vestaboards; lists stay on the software route. `data/event-routing-settings.json`; Settings → Global compact list + editor sheet |
 | `src/public-url.js` | **Public base URL** — live-reload `data/public-url-settings.json` (not `config.json`). Getter re-reads; `applyToConfig` copies onto `config.web.publicBaseUrl`. `publicUrl(path)` joins origin + path with no trailing slash unless `path` supplies one. Precedence: `web.publicBaseUrl` → `GUEST_PHOTOBOOTH_URL` → file booth URL → LAN default. Rejects a LAN IP as a short-link target (`isUsableShortLinkOrigin`) |
 | `src/tinyurl-credentials.js` | TinyURL API token — one store, optional per-scope overrides (`guestbook`, `guestsnaps`, `games`). Ladder: scope env `TINYURL_API_TOKEN_GAMES` → saved `overrides[scope]` → global env `TINYURL_API_TOKEN` → saved `token`. File `{ token, overrides, updatedAt }` is backward compatible. Settings → Global owns the shared token; feature cards may store an override. Env wins (**409**) |
 | `src/guest-book-settings.js` | Guest Book settings in `data/guest-book-settings.json`: enable/pause, preferred alias, who-can-send, scrypt password, `rateLimitEnabled` plus rates, blocked words, approval, invite footer, guests-may-wake. Password hash is never returned |
@@ -265,7 +265,7 @@ Echo / Alexa app  →  Amazon cloud  →  alexa-remote2 (this bridge)
 | `src/learn-japanese-words.json` | Shipped JLPT N5+N4 romaji lexicon (~1240 words) converted from OpenJLPT / JMDict. Rebuild with `tools/build-learn-japanese-words.js` |
 | `tools/build-learn-japanese-words.js` | Kana→Hepburn romaji + POS inference for OpenJLPT vocab JSON |
 | `src/timer-sync.js` | Poll Amazon notifications API; mirror active timers; fire verify. `requestImmediatePoll(reason, device, { actor, targetId })` — the chosen display rides to `onSnapshot` alongside the actor, but **only** on the explicit `show-timers` trigger; a firing timer is unsolicited and stays house-wide |
-| `src/alarm-sync.js` | Poll Amazon notifications API; mirror active wake alarms (`Alarm`/`MusicAlarm`). Same `targetId` passthrough as timers, gated on `show-alarms` |
+| `src/alarm-sync.js` | Poll Amazon notifications API; mirror active wake alarms (`Alarm`/`MusicAlarm`). Stores `fireAt` (same instant as `triggerTime`) and wakes a poll at the bell. A row that drops from 45s before the bell through the next hour, or a recurring alarm whose trigger rolls forward, is `event.kind: fired` — not an empty list. Same `targetId` passthrough as timers, gated on `show-alarms`; a firing alarm stays house-wide |
 | `src/reminder-sync.js` | Poll Amazon notifications API; mirror active `Reminder` rows; wake at fire time; UDP `reminder.fired` |
 | `src/alexa-alarms.js` | Detect show/set/cancel wake-alarm voice commands (distinct from Vivint security) |
 | `src/alexa-reminders.js` | Detect reminder set/cancel/fire from ASR + TTS (`I'll remind you to…` / `Here's your reminder`) |
@@ -647,7 +647,7 @@ All payloads include `version: 2` and a `type` field. **Broadcast payloads keep 
 | `tesla-battery.query` | "Show tesla battery" — `battery` object from Fleet API or speech fallback |
 | `tesla-dashboard.query` | "Show Tesla dashboard" — `dashboard` object from Fleet API (`vehicle_data` + `location_data`) |
 | `request.processing` | Instant ack for slow external-API commands (Tesla) when **no cache exists** — `request.{title,source,timeoutSeconds,stages[]}`; when a cached snapshot exists the bridge sends it instead, flagged `stale+refreshing`. Either is replaced by the real payload when the fetch completes |
-| `alarm.snapshot` | Wake alarms list / newly set alarm highlight |
+| `alarm.snapshot` | Wake alarms list / newly set alarm highlight. `event.kind: fired` is the bell (including an alarm that kept ringing until Alexa announced it on the other Echos). Quiet hours let `alarm.fired` through |
 | `web.open` | Control page pushes a URL — `web.{url,errorDisplaySeconds}`, `persistent: true`; client opens it in a WebView2 overlay that stays until `web.close` |
 | `web.close` | Control page "Close Browser" — client kills the WebView2 overlay |
 | `system.command` | Control page Remote tab — `system.action` = `reboot` \| `poweroff`; client runs Windows `shutdown` |
@@ -954,6 +954,7 @@ QR scanning (reading a code with the phone) is client-side: `<input type="file" 
 
 ## Recent changes
 
+- 2026-10-22: **Alarm fires were empty lists, and fires never reached the Vestaboard** — a wake alarm only stored `triggerTime`, so when it went off `diffTimerSnapshots` called the disappearance `removed` and the snapshot was `event.kind: list` with no alarms (Bedroom Echo 7:00am, 2026-10-22). Alarms now keep `fireAt`, poll at the bell, and treat a drop in the following hour (or a recurring roll to the next day) as `fired`. A Software-only route (`full`) used to skip Vestaboards for these families; a fire now also goes to the boards, and lists stay on software. The Echo "still going off" announcement is not in voice history — the fire card is that event. Tests: `alarm-sync`, `event-routing`.
 - 2026-10-10: **Autodarts follows the visit in hand** — start, the roster and the winner were reaching the wall, and the score and the thrower were not. `turns` on a live match is the whole leg, oldest first, so reading `turns[0]` kept the first three darts up for the rest of the game and never moved `player` when that field lagged. The open visit is the one Autodarts has not closed (`finishedAt` empty or Go's zero time); its `playerId` is who is at the oche, and remaining is still `gameScores` minus the points in that hand. The Vestaboard live card is that scoreboard (green chip on the thrower, darts in hand) instead of a static GAME ON page that only changed when somebody won. Tests: `autodarts-live`, `vestaboard-gaming`.
 - 2026-10-03: **Red Letter can list the next few events** — Push Now and On a schedule gain **The next few**, with a count locked to 1–5 (default 3). That card is one `COUNTDOWN TO` header plus up to five title-and-days lines (`DADDY BIRTHDAY      4D`), centred when there are fewer than five. A title that will not fit beside the days ends in `..` (`LILY'S BABY SHO.. 300D`). The single next/random cards are unchanged. Cache-bust `signal334`. Tests: `red-letter`, `web-server`.
 - 2026-10-02: **Word of the Day settings spell out each part of speech** — the filter and the word picker say Noun, Verb, Adjective, Adverb, Preposition, Conjunction, Pronoun, and Interjection. The Vestaboard headline stays short (`ORACY, N.`). Cache-bust `signal333`. Tests: `word-of-the-day`, `web-server`.

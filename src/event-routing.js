@@ -14,9 +14,9 @@
 'use strict';
 
 const FAMILIES = Object.freeze([
-  { id: 'alexa.alarms', label: 'Alarms', blurb: 'Wake alarms from Alexa' },
-  { id: 'alexa.timers', label: 'Timers', blurb: 'Kitchen and reminder timers' },
-  { id: 'alexa.reminders', label: 'Reminders', blurb: 'Alexa reminder fires' },
+  { id: 'alexa.alarms', label: 'Alarms', blurb: 'Wake alarms from Alexa. When this route is Software only, an alarm that goes off still reaches Vestaboards.' },
+  { id: 'alexa.timers', label: 'Timers', blurb: 'Kitchen and reminder timers. When this route is Software only, a timer that goes off still reaches Vestaboards.' },
+  { id: 'alexa.reminders', label: 'Reminders', blurb: 'Alexa reminder fires. When this route is Software only, a reminder that goes off still reaches Vestaboards.' },
   { id: 'alexa.broadcast', label: 'Broadcasts', blurb: 'Alexa announce / broadcast messages' },
   { id: 'alexa.smarthome', label: 'Alexa Smarthome', blurb: 'Turn lights, plugs, and other devices on or off' },
   { id: 'alexa.music', label: 'Alexa music', blurb: 'Now Playing cards from Echo speakers' },
@@ -397,7 +397,43 @@ function resolveRoute(payload, options = {}, settings, ctx = {}) {
       targets: [],
     };
   }
-  return { skip: false, family, targets, destinations: targets };
+  return includeBoardsForFire(
+    { skip: false, family, targets, destinations: targets },
+    payload,
+  );
+}
+
+function isUnsolicitedFire(payload) {
+  const type = String(payload?.type || '');
+  if (type === 'reminder.fired' || type === 'alarm.fired' || type === 'timer.fired') {
+    return true;
+  }
+  if (type !== 'alarm.snapshot' && type !== 'timer.snapshot') {
+    return false;
+  }
+  return payload?.event?.kind === 'fired';
+}
+
+// Software-only routes keep alarm/timer *lists* off the flaps. The fire
+// itself is the alert the board priorities already jump for, including the
+// Echo announcement that an alarm is still ringing because nobody stopped it.
+function includeBoardsForFire(route, payload) {
+  if (!route || route.skip || route.bypassed || route.targets == null) {
+    return route;
+  }
+  if (!isUnsolicitedFire(payload)) {
+    return route;
+  }
+  const targets = route.targets;
+  const hasBoardClass = targets.some((id) => {
+    const key = String(id || '').trim().toLowerCase();
+    return key === 'vestaboard' || key === 'all' || key === '*';
+  });
+  const softwareClass = targets.some((id) => String(id || '').trim().toLowerCase() === 'full');
+  if (!softwareClass || hasBoardClass) {
+    return route;
+  }
+  return { ...route, targets: [...targets, 'vestaboard'] };
 }
 
 function cloneFamilyRule(rule) {

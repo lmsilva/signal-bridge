@@ -68,6 +68,33 @@ test('smarthome routing is independent of broadcasts', () => {
   assert.equal(dinner.targets, null);
 });
 
+test('software-only routes still deliver alarm, timer, and reminder fires to vestaboards', () => {
+  const settings = sanitiseSettings({
+    families: {
+      'alexa.alarms': { routes: [{ destinations: 'full', slots: [] }] },
+      'alexa.timers': { routes: [{ destinations: 'full', slots: [] }] },
+      'alexa.reminders': { routes: [{ destinations: 'full', slots: [] }] },
+    },
+  });
+
+  assert.deepEqual(
+    resolveRoute({ type: 'alarm.snapshot', event: { kind: 'list' } }, {}, settings).targets,
+    ['full'],
+  );
+  assert.deepEqual(
+    resolveRoute({ type: 'alarm.snapshot', event: { kind: 'fired' } }, {}, settings).targets,
+    ['full', 'vestaboard'],
+  );
+  assert.deepEqual(
+    resolveRoute({ type: 'timer.snapshot', event: { kind: 'fired' } }, {}, settings).targets,
+    ['full', 'vestaboard'],
+  );
+  assert.deepEqual(
+    resolveRoute({ type: 'reminder.fired' }, {}, settings).targets,
+    ['full', 'vestaboard'],
+  );
+});
+
 test('manual and scheduler sends bypass routing', () => {
   assert.equal(shouldBypassRouting({ source: 'scheduler' }), true);
   assert.equal(shouldBypassRouting({ source: 'web-api' }), true);

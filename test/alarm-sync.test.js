@@ -8,6 +8,8 @@ const {
   isActiveAlarm,
   listActiveAlarms,
   shouldEmitAlarmSnapshot,
+  reclassifyAlarmEvents,
+  recurringAlarmFires,
 } = require('../src/alarm-sync');
 const { buildAlarmSnapshotPayload } = require('../src/udp-payload');
 const { createAlarmSync } = require('../src/alarm-sync');
@@ -183,6 +185,96 @@ test('listActiveAlarms sorts by trigger time', () => {
 
   assert.equal(alarms[0].amazonId, 'sooner');
   assert.equal(alarms[1].amazonId, 'later');
+});
+
+test('a removal near the alarm time is a fire, an early removal stays a cancel', () => {
+  const ringing = reclassifyAlarmEvents([{
+    kind: 'removed',
+    timer: { triggerTime: new Date(Date.now() - 10 * 60 * 1000).toISOString(), device: 'Bedroom Echo' },
+  }]);
+  assert.equal(ringing[0].kind, 'fired');
+
+  const early = reclassifyAlarmEvents([{
+    kind: 'cancelled',
+    timer: { fireAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() },
+  }]);
+  assert.equal(early[0].kind, 'cancelled');
+});
+
+test('a recurring alarm that rolls to the next day is a fire of the occurrence that passed', () => {
+  const previous = {
+    amazonId: 'daily',
+    device: 'Bedroom Echo',
+    status: 'ON',
+    triggerTime: new Date(Date.now() - 30 * 1000).toISOString(),
+    fireAt: new Date(Date.now() - 30 * 1000).toISOString(),
+  };
+  const events = recurringAlarmFires(
+    { daily: previous },
+    {
+      daily: {
+        ...previous,
+        triggerTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        fireAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    },
+  );
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, 'fired');
+  assert.equal(events[0].timer.device, 'Bedroom Echo');
+});
+
+test('createAlarmSync reports a due alarm as fired when Amazon drops it', async () => {
+  const mirrorPath = path.join(os.tmpdir(), `alarm-mirror-fire-${Date.now()}.json`);
+  const trigger = new Date(Date.now() - 20 * 1000).toISOString();
+  fs.writeFileSync(mirrorPath, JSON.stringify({
+    alarms: {
+      a1: {
+        amazonId: 'a1',
+        device: 'Bedroom Echo',
+        label: null,
+        status: 'ON',
+        triggerTime: trigger,
+        remainingSec: 20,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  }));
+
+  let sync;
+  try {
+    const snapshot = await new Promise((resolve, reject) => {
+      sync = createAlarmSync({
+        alexa: {
+          getNotifications(_all, callback) {
+            callback(null, { notifications: [] });
+          },
+        },
+        config: {
+          sessionPath: path.join(os.tmpdir(), 'alexa-session-test.json'),
+          alarmMirrorPath: mirrorPath,
+          alarmSync: { enabled: true },
+        },
+        log: { info() {}, warn() {}, debug() {} },
+        onSnapshot: (shot) => {
+          try {
+            resolve(shot);
+          } catch (error) {
+            reject(error);
+          }
+        },
+      });
+      sync.requestImmediatePoll('notification-change', 'Bedroom Echo');
+    });
+    assert.equal(snapshot.event.kind, 'fired');
+    assert.equal(snapshot.event.alarm.device, 'Bedroom Echo');
+    assert.equal(snapshot.event.alarm.triggerTime, trigger);
+  } finally {
+    sync?.stop();
+    if (fs.existsSync(mirrorPath)) {
+      fs.unlinkSync(mirrorPath);
+    }
+  }
 });
 
 test('shouldEmitAlarmSnapshot does not re-emit unchanged lists on followup polls', () => {
