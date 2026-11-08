@@ -661,13 +661,24 @@ test('a snapshot already in line is dropped once quiet hours open', async () => 
   assert.equal(h.queue.pending().length, 0);
 });
 
-test('alarm and timer fires still get through quiet hours', async () => {
+test('an alarm fire still gets through quiet hours; a timer does not', async () => {
   const h = makeQueue({ quietHours: { start: '00:00', end: '23:59' } });
 
-  h.queue.submit([frame('TIMER', 9, { source: 'timer.fired kitchen' })], { priority: 'alert' });
-  assert.equal(await h.queue.tick(), 'posted');
+  const timer = h.queue.submit(
+    [frame('TIMER', 9, { source: 'timer.fired kitchen' })],
+    { priority: 'alert' },
+  );
+  assert.equal(timer.accepted, 0);
+  assert.equal(timer.reason, 'quiet');
 
-  h.advance(15 * SECOND);
+  const list = h.queue.submit(
+    [frame('TIMERS', 3, { source: 'timer.snapshot' })],
+    { priority: 'snapshot' },
+  );
+  assert.equal(list.accepted, 0);
+  assert.equal(list.reason, 'quiet');
+  assert.equal(h.queue.pending().length, 0);
+
   h.queue.submit([frame('ALARM', 8, { source: 'alarm.fired bedroom' })], { priority: 'alert' });
   assert.equal(await h.queue.tick(), 'posted');
 
@@ -678,6 +689,60 @@ test('alarm and timer fires still get through quiet hours', async () => {
   );
   assert.equal(broadcast.reason, 'quiet', 'an alert is not automatically exempt');
   assert.equal(broadcast.accepted, 0);
+});
+
+test('a timer still posts outside quiet hours and when marked exempt', async () => {
+  const open = makeQueue();
+  open.queue.submit([frame('TIMER', 9, { source: 'timer.fired' })], { priority: 'alert' });
+  assert.equal(await open.queue.tick(), 'posted');
+  open.advance(15 * SECOND);
+  open.queue.submit([frame('TIMERS', 2, { source: 'timer.snapshot' })]);
+  assert.equal(await open.queue.tick(), 'posted');
+
+  const quiet = makeQueue({ quietHours: { start: '00:00', end: '23:59' } });
+  quiet.queue.submit(
+    [frame('TIMER', 4, { source: 'timer.fired' })],
+    { priority: 'alert', quietHoursExempt: true },
+  );
+  assert.equal(await quiet.queue.tick(), 'posted');
+});
+
+test('a quiet fan-out drops timer pages and keeps the page that was refused', async () => {
+  const h = makeQueue({ quietHours: { enabled: false }, rateWindowSeconds: 0 });
+  h.transport.answerWith({ ok: false, reason: 'quiet', retryable: true });
+
+  h.queue.submit([frame('WEATHER', 1)], { boardIds: ['home'] });
+  h.queue.submit(
+    [frame('HOME TIMER', 2, { source: 'timer.snapshot' })],
+    { boardIds: ['home'] },
+  );
+  h.queue.submit([frame('HOUSE TIMER', 3, { source: 'timer.snapshot' })]);
+  h.queue.submit(
+    [frame('SIM TIMER', 4, { source: 'timer.snapshot' })],
+    { boardIds: ['sim'] },
+  );
+
+  assert.equal(await h.queue.tick(), 'quiet');
+  assert.deepEqual(
+    h.queue.pending().map((row) => row.label),
+    ['WEATHER', 'HOUSE TIMER', 'SIM TIMER'],
+  );
+
+  h.transport.answerWith({ ok: true, reason: 'ok', status: 200 });
+  assert.equal(await h.queue.tick(), 'posted');
+  assert.equal(h.transport.posts.at(-1).layout[0][0], 1, 'the weather page posts, not the dropped timer');
+});
+
+test('a house-wide quiet refusal drops a house-wide timer waiting behind another page', async () => {
+  const h = makeQueue({ quietHours: { enabled: false }, rateWindowSeconds: 0 });
+  h.transport.answerWith({ ok: false, reason: 'quiet', retryable: true });
+
+  h.queue.submit([frame('WEATHER', 1)]);
+  h.queue.submit([frame('TIMERS', 2, { source: 'timer.snapshot' })]);
+  h.queue.submit([frame('DONE', 3, { source: 'timer.fired kitchen' })], { priority: 'alert' });
+
+  assert.equal(await h.queue.tick(), 'quiet');
+  assert.deepEqual(h.queue.pending().map((row) => row.label), ['WEATHER']);
 });
 
 test('the caller can declare a frame exempt outright', async () => {

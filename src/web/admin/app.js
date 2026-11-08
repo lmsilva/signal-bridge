@@ -20779,7 +20779,7 @@
     panel.hidden = false;
     const hint = $('vb-quiet-hint');
     if (hint) {
-      hint.innerHTML = 'While quiet, <b>' + (board.name || board.id) + '</b> shows nothing new; queued events wait until the board wakes. Exempt rules and the Quiet Hours Reminder still post.';
+      hint.innerHTML = 'While quiet, <b>' + (board.name || board.id) + '</b> shows nothing new. Timer cards are discarded. Other queued events wait until the board wakes. An alarm that goes off, exempt rules, and the Quiet Hours Reminder still post.';
     }
     const enabled = $('vb-quiet-enabled');
     if (enabled) enabled.checked = board.quietHours?.enabled !== false;

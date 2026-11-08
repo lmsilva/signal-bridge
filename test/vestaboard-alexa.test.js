@@ -330,7 +330,7 @@ test('running timers list soonest first with right aligned countdowns', () => {
   ], 'timers');
 });
 
-test('a fired timer is an orange alert that quiet hours let through', () => {
+test('a fired timer is an orange alert', () => {
   const frames = alexa.timerFrames(timerPayload(
     [],
     { kind: 'fired', amazonId: 't1', timer: { label: 'Pizza', status: 'OFF', remainingSec: 0 } },
@@ -338,8 +338,8 @@ test('a fired timer is an orange alert that quiet hours let through', () => {
 
   assert.equal(frames[0].priority, 'alert');
   assert.equal(frames[0].dwellSeconds, 60);
-  // The queue reads the first word of `source` to decide what may wake the
-  // house, so this string is load-bearing.
+  // Priorities jump the line from this first word. Quiet hours do not
+  // treat it as an exemption.
   assert.equal(frames[0].source, 'timer.fired');
 
   assertLayout(frames[0].rows, [

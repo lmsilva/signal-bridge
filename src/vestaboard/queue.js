@@ -25,10 +25,11 @@
 //   - repeats of the same thing replace each other instead of stacking
 //   - a layout identical to what is already showing is dropped, because the
 //     board would not flip anyway
-//   - during quiet hours only alarm and timer fires get through, and anything
-//     else is dropped rather than saved for morning; a stale snapshot at 7am
-//     is worse than no snapshot. Simulator Skip is a wake and still posts.
-//     The window is household wall-clock
+//   - during quiet hours an alarm fire still posts. A timer card (the list
+//     or time's up) is discarded, not saved for morning. Other pages are
+//     dropped when this queue's own quiet hours are on, and held until a
+//     board wakes when a follower answers quiet. `quietHoursExempt` and
+//     Simulator Skip still post. The window is household wall-clock
 //     (`timeZone`), not the process TZ, so a UTC container does not treat
 //     8pm Utah as 2am quiet.
 //   - a live hold is session-scoped (`laneLock`, still exposed as `gameLock`).
@@ -66,8 +67,9 @@ const RETRY_DELAYS_MS = [30_000, 60_000];
 const UNHEALTHY_RETRY_MS = 5 * 60 * 1000;
 const FAILURES_BEFORE_UNHEALTHY = 3;
 
-// The only things worth waking the house for.
-const QUIET_HOURS_EXEMPT = new Set(['alarm.fired', 'timer.fired']);
+// An alarm is still worth waking the house for. A timer is not: the list
+// and the "time's up" card are both discarded while a board is quiet.
+const QUIET_HOURS_EXEMPT = new Set(['alarm.fired']);
 
 // A hold session releases its own lock. This only bounds the damage when a
 // session dies without closing (crash, lost tick) so the board cannot wedge
@@ -110,6 +112,31 @@ function normaliseBoardIds(value) {
     value.map((id) => String(id == null ? '' : id).trim()).filter(Boolean),
   )];
   return ids.length ? ids : null;
+}
+
+function frameSource(frame) {
+  return String(frame?.source || '').split(' ')[0];
+}
+
+function isTimerFrame(frame) {
+  const event = frameSource(frame);
+  return event === 'timer.fired' || event === 'timer.snapshot';
+}
+
+/**
+ * A quiet refusal covered these boards (`null` means every running board).
+ * A non-exempt timer aimed only at that set would be stale by morning, so
+ * it is discarded. A house-wide timer stays when the refusal named specific
+ * boards: an awake board can still take it.
+ */
+function timerDiscardedByQuiet(item, quietBoardIds) {
+  if (!item || item.quietHoursExempt || !isTimerFrame(item.frame)) return false;
+  const quiet = normaliseBoardIds(quietBoardIds);
+  if (quiet === null) return true;
+  const aimed = normaliseBoardIds(item.boardIds);
+  if (aimed === null) return false;
+  const covered = new Set(quiet);
+  return aimed.every((id) => covered.has(id));
 }
 
 /** Two pages aimed at the same set of boards. */
@@ -1015,6 +1042,14 @@ function createQueue({
     dropAt(0, reason, item);
   }
 
+  function dropTimersQuietOn(quietBoardIds) {
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      if (timerDiscardedByQuiet(items[i], quietBoardIds)) {
+        dropAt(i, 'skip (quiet)', items[i]);
+      }
+    }
+  }
+
   function onPosted(item, at) {
     state.current = item.frame.rows;
     state.currentBoardIds = item.boardIds || null;
@@ -1249,8 +1284,9 @@ function createQueue({
     }
 
     if (outcome.reason === 'quiet') {
-      // A follower board is in quiet hours. Leave the page waiting; the next
-      // tick (or the end of quiet hours) will try again.
+      // A follower board is in quiet hours. Timer cards are stale by morning,
+      // so they leave the line. Every other page waits until a board wakes.
+      dropTimersQuietOn(item.boardIds);
       return 'quiet';
     }
 

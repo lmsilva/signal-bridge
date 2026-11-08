@@ -338,6 +338,8 @@ function smartHomeFrames(payload = {}, ctx = {}) {
 // A4. Timers
 // ---------------------------------------------------------------------------
 
+// `source` stays `timer.fired` so Priorities can jump the line. Quiet hours
+// discard the card; only an explicit quietHoursExempt posts it then.
 function timerFiredFrame(timer = {}) {
   const name = fold(timer.label);
   // Prefer the full "NAME TIMER DONE" when it fits the 18-flap border band;
