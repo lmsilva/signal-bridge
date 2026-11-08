@@ -314,7 +314,7 @@ test('guest snaps keeps a long password and host by wrapping, never cutting', ()
     displaySeconds: 180,
     guestPhotobooth: {
       wifi: { ssid: 'GUESTNET' },
-      booth: { content: 'https://signal.example.com/' },
+      booth: { content: 'https://signal.examplesite.com/' },
     },
   }, { password: 'examplewifipassword2' });
 
@@ -323,8 +323,8 @@ test('guest snaps keeps a long password and host by wrapping, never cutting', ()
   assert.match(drawn, /EXAMPLEWIFIPASSWORD2/);
   assert.match(drawn, /SIGNAL\.EXAMPLESITE\./);
   assert.match(drawn, /\bCOM\b/);
-  assert.doesNotMatch(drawn, /THOSEPORTUGUESEPI[^G]/);
-  assert.doesNotMatch(drawn, /WITTYDIGITA[^L]/);
+  assert.doesNotMatch(drawn, /EXAMPLEWIFIPASSWOR[^D]/);
+  assert.doesNotMatch(drawn, /EXAMPLESIT[^E]/);
 
   assertLayout(frames[0].rows, [
     'bb   GUEST SNAPS    bb',
@@ -362,13 +362,13 @@ test('guest snaps prints a 10-letter TinyURL alias without clipping flaps', () =
     displaySeconds: 60,
     guestPhotobooth: {
       wifi: { ssid: 'CASA' },
-      booth: { content: 'https://tinyurl.com/GUESTBOOK' },
+      booth: { content: 'https://tinyurl.com/GUESTBOOK1' },
     },
   }, { password: 'OK' });
 
   const drawn = formatLayout(frames[0].rows);
-  assert.match(drawn, /TINYURL\.COM\/GUESTBOOK/);
-  assert.doesNotMatch(drawn, /WITTYBOAR[^D]/);
+  assert.match(drawn, /TINYURL\.COM\/GUESTBOOK1/);
+  assert.doesNotMatch(drawn, /GUESTBOOK[^1]/);
 });
 
 test('a booth host splits at a dot rather than hyphenating', () => {

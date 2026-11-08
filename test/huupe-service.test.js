@@ -51,7 +51,7 @@ function fakeCollector(overrides = {}) {
     adbPath: 'adb',
     state: 'streaming',
     configured: true,
-    serial: '192.168.50.7:5555',
+    serial: '192.168.1.7:5555',
     connected: true,
     lastError: null,
     lastConnectedAt: '2026-08-27T09:00:00.000Z',
@@ -60,7 +60,7 @@ function fakeCollector(overrides = {}) {
     retryInSeconds: null,
     discovering: false,
     device: {
-      serial: '192.168.50.7:5555',
+      serial: '192.168.1.7:5555',
       model: 'Huupe Mini',
       manufacturer: 'Huupe',
       androidRelease: '11',
@@ -106,7 +106,7 @@ function writeSettings(root, device = {}) {
   fs.writeFileSync(
     path.join(dir, 'huupe-settings.json'),
     JSON.stringify({
-      device: { host: '192.168.50.7', autoDiscover: false, port: 5555, ...device },
+      device: { host: '192.168.1.7', autoDiscover: false, port: 5555, ...device },
     }),
     'utf8',
   );
@@ -187,7 +187,7 @@ async function settle(rounds = 4) {
 }
 
 /** Enough of adb/logcat to walk the real collector from dial to a live tail. */
-function createAdbHarness(hosts = { '192.168.50.7': true }) {
+function createAdbHarness(hosts = { '192.168.1.7': true }) {
   const execCalls = [];
   const spawns = [];
 
@@ -298,10 +298,10 @@ test('the status snapshot folds the collector, the live machine and the archive 
     assert.equal(status.hasArchive, true);
     assert.equal(status.hasLiveSession, false);
     assert.equal(status.players, 2);
-    assert.equal(status.settings.device.host, '192.168.50.7');
+    assert.equal(status.settings.device.host, '192.168.1.7');
     assert.deepEqual(status.device, {
       name: 'Huupe Mini',
-      serial: '192.168.50.7:5555',
+      serial: '192.168.1.7:5555',
       online: true,
       statusLabel: 'Online',
       androidRelease: '11',
@@ -330,13 +330,13 @@ test('saving a new hoop address is sanitised, persisted and pushed to the collec
     service.start();
     assert.equal(collector.calls.reconnectNow, 0);
 
-    const saved = service.updateSettings({ device: { host: 'adb://192.168.50.7:5555' } });
+    const saved = service.updateSettings({ device: { host: 'adb://192.168.1.7:5555' } });
     assert.equal(saved.ok, true);
-    assert.equal(saved.settings.device.host, '192.168.50.7');
+    assert.equal(saved.settings.device.host, '192.168.1.7');
     // A new address has to take effect now, not after the current backoff.
     assert.equal(collector.calls.reconnectNow, 1);
     assert.ok(fs.existsSync(path.join(root, 'data', 'huupe-settings.json')));
-    assert.equal(service.settings.get().device.host, '192.168.50.7');
+    assert.equal(service.settings.get().device.host, '192.168.1.7');
 
     const clamped = service.updateSettings({
       device: { port: 70000 },
@@ -356,7 +356,7 @@ test('saving a new hoop address is sanitised, persisted and pushed to the collec
     // that carries the device section unchanged must leave the stream — and any
     // game running on it — alone.
     service.updateSettings({
-      device: { host: '192.168.50.7', port: 65535, autoDiscover: false },
+      device: { host: '192.168.1.7', port: 65535, autoDiscover: false },
       dashboard: { leaderboardSize: 8 },
     });
     assert.equal(collector.calls.reconnectNow, 2);
@@ -371,7 +371,7 @@ test('discovering a hoop remembers the address and dials it straight away', asyn
   const collector = fakeCollector({
     methods: {
       async discover() {
-        return { ok: true, host: '192.168.50.7', serial: '192.168.50.7:5555' };
+        return { ok: true, host: '192.168.1.7', serial: '192.168.1.7:5555' };
       },
     },
   });
@@ -387,7 +387,7 @@ test('discovering a hoop remembers the address and dials it straight away', asyn
     const found = await service.discover();
 
     assert.equal(found.ok, true);
-    assert.equal(service.settings.get().device.host, '192.168.50.7');
+    assert.equal(service.settings.get().device.host, '192.168.1.7');
     assert.equal(collector.calls.reconnectNow, 1);
 
     service.close();

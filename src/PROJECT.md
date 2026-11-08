@@ -3,7 +3,7 @@
 > **For AI agents:** Read this file first when working on the NAS/container code.  
 > **Keep fresh:** Update this file whenever you change architecture, modules, config, Docker, auth, or UDP behavior. Bump **Last updated** and add a line under **Recent changes**.
 
-**Last updated:** 2026-10-22 (Alarm fires reach the Vestaboard)
+**Last updated:** 2026-11-07 (Public-repo privacy scrub)
 
 ---
 

@@ -15,11 +15,10 @@
 #   ./issue-letsencrypt-cert.sh
 #   ./issue-letsencrypt-cert.sh --staging
 #   ./issue-letsencrypt-cert.sh --no-restart
-#   ./issue-letsencrypt-cert.sh --domain other.example.com --email other@example.com
+#   ./issue-letsencrypt-cert.sh --domain signal.example.com --email admin@example.com
 #
-# Defaults (edit in this script or override via flags / CERTBOT_* env):
-#   domain = signal.example.com
-#   email  = admin@example.com
+# Domain and email are required via flags or CERTBOT_DOMAIN / CERTBOT_EMAIL
+# (no personal defaults in this public repo).
 #
 # Env: CERTBOT_DOMAIN  CERTBOT_EMAIL  CONTAINER_NAME (default signal-bridge)
 
@@ -32,9 +31,8 @@ CONTAINER="${CONTAINER_NAME:-signal-bridge}"
 INSIDE="/app/scripts/issue-letsencrypt-inside.sh"
 RESTART=1
 STAGING=0
-# Defaults (override with --domain / --email or CERTBOT_* env)
-DOMAIN="${CERTBOT_DOMAIN:-signal.example.com}"
-EMAIL="${CERTBOT_EMAIL:-admin@example.com}"
+DOMAIN="${CERTBOT_DOMAIN:-}"
+EMAIL="${CERTBOT_EMAIL:-}"
 
 usage() {
   sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'
@@ -68,6 +66,12 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -z "$DOMAIN" ] || [ -z "$EMAIL" ]; then
+  echo "ERROR: --domain / CERTBOT_DOMAIN and --email / CERTBOT_EMAIL are required." >&2
+  echo "Example: CERTBOT_DOMAIN=signal.example.com CERTBOT_EMAIL=admin@example.com $0" >&2
+  exit 1
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR: docker not found on this host" >&2

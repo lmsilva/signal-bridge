@@ -5,22 +5,23 @@
 #
 # Prefer the host wrapper: ./issue-letsencrypt-cert.sh (docker exec -it + restart).
 # Direct use:
-#   docker exec -it signal-bridge /app/scripts/issue-letsencrypt-inside.sh
+#   docker exec -it signal-bridge sh /app/scripts/issue-letsencrypt-inside.sh \
+#     --domain signal.example.com --email admin@example.com
 #   docker exec -it signal-bridge sh /app/scripts/issue-letsencrypt-inside.sh --staging
 #
-# Defaults: domain=signal.example.com
-#           email=admin@example.com
+# Domain and email are required via flags or CERTBOT_DOMAIN / CERTBOT_EMAIL
+# (no personal defaults in this public repo).
 
 set -eu
 
-DOMAIN="${CERTBOT_DOMAIN:-signal.example.com}"
-EMAIL="${CERTBOT_EMAIL:-admin@example.com}"
+DOMAIN="${CERTBOT_DOMAIN:-}"
+EMAIL="${CERTBOT_EMAIL:-}"
 STAGING=0
 CERT_DIR="${WEB_CERT_DIR:-/app/data/web-certs}"
 LE_DIR="${LETSENCRYPT_DIR:-/app/data/letsencrypt}"
 
 usage() {
-  sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
   exit "${1:-0}"
 }
 
@@ -48,11 +49,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Defaults already set above; only prompt if somehow empty after overrides.
+if [ -z "$DOMAIN" ]; then
+  echo "ERROR: --domain / CERTBOT_DOMAIN required" >&2
+  exit 1
+fi
 if [ -z "$EMAIL" ]; then
-  echo "Email is required (Let's Encrypt account contact)."
-  printf "Enter email: "
-  read -r EMAIL
+  echo "ERROR: --email / CERTBOT_EMAIL required (Let's Encrypt account contact)." >&2
+  exit 1
 fi
 case "$EMAIL" in
   *@*) ;;

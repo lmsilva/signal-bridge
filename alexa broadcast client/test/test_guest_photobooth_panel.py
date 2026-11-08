@@ -177,7 +177,7 @@ class GuestPhotoboothCaptionTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.root.destroy()
 
-    def runs(self, ssid="Pandamonium"):
+    def runs(self, ssid="Guestnet"):
         return [(self.small, "Network ", "#9AA7B8"), (self.large, ssid, "#5FD0FF")]
 
     def test_the_two_runs_share_a_baseline(self):
@@ -206,7 +206,7 @@ class GuestPhotoboothCaptionTests(unittest.TestCase):
         self.assertEqual(layout["runs"][1]["dx"], self.small.measure("Network "))
         self.assertEqual(
             layout["width"],
-            self.small.measure("Network ") + self.large.measure("Pandamonium"),
+            self.small.measure("Network ") + self.large.measure("Guestnet"),
         )
 
     def test_the_band_is_tall_enough_for_the_larger_face(self):
@@ -237,7 +237,7 @@ class GuestPhotoboothCaptionTests(unittest.TestCase):
         panel._draw_caption_runs(runs, center_x=500, top=200)
 
         calls = panel.canvas.create_text.call_args_list
-        self.assertEqual([c.kwargs["text"] for c in calls], ["Network ", "Pandamonium"])
+        self.assertEqual([c.kwargs["text"] for c in calls], ["Network ", "Guestnet"])
         self.assertEqual([c.kwargs["anchor"] for c in calls], ["nw", "nw"])
         layout = GuestPhotoboothPanel.layout_caption_runs(runs)
         self.assertAlmostEqual(calls[0].args[0], 500 - layout["width"] / 2)

@@ -276,7 +276,7 @@ test('the newest session wins when two theater streams qualify', async () => {
 test('a phone on another IP is invisible', async () => {
   process.env.PLEX_TOKEN = 'test-token';
   const { watcher, sent } = makeWatcher({
-    sessions: [movie({ player: { address: '192.168.50.9' } })],
+    sessions: [movie({ player: { address: '192.168.1.9' } })],
   });
   await watcher.tick();
   assert.equal(sent.length, 0);

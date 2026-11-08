@@ -123,8 +123,8 @@ test('resolveSteamConfig defaults to any-PC (no presence required)', () => {
     const steam = resolveSteamConfig({ ROOT: os.tmpdir() }, {});
     assert.equal(steam.requirePresence, false);
     assert.deepEqual(steam.allowedHosts, ['GAMING-PC']);
-    assert.equal(isAllowedHost(steam, 'movietheaterpc'), true);
-    assert.equal(normalizeHostname('MovieTheaterPC'), 'GAMING-PC');
+    assert.equal(isAllowedHost(steam, 'gaming-pc'), true);
+    assert.equal(normalizeHostname('Gaming-PC'), 'GAMING-PC');
     assert.equal(steam.pollIntervalSeconds, 15);
     assert.equal(steam.restoreAfterInterruptSeconds, 75);
     assert.equal(steam.inferFromRecentSeconds, 180);

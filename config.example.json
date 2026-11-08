@@ -64,7 +64,7 @@
     "localTimeZone": "America/Denver",
     "eventsLogFile": "data/voice-events.jsonl",
     "defaultLocation": {
-      "name": "Saratoga Springs, UT",
+      "name": "Home",
       "latitude": 40.0,
       "longitude": -111.0
     }

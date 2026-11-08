@@ -209,7 +209,7 @@ test('a cold start with no hoop configured waits instead of sweeping the LAN', a
   // The product rule: an uninvited /24 scan on first boot is not an acceptable
   // first move, so with no saved host the collector parks and waits for an
   // explicit Discover. Auto-discovery is a recovery path, never a cold start.
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const collector = buildCollector({
@@ -236,12 +236,12 @@ test('a cold start with no hoop configured waits instead of sweeping the LAN', a
 });
 
 test('a configured hoop is dialled, identified and then tailed', async () => {
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const streamStates = [];
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.7' }),
+    settings: fakeSettings({ host: '192.168.1.7' }),
     adb,
     spawner,
     timers,
@@ -251,14 +251,14 @@ test('a configured hoop is dialled, identified and then tailed', async () => {
   collector.start();
   await settle();
 
-  assert.deepEqual(adb.connectTargets(), ['192.168.50.7:5555']);
+  assert.deepEqual(adb.connectTargets(), ['192.168.1.7:5555']);
   assert.ok(adb.calls.some((call) => call.args.join(' ').includes('shell getprop')));
   assert.ok(adb.calls.some((call) => call.args.join(' ').includes('pm list packages')));
 
   const spawned = spawner.last();
   assert.equal(spawner.spawns.length, 1);
   assert.deepEqual(spawned.args.slice(0, 7), [
-    '-s', '192.168.50.7:5555', 'logcat', '-v', 'threadtime', '-T', '1',
+    '-s', '192.168.1.7:5555', 'logcat', '-v', 'threadtime', '-T', '1',
   ]);
   // Everything outside the tag allowlist is silenced so profile dumps never arrive.
   assert.equal(spawned.args.at(-1), '*:S');
@@ -267,26 +267,26 @@ test('a configured hoop is dialled, identified and then tailed', async () => {
   assert.equal(status.state, 'streaming');
   assert.equal(status.connected, true);
   assert.equal(status.configured, true);
-  assert.equal(status.serial, '192.168.50.7:5555');
+  assert.equal(status.serial, '192.168.1.7:5555');
   assert.equal(status.device.model, 'Huupe Mini');
   assert.equal(status.device.persistentAdbPort, '5555');
   assert.deepEqual(streamStates.at(-1), {
     connected: true,
     reason: null,
     state: 'streaming',
-    serial: '192.168.50.7:5555',
+    serial: '192.168.1.7:5555',
   });
 
   collector.close();
 });
 
 test('logcat lines split across chunk boundaries are reassembled before parsing', async () => {
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const events = [];
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.7' }),
+    settings: fakeSettings({ host: '192.168.1.7' }),
     adb,
     spawner,
     timers,
@@ -323,11 +323,11 @@ test('logcat lines split across chunk boundaries are reassembled before parsing'
 });
 
 test('a dropped logcat stream reconnects with a growing backoff', async () => {
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.7', autoDiscover: false }),
+    settings: fakeSettings({ host: '192.168.1.7', autoDiscover: false }),
     adb,
     spawner,
     timers,
@@ -343,7 +343,7 @@ test('a dropped logcat stream reconnects with a growing backoff', async () => {
   assert.deepEqual(timers.retryDelays(), [3000]);
 
   // The hoop is now off, so every retry from here fails on the dial.
-  delete adb.hosts['192.168.50.7'];
+  delete adb.hosts['192.168.1.7'];
   timers.fireRetry(0);
   await settle();
   timers.fireRetry(1);
@@ -360,25 +360,25 @@ test('a dropped logcat stream reconnects with a growing backoff', async () => {
 
 test('a hoop that moved is found again by a sweep and its new address is saved', async () => {
   await withFakeLan(async () => {
-    const adb = createAdbFake({ '192.168.50.3': NOT_A_HUUPE, '192.168.50.7': HUUPE });
+    const adb = createAdbFake({ '192.168.1.3': NOT_A_HUUPE, '192.168.1.7': HUUPE });
     const spawner = createSpawnFake();
     const timers = createTimerFake();
-    const settings = fakeSettings({ host: '192.168.50.99', autoDiscover: true });
+    const settings = fakeSettings({ host: '192.168.1.99', autoDiscover: true });
     const collector = buildCollector({ settings, adb, spawner, timers });
 
     collector.start();
     await settle(6);
 
     // The saved address is always tried first; the sweep is the fallback.
-    assert.equal(adb.connectTargets()[0], '192.168.50.99:5555');
+    assert.equal(adb.connectTargets()[0], '192.168.1.99:5555');
     assert.ok(adb.connectTargets().length > 1);
     // Something else answered on 5555 and was let go once getprop disowned it.
-    assert.deepEqual(adb.disconnectTargets(), ['192.168.50.3:5555']);
+    assert.deepEqual(adb.disconnectTargets(), ['192.168.1.3:5555']);
 
-    assert.deepEqual(settings.updates, [{ device: { host: '192.168.50.7' } }]);
+    assert.deepEqual(settings.updates, [{ device: { host: '192.168.1.7' } }]);
     assert.equal(collector.statusSnapshot().state, 'streaming');
-    assert.equal(collector.statusSnapshot().serial, '192.168.50.7:5555');
-    assert.equal(spawner.last().args[1], '192.168.50.7:5555');
+    assert.equal(collector.statusSnapshot().serial, '192.168.1.7:5555');
+    assert.equal(spawner.last().args[1], '192.168.1.7:5555');
 
     collector.close();
   });
@@ -386,16 +386,16 @@ test('a hoop that moved is found again by a sweep and its new address is saved',
 
 test('with auto-discovery off an unreachable hoop fails without touching other addresses', async () => {
   await withFakeLan(async () => {
-    const adb = createAdbFake({ '192.168.50.7': HUUPE });
+    const adb = createAdbFake({ '192.168.1.7': HUUPE });
     const spawner = createSpawnFake();
     const timers = createTimerFake();
-    const settings = fakeSettings({ host: '192.168.50.99', autoDiscover: false });
+    const settings = fakeSettings({ host: '192.168.1.99', autoDiscover: false });
     const collector = buildCollector({ settings, adb, spawner, timers });
 
     collector.start();
     await settle();
 
-    assert.deepEqual(adb.connectTargets(), ['192.168.50.99:5555']);
+    assert.deepEqual(adb.connectTargets(), ['192.168.1.99:5555']);
     assert.deepEqual(settings.updates, []);
     assert.equal(spawner.spawns.length, 0);
     assert.equal(collector.statusSnapshot().state, 'disconnected');
@@ -410,7 +410,7 @@ test('the status snapshot reports state, whether a hoop is configured and the la
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.99', autoDiscover: false }),
+    settings: fakeSettings({ host: '192.168.1.99', autoDiscover: false }),
     adb,
     spawner,
     timers,
@@ -439,11 +439,11 @@ test('the status snapshot reports state, whether a hoop is configured and the la
 });
 
 test('closing the collector kills the logcat child and parks the state at idle', async () => {
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.7' }),
+    settings: fakeSettings({ host: '192.168.1.7' }),
     adb,
     spawner,
     timers,
@@ -472,7 +472,7 @@ test('closing the collector cancels a reconnect that was already pending', async
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.99', autoDiscover: false }),
+    settings: fakeSettings({ host: '192.168.1.99', autoDiscover: false }),
     adb,
     spawner,
     timers,
@@ -500,12 +500,12 @@ test('a stream the hoop stopped answering is torn down and dialled again', async
   // without closing it. logcat keeps running and the collector keeps saying
   // Online, so the next game is never seen. Silence alone cannot be the tell —
   // a hoop nobody is shooting on logs nothing — so the stream is asked.
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const streamStates = [];
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.7', autoDiscover: false }),
+    settings: fakeSettings({ host: '192.168.1.7', autoDiscover: false }),
     adb,
     spawner,
     timers,
@@ -527,7 +527,7 @@ test('a stream the hoop stopped answering is torn down and dialled again', async
   assert.equal(timers.beats().length, 2);
 
   // Now the hoop goes to sleep. logcat never notices — the child is still up.
-  delete adb.hosts['192.168.50.7'];
+  delete adb.hosts['192.168.1.7'];
 
   // One missed beat is a busy device, not a dead stream.
   timers.fireBeat();
@@ -548,12 +548,12 @@ test('a stream the hoop stopped answering is torn down and dialled again', async
   assert.match(status.lastError, /stopped answering/);
   assert.equal(streamStates.at(-1).connected, false);
   // The half-open entry is dropped so the next connect is a real one.
-  assert.deepEqual(adb.disconnectTargets(), ['192.168.50.7:5555']);
+  assert.deepEqual(adb.disconnectTargets(), ['192.168.1.7:5555']);
   // A sleeping hoop is the common case, so recovery starts at the short end.
   assert.deepEqual(timers.retryDelays(), [3000]);
 
   // And when it wakes, the retry puts the stream back.
-  adb.hosts['192.168.50.7'] = HUUPE;
+  adb.hosts['192.168.1.7'] = HUUPE;
   timers.fireRetry(0);
   await settle();
   assert.equal(collector.statusSnapshot().state, 'streaming');
@@ -563,11 +563,11 @@ test('a stream the hoop stopped answering is torn down and dialled again', async
 });
 
 test('the heartbeat stops with the stream and never outlives a close', async () => {
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const collector = buildCollector({
-    settings: fakeSettings({ host: '192.168.50.7', autoDiscover: false }),
+    settings: fakeSettings({ host: '192.168.1.7', autoDiscover: false }),
     adb,
     spawner,
     timers,
@@ -592,12 +592,12 @@ test('the heartbeat stops with the stream and never outlives a close', async () 
 test('a throw from the event handler does not take the log pump down', async () => {
   // The state machine downstream owns the display. If it throws, the shot that
   // caused it is lost — but every later shot, and every later game, must not be.
-  const adb = createAdbFake({ '192.168.50.7': HUUPE });
+  const adb = createAdbFake({ '192.168.1.7': HUUPE });
   const spawner = createSpawnFake();
   const timers = createTimerFake();
   const seen = [];
   const collector = createHuupeCollector({
-    settings: fakeSettings({ host: '192.168.50.7' }),
+    settings: fakeSettings({ host: '192.168.1.7' }),
     log: silentLog(),
     onEvent: (event) => {
       seen.push(event.zone);
